@@ -3,6 +3,8 @@ import {exec} from 'node:child_process';
 import https from 'node:https';
 import assert from 'node:assert';
 
+process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
+
 describe("The root object", () => {
     let child = null
     before(() => {
