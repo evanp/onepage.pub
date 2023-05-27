@@ -24,5 +24,7 @@ describe("The root object", () => {
         const res = await fetch('https://localhost:3000/')
         const obj = await res.json()
         assert.strictEqual(obj.type, 'Service')
+        assert.strictEqual(obj.name, 'One Page Pub')
+        assert.strictEqual(obj.id, 'https://localhost:3000/')
     })
 })

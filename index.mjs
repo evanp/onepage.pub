@@ -33,7 +33,7 @@ passport.use(new LocalStrategy(
 ));
 
 app.get('/', wrap(async(req, res) => {
-  const url = req.originalUrl;
+  const url = req.protocol + '://' + req.get('host') + req.originalUrl;
   res.set('Content-Type', 'application/activity+json')
   res.json({
     '@context': 'https://w3c.org/ns/activitystreams',
