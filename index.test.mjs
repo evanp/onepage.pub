@@ -95,4 +95,35 @@ describe("Web API interface", () => {
             assert(obj.links[0].href.startsWith('https://localhost:3000/person/'))
         })
     })
+    describe("Actor", () => {
+        before(() => {
+            const username = 'testuser3';
+            const password = 'testpassword3';
+            return fetch('https://localhost:3000/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: querystring.stringify({username, password, confirmation: password}),
+            })
+        })
+        it("can get actor data", async () => {
+            const res = await fetch('https://localhost:3000/.well-known/webfinger?resource=acct:testuser3@localhost:3000')
+            const obj = await res.json()
+            const actorId = obj.links[0].href
+            const actorRes = await fetch(actorId)
+            const actorObj = await actorRes.json()
+            assert.strictEqual(actorObj.id, actorId)
+            assert.strictEqual(actorObj.type, 'Person')
+            assert.strictEqual(actorObj.name, 'testuser3')
+            assert(actorObj.inbox)
+            assert(actorObj.inbox.startsWith('https://localhost:3000/orderedcollection/'))
+            assert(actorObj.outbox)
+            assert(actorObj.outbox.startsWith('https://localhost:3000/orderedcollection/'))
+            assert(actorObj.followers)
+            assert(actorObj.followers.startsWith('https://localhost:3000/orderedcollection/'))
+            assert(actorObj.following)
+            assert(actorObj.following.startsWith('https://localhost:3000/orderedcollection/'))
+            assert(actorObj.liked)
+            assert(actorObj.liked.startsWith('https://localhost:3000/orderedcollection/'))
+        })
+    })
 })

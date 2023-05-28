@@ -115,7 +115,14 @@ app.post('/register', wrap(async(req, res) => {
     const username = req.body.username
     const password = req.body.password
     const passwordHash = await bcrypt.hash(password, 10)
-    const objectId = await saveObject('Person', {'name': username})
+    const objectId = await saveObject('Person', {
+      'name': username,
+      'inbox': await saveObject('OrderedCollection'),
+      'outbox': await saveObject('OrderedCollection'),
+      'followers': await saveObject('OrderedCollection'),
+      'following': await saveObject('OrderedCollection'),
+      'liked': await saveObject('OrderedCollection')
+    })
     await run(db, 'INSERT INTO user (username, passwordHash, objectId) VALUES (?, ?, ?)', [username, passwordHash, objectId])
     res.type('html')
     res.status(200)
@@ -167,6 +174,25 @@ app.get('/.well-known/webfinger', wrap(async(req, res) => {
       }
     ]
   })
+}))
+
+app.get('/:type/:id', wrap(async(req, res) => {
+  const full = req.protocol + '://' + req.get('host') + req.originalUrl;
+  const type = req.params.type
+  const id = req.params.id
+  const obj = await get(db, 'SELECT data FROM object WHERE id = ?', [full])
+  if (!obj) {
+    throw new createError.NotFound('Object not found')
+  }
+  if (!obj.data) {
+    throw new createError.InternalServerError('Invalid object')
+  }
+  const data = JSON.parse(obj.data)
+  if (data.type.toLowerCase() !== type) {
+    throw new createError.InternalServerError('Invalid object type')
+  }
+  res.set('Content-Type', 'application/activity+json')
+  res.json(data)
 }))
 
 app.use((err, req, res, next) => {
