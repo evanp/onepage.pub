@@ -126,4 +126,31 @@ describe("Web API interface", () => {
             assert(actorObj.liked.startsWith('https://localhost:3000/orderedcollection/'))
         })
     })
+    describe("Actor streams", () => {
+        let actor = null
+        before(async () => {
+            const username = 'testuser4';
+            const password = 'testpassword4';
+            await fetch('https://localhost:3000/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: querystring.stringify({username, password, confirmation: password}),
+            })
+            const res = await fetch('https://localhost:3000/.well-known/webfinger?resource=acct:testuser4@localhost:3000')
+            const obj = await res.json()
+            const actorId = obj.links[0].href
+            const actorRes = await fetch(actorId)
+            actor = await actorRes.json()
+            return
+        })
+        it("can get actor inbox", async () => {
+            const res = await fetch(actor.inbox)
+            const obj = await res.json()
+            assert.strictEqual(obj.id, actor.inbox)
+            assert.strictEqual(obj.type, 'OrderedCollection')
+            assert.strictEqual(obj.totalItems, 0)
+            assert(obj.first)
+            assert(obj.first.startsWith('https://localhost:3000/orderedcollectionpage/'))
+        })
+    })
 })

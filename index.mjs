@@ -45,6 +45,14 @@ const get = async (db, sql, ...params) => {
   });
 }
 
+const emptyOrderedCollection = async(name) => {
+  return saveObject('OrderedCollection', {
+    name: name,
+    totalItems: 0,
+    first: await saveObject('OrderedCollectionPage', {'ordered': []})
+  })
+}
+
 db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), objectId VARCHAR(255))');
 db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, data TEXT)');
 db.run('CREATE TABLE IF NOT EXISTS member (objectId VARCHAR(255), collectionId VARCHAR(255), FOREIGN KEY(objectId) REFERENCES object(id), FOREIGN KEY(collectionId) REFERENCES collection(id))');
@@ -117,11 +125,11 @@ app.post('/register', wrap(async(req, res) => {
     const passwordHash = await bcrypt.hash(password, 10)
     const objectId = await saveObject('Person', {
       'name': username,
-      'inbox': await saveObject('OrderedCollection'),
-      'outbox': await saveObject('OrderedCollection'),
-      'followers': await saveObject('OrderedCollection'),
-      'following': await saveObject('OrderedCollection'),
-      'liked': await saveObject('OrderedCollection')
+      'inbox': await emptyOrderedCollection(`${username}'s Inbox`),
+      'outbox': await emptyOrderedCollection(`${username}'s Outbox`),
+      'followers': await emptyOrderedCollection(`${username}'s Followers`),
+      'following': await emptyOrderedCollection(`${username}'s Following`),
+      'liked': await emptyOrderedCollection(`${username}'s Liked`)
     })
     await run(db, 'INSERT INTO user (username, passwordHash, objectId) VALUES (?, ?, ?)', [username, passwordHash, objectId])
     res.type('html')
@@ -191,6 +199,7 @@ app.get('/:type/:id', wrap(async(req, res) => {
   if (data.type.toLowerCase() !== type) {
     throw new createError.InternalServerError('Invalid object type')
   }
+  data['@context'] = data['@context'] || 'https://w3c.org/ns/activitystreams'
   res.set('Content-Type', 'application/activity+json')
   res.json(data)
 }))
