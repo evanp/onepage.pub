@@ -5,6 +5,9 @@ import LocalStrategy from 'passport-local';
 import fs from 'fs';
 import https from 'https';
 import wrap from 'express-async-handler';
+import createError from 'http-errors';
+import { nanoid } from 'nanoid/async';
+import bcrypt from 'bcrypt';
 
 const DATABASE = process.env.OPP_DATABASE || ':memory:'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
@@ -24,6 +27,8 @@ db.run('CREATE TABLE IF NOT EXISTS member (objectId VARCHAR(255), collectionId V
 // Initialize Passport
 app.use(passport.initialize());
 // app.use(passport.session());
+app.use(express.json()) // for parsing application/json
+app.use(express.urlencoded({ extended: true })) // for parsing application/x-www-form-urlencoded
 
 // Local Strategy for login/logout
 passport.use(new LocalStrategy(
@@ -43,33 +48,68 @@ app.get('/', wrap(async(req, res) => {
   })
 }))
 
-// Routes for ActivityPub
-app.get('/:username', wrap(async (req, res) => {
-  // TODO: handle actor
-}));
+app.get('/register', wrap(async(req, res) => {
+  res.type('html')
+  res.status(200)
+  res.end(`
+    <html>
+    <head>
+    <title>Register</title>
+    </head>
+    <body>
+    <form method="POST" action="/register">
+    <label for="username">Username</label> <input type="text" name="username" placeholder="Username" />
+    <label for="password">Password</label> <input type="password" name="password" placeholder="Password" />
+    <label for="confirmation">Confirm</label> <input type="password" name="confirmation" placeholder="Confirm Password" />
+    </form>
+    </body>
+    </html>`)
+}))
 
-app.get('/:username/inbox', wrap(async (req, res) => {
-  // TODO: handle inbox
-}));
+app.post('/register', wrap(async(req, res) => {
+  if (req.get('Content-Type') !== 'application/x-www-form-urlencoded') {
+    throw new createError.BadRequest('Invalid Content-Type');
+  }
+  if (!req.body.username) {
+    throw new createError.BadRequest('Username is required')
+  }
+  if (!req.body.password) {
+    throw new createError.BadRequest('Password is required')
+  }
+  if (req.body.password !== req.body.confirmation) {
+    throw new createError.BadRequest('Passwords do not match')
+  } else {
+    const username = req.body.username
+    const password = req.body.password
+    const passwordHash = await bcrypt.hash(password, 10)
+    db.run('INSERT INTO user (username, passwordHash) VALUES (?, ?)', [username, passwordHash])
+    res.type('html')
+    res.status(200)
+    res.end(`
+      <html>
+      <head>
+      <title>Registered</title>
+      </head>
+      <body>
+      <p>Registered ${username}</p>
+      </body>
+      </html>`)
+  }
+}))
 
-app.post('/:username/inbox', wrap(async (req, res) => {
-  // TODO: handle inbox
-}));
-
-// and so on...
-
-// Routes for authentication
-app.post('/register', wrap(async (req, res) => {
-  // TODO: handle registration
-}));
-
-app.post('/login', passport.authenticate('local'), wrap(async (req, res) => {
-  // TODO: handle login
-}));
-
-app.post('/logout', wrap(async (req, res) => {
-  // TODO: handle logout
-}));
+app.use(wrap(async(err, req, res, next) => {
+  if (createError.isHttpError(err)) {
+    res.status(err.statusCode)
+    if (res.expose) {
+      res.end(err.message)
+    } else {
+      res.end('Internal Server Error')
+    }
+  } else {
+    res.status(500)
+    res.end('Internal Server Error')
+  }
+}))
 
 // Start server with SSL
 https.createServer({
