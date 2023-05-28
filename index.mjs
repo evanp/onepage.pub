@@ -20,15 +20,38 @@ const app = express();
 
 // Initialize SQLite
 const db = new sqlite3.Database(DATABASE);
+
+const run = async (db, sql, ...params) => {
+  return new Promise((resolve, reject) => {
+    db.run(sql, ...params, function(err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+const get = async (db, sql, ...params) => {
+  return new Promise((resolve, reject) => {
+    db.get(sql, ...params, function(err, row) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(row);
+      }
+    });
+  });
+}
+
 db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), objectId VARCHAR(255))');
 db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, data TEXT)');
 db.run('CREATE TABLE IF NOT EXISTS member (objectId VARCHAR(255), collectionId VARCHAR(255), FOREIGN KEY(objectId) REFERENCES object(id), FOREIGN KEY(collectionId) REFERENCES collection(id))');
 
-// Initialize Passport
-app.use(passport.initialize());
-// app.use(passport.session());
+app.use(passport.initialize()); // Initialize Passport
 app.use(express.json()) // for parsing application/json
-app.use(express.urlencoded({ extended: true })) // for parsing application/x-www-form-urlencoded
+app.use(express.urlencoded({ extended: true })) // for HTML forms
 
 // Local Strategy for login/logout
 passport.use(new LocalStrategy(
@@ -36,6 +59,16 @@ passport.use(new LocalStrategy(
 
   }
 ));
+
+async function saveObject(type, data) {
+  data = data || {};
+  data.id = data.id || `https://${HOSTNAME}:${PORT}/${type.toLowerCase()}/${await nanoid()}`;
+  data.type = data.type || type || 'Object';
+  data.updated = new Date().toISOString();
+  data.published = data.published || data.updated;
+  run(db, 'INSERT INTO object (id, data) VALUES (?, ?)', data.id, JSON.stringify(data));
+  return data.id;
+}
 
 app.get('/', wrap(async(req, res) => {
   const url = req.protocol + '://' + req.get('host') + req.originalUrl;
@@ -82,7 +115,8 @@ app.post('/register', wrap(async(req, res) => {
     const username = req.body.username
     const password = req.body.password
     const passwordHash = await bcrypt.hash(password, 10)
-    db.run('INSERT INTO user (username, passwordHash) VALUES (?, ?)', [username, passwordHash])
+    const objectId = await saveObject('Person', {'name': username})
+    await run(db, 'INSERT INTO user (username, passwordHash, objectId) VALUES (?, ?, ?)', [username, passwordHash, objectId])
     res.type('html')
     res.status(200)
     res.end(`
@@ -97,19 +131,57 @@ app.post('/register', wrap(async(req, res) => {
   }
 }))
 
-app.use(wrap(async(err, req, res, next) => {
+app.get('/.well-known/webfinger', wrap(async(req, res) => {
+  const resource = req.query.resource
+  if (!resource) {
+    throw new createError.BadRequest('Missing resource')
+  }
+  if (!resource.startsWith('acct:')) {
+    throw new createError.BadRequest('Resource must start with acct:')
+  }
+  if (!resource.includes('@')) {
+    throw new createError.BadRequest('Resource must contain @')
+  }
+  const [username, hostname] = resource.substr('acct:'.length).split('@')
+  if (hostname !== req.get('host')) {
+    throw new createError.NotFound('Hostname does not match')
+  }
+  const user = await get(db, 'SELECT username, objectId FROM user WHERE username = ?', [username])
+  if (!user) {
+    throw new createError.NotFound('User not found')
+  }
+  if (!user.username) {
+    throw new createError.NotFound('User not found')
+  }
+  if (!user.objectId) {
+    throw new createError.InternalServerError('Invalid user')
+  }
+  res.set('Content-Type', 'application/jrd+json')
+  res.json({
+    'subject': resource,
+    'links': [
+      {
+        'rel': 'self',
+        'type': 'application/activity+json',
+        'href': user.objectId
+      }
+    ]
+  })
+}))
+
+app.use((err, req, res, next) => {
   if (createError.isHttpError(err)) {
     res.status(err.statusCode)
     if (res.expose) {
-      res.end(err.message)
+      res.json({message: err.message})
     } else {
-      res.end('Internal Server Error')
+      res.json({message: err.message})
     }
   } else {
     res.status(500)
-    res.end('Internal Server Error')
+    res.json({message: err.message})
   }
-}))
+})
 
 // Start server with SSL
 https.createServer({
