@@ -67,6 +67,7 @@ describe("Web API interface", () => {
             assert.strictEqual(res.headers.get('Content-Type'), 'text/html; charset=utf-8')
             assert(body.includes('Registered'))
             assert(body.includes(username))
+            assert(body.match('<span class="token">.+?</span>'))
         })
     })
 
@@ -95,6 +96,7 @@ describe("Web API interface", () => {
             assert(obj.links[0].href.startsWith('https://localhost:3000/person/'))
         })
     })
+
     describe("Actor", () => {
         before(() => {
             const username = 'testuser3';
@@ -126,6 +128,7 @@ describe("Web API interface", () => {
             assert(actorObj.liked.startsWith('https://localhost:3000/orderedcollection/'))
         })
     })
+
     describe("Actor streams", () => {
         let actor = null
         before(async () => {

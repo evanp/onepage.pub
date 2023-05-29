@@ -8,12 +8,19 @@ import wrap from 'express-async-handler';
 import createError from 'http-errors';
 import { nanoid } from 'nanoid/async';
 import bcrypt from 'bcrypt';
+import { expressjwt } from "express-jwt";
+import jwt from 'jsonwebtoken';
+import { promisify } from 'util';
+
+const sign = promisify(jwt.sign);
 
 const DATABASE = process.env.OPP_DATABASE || ':memory:'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
 const PORT = process.env.OPP_PORT || 3000
 const KEY = process.env.OPP_KEY || 'server.key'
 const CERT = process.env.OPP_CERT || 'server.crt'
+const KEY_DATA = fs.readFileSync(KEY)
+const CERT_DATA = fs.readFileSync(CERT)
 
 // Initialize Express
 const app = express();
@@ -132,6 +139,14 @@ app.post('/register', wrap(async(req, res) => {
       'liked': await emptyOrderedCollection(`${username}'s Liked`)
     })
     await run(db, 'INSERT INTO user (username, passwordHash, objectId) VALUES (?, ?, ?)', [username, passwordHash, objectId])
+    const token = await sign(
+      {
+        subject: `acct:${username}@${HOSTNAME}:${PORT}`,
+        issuer: req.protocol + '://' + req.get('host') + req.originalUrl
+      },
+      KEY_DATA,
+      { algorithm: 'RS256' }
+    )
     res.type('html')
     res.status(200)
     res.end(`
@@ -141,6 +156,7 @@ app.post('/register', wrap(async(req, res) => {
       </head>
       <body>
       <p>Registered ${username}</p>
+      <p>Personal access token is <span class="token">${token}</span>
       </body>
       </html>`)
   }
@@ -184,7 +200,9 @@ app.get('/.well-known/webfinger', wrap(async(req, res) => {
   })
 }))
 
-app.get('/:type/:id', wrap(async(req, res) => {
+app.get('/:type/:id',
+  expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ["RS256"] }),
+  wrap(async(req, res) => {
   const full = req.protocol + '://' + req.get('host') + req.originalUrl;
   const type = req.params.type
   const id = req.params.id
@@ -220,8 +238,8 @@ app.use((err, req, res, next) => {
 
 // Start server with SSL
 https.createServer({
-  key: fs.readFileSync(KEY),
-  cert: fs.readFileSync(CERT)
+  key: KEY_DATA,
+  cert: CERT_DATA
 }, app)
 .listen(PORT, HOSTNAME, () => {
   console.log(`Listening on ${HOSTNAME}:${PORT}`)
