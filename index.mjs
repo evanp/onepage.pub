@@ -28,29 +28,8 @@ const app = express();
 // Initialize SQLite
 const db = new sqlite3.Database(DATABASE);
 
-const run = async (db, sql, ...params) => {
-  return new Promise((resolve, reject) => {
-    db.run(sql, ...params, function(err) {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-}
-
-const get = async (db, sql, ...params) => {
-  return new Promise((resolve, reject) => {
-    db.get(sql, ...params, function(err, row) {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(row);
-      }
-    });
-  });
-}
+const run = promisify((...params) => { db.run(...params) })
+const get = promisify((...params) => { db.get(...params) })
 
 const emptyOrderedCollection = async(name) => {
   return saveObject('OrderedCollection', {
@@ -61,8 +40,8 @@ const emptyOrderedCollection = async(name) => {
 }
 
 db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), objectId VARCHAR(255))');
-db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, data TEXT)');
-db.run('CREATE TABLE IF NOT EXISTS member (objectId VARCHAR(255), collectionId VARCHAR(255), FOREIGN KEY(objectId) REFERENCES object(id), FOREIGN KEY(collectionId) REFERENCES collection(id))');
+db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)');
+db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
 
 app.use(passport.initialize()); // Initialize Passport
 app.use(express.json()) // for parsing application/json
@@ -81,7 +60,7 @@ async function saveObject(type, data) {
   data.type = data.type || type || 'Object';
   data.updated = new Date().toISOString();
   data.published = data.published || data.updated;
-  run(db, 'INSERT INTO object (id, data) VALUES (?, ?)', data.id, JSON.stringify(data));
+  run('INSERT INTO object (id, data) VALUES (?, ?)', [data.id, JSON.stringify(data)]);
   return data.id;
 }
 
@@ -138,7 +117,7 @@ app.post('/register', wrap(async(req, res) => {
       'following': await emptyOrderedCollection(`${username}'s Following`),
       'liked': await emptyOrderedCollection(`${username}'s Liked`)
     })
-    await run(db, 'INSERT INTO user (username, passwordHash, objectId) VALUES (?, ?, ?)', [username, passwordHash, objectId])
+    await run('INSERT INTO user (username, passwordHash, objectId) VALUES (?, ?, ?)', [username, passwordHash, objectId])
     const token = await sign(
       {
         subject: `acct:${username}@${HOSTNAME}:${PORT}`,
@@ -177,7 +156,7 @@ app.get('/.well-known/webfinger', wrap(async(req, res) => {
   if (hostname !== req.get('host')) {
     throw new createError.NotFound('Hostname does not match')
   }
-  const user = await get(db, 'SELECT username, objectId FROM user WHERE username = ?', [username])
+  const user = await get('SELECT username, objectId FROM user WHERE username = ?', [username])
   if (!user) {
     throw new createError.NotFound('User not found')
   }
@@ -206,7 +185,7 @@ app.get('/:type/:id',
   const full = req.protocol + '://' + req.get('host') + req.originalUrl;
   const type = req.params.type
   const id = req.params.id
-  const obj = await get(db, 'SELECT data FROM object WHERE id = ?', [full])
+  const obj = await get('SELECT data FROM object WHERE id = ?', [full])
   if (!obj) {
     throw new createError.NotFound('Object not found')
   }
