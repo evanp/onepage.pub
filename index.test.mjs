@@ -59,12 +59,9 @@ describe("Web API interface", () => {
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: querystring.stringify({username, password, confirmation: password}),
             })
-            const body = await res.text()
-            if (res.status !== 200) {
-                console.log(body)
-            }
             assert.strictEqual(res.status, 200)
             assert.strictEqual(res.headers.get('Content-Type'), 'text/html; charset=utf-8')
+            const body = await res.text()
             assert(body.includes('Registered'))
             assert(body.includes(username))
             assert(body.match('<span class="token">.+?</span>'))
@@ -112,6 +109,8 @@ describe("Web API interface", () => {
             const obj = await res.json()
             const actorId = obj.links[0].href
             const actorRes = await fetch(actorId)
+            assert.strictEqual(actorRes.status, 200)
+            assert.strictEqual(actorRes.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const actorObj = await actorRes.json()
             assert.strictEqual(actorObj.id, actorId)
             assert.strictEqual(actorObj.type, 'Person')
@@ -148,6 +147,8 @@ describe("Web API interface", () => {
         })
         it("can get actor inbox", async () => {
             const res = await fetch(actor.inbox)
+            assert.strictEqual(res.status, 200)
+            assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
             assert.strictEqual(obj.id, actor.inbox)
             assert.strictEqual(obj.type, 'OrderedCollection')
@@ -158,6 +159,8 @@ describe("Web API interface", () => {
         })
         it("can get actor outbox", async () => {
             const res = await fetch(actor.outbox)
+            assert.strictEqual(res.status, 200)
+            assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
             assert.strictEqual(obj.id, actor.outbox)
             assert.strictEqual(obj.type, 'OrderedCollection')
@@ -168,6 +171,8 @@ describe("Web API interface", () => {
         })
         it("can get actor followers", async () => {
             const res = await fetch(actor.followers)
+            assert.strictEqual(res.status, 200)
+            assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
             assert.strictEqual(obj.id, actor.followers)
             assert.strictEqual(obj.type, 'OrderedCollection')
@@ -178,6 +183,8 @@ describe("Web API interface", () => {
         })
         it("can get actor following", async () => {
             const res = await fetch(actor.following)
+            assert.strictEqual(res.status, 200)
+            assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
             assert.strictEqual(obj.id, actor.following)
             assert.strictEqual(obj.type, 'OrderedCollection')
@@ -188,6 +195,8 @@ describe("Web API interface", () => {
         })
         it("can get actor liked", async () => {
             const res = await fetch(actor.liked)
+            assert.strictEqual(res.status, 200)
+            assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
             assert.strictEqual(obj.id, actor.liked)
             assert.strictEqual(obj.type, 'OrderedCollection')
