@@ -21,7 +21,9 @@ const KEY = process.env.OPP_KEY || 'server.key'
 const CERT = process.env.OPP_CERT || 'server.crt'
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
-const PUBLIC = "https://w3.org/ns/activitypub#Public"
+
+const PUBLIC = "https://www.w3.org/ns/activitystreams#Public"
+const MAX_PAGE_SIZE = 20
 
 // Initialize Express
 const app = express();
@@ -33,25 +35,12 @@ const run = promisify((...params) => { db.run(...params) })
 const get = promisify((...params) => { db.get(...params) })
 const all = promisify((...params) => { db.all(...params) })
 
-const emptyOrderedCollection = async(name, owner, addressees) => {
-  return saveObject(
-    'OrderedCollection',
-    {
-      name: name,
-      totalItems: 0,
-      first: await saveObject('OrderedCollectionPage', {'orderedItems': []}, owner, addressees)
-    },
-    owner,
-    addressees
-  )
-}
-
 db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255))');
 db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)');
 db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
 
 app.use(passport.initialize()); // Initialize Passport
-app.use(express.json()) // for parsing application/json
+app.use(express.json({type: ['application/json', 'application/activity+json']})) // for parsing application/json
 app.use(express.urlencoded({ extended: true })) // for HTML forms
 
 // Local Strategy for login/logout
@@ -61,9 +50,34 @@ passport.use(new LocalStrategy(
   }
 ));
 
+async function makeId(type) {
+  return `https://${HOSTNAME}:${PORT}/${type.toLowerCase()}/${await nanoid()}`;
+}
+
+async function getObject(id) {
+  const row = await get(`SELECT data FROM object WHERE id = ?`, [id])
+  if (!row) {
+    return null
+  }
+  return JSON.parse(row.data)
+}
+
+async function getOwner(id) {
+  const row = await get(`SELECT owner FROM object WHERE id = ?`, [id])
+  if (!row) {
+    return null
+  }
+  return getObject(row.owner)
+}
+
+async function getAddressees(id) {
+  const rows = await all(`SELECT addresseeId FROM addressee WHERE objectId = ?`, [id])
+  return rows.map((row) => row.addresseeId)
+}
+
 async function saveObject(type, data, owner=null, addressees=[]) {
   data = data || {};
-  data.id = data.id || `https://${HOSTNAME}:${PORT}/${type.toLowerCase()}/${await nanoid()}`;
+  data.id = data.id || await makeId(type)
   data.type = data.type || type || 'Object';
   data.updated = new Date().toISOString();
   data.published = data.published || data.updated;
@@ -76,7 +90,7 @@ async function saveObject(type, data, owner=null, addressees=[]) {
       [data.id, addressee]
     )
   )
-  return data.id;
+  return data;
 }
 
 async function patchObject(id, patch) {
@@ -86,6 +100,32 @@ async function patchObject(id, patch) {
   }
   const merged = {...JSON.parse(row.data), ...patch, updated: new Date().toISOString()}
   await run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(merged), id])
+  return merged
+}
+
+const emptyOrderedCollection = async(name, owner, addressees) => {
+  const id = await makeId('OrderedCollection')
+  const page = await saveObject(
+    'OrderedCollectionPage',
+    {
+      'orderedItems': [],
+      'partOf': id
+    },
+    owner,
+    addressees
+  )
+  return await saveObject(
+    'OrderedCollection',
+    {
+      id: id,
+      name: name,
+      totalItems: 0,
+      first: page.id,
+      last: page.id
+    },
+    owner,
+    addressees
+  )
 }
 
 async function canRead(objectId, subjectId, ownerId, addressees) {
@@ -114,23 +154,19 @@ async function canRead(objectId, subjectId, ownerId, addressees) {
 }
 
 async function memberOf(objectId, collectionId) {
-  const data = await get(`SELECT data from object where id = ?`, [collectionId])
-  if (!data) {
-    return false
-  }
-  const coll = JSON.parse(data)
+  const coll = getObject(collectionId)
   switch (coll.type) {
     case "Collection":
     case "OrderedCollection":
-      if (coll.items) {
-        return objectId in coll.items
+      if (coll.orderedItems) {
+        return objectId in coll.orderedItems
       } else if (coll.first) {
         return memberOf(objectId, coll.first)
       }
       break
     case "CollectionPage":
     case "OrderedCollectionPage":
-      if (coll.items && (objectId in coll.items)) {
+      if (coll.orderedItems && (objectId in coll.orderedItems)) {
         return true;
       }
       if (coll.next) {
@@ -138,6 +174,104 @@ async function memberOf(objectId, collectionId) {
       }
       return false
   }
+}
+
+async function saveActivity(data, owner) {
+  data = data || {};
+  data.type = data.type || 'Activity';
+  data.id = data.id || await makeId(data.type)
+  data.actor = owner.id
+  const addressees = ['to', 'cc', 'bto', 'bcc']
+    .map((prop) => data[prop])
+    .filter((a) => a)
+    .flat()
+  delete data['bto']
+  delete data['bcc']
+  return saveObject(data.type, data, owner, addressees)
+}
+
+async function applyActivity(activity, owner) {
+  return
+}
+
+async function prependObject(collection, object) {
+  if (collection.orderedItems) {
+    await patchObject(collection.id, {totalItems: collection.totalItems + 1, orderedItems: [object.id, ...collection.orderedItems]})
+  } else if (collection.first) {
+    const first = await getObject(collection.first)
+    if (first.orderedItems.length < MAX_PAGE_SIZE) {
+      await patchObject(first.id, {orderedItems: [object.id, ...first.orderedItems]})
+      await patchObject(collection.id, {totalItems: collection.totalItems + 1})
+    } else {
+      const owner = await getOwner(collection.id)
+      const addressees = await getAddressees(collection.id)
+      const newFirst = await saveObject('OrderedCollectionPage', {partOf: collection.id, 'orderedItems': [object.id], next: first.id}, owner, addressees)
+      await patchObject(collection.id, {totalItems: collection.totalItems + 1, first: newFirst.id})
+      await patchObject(first.id, {prev: newFirst.id})
+    }
+  }
+}
+
+async function getAllMembers(id) {
+  const obj = await getObject(id)
+  let cur = []
+  switch (obj.type) {
+    case 'CollectionPage':
+    case 'OrderedCollectionPage':
+      cur = obj.items || obj.orderedItems || [];
+      if (obj.next) {
+        cur = cur.concat(await getAllMembers(obj.next))
+      }
+    case 'Collection':
+    case 'OrderedCollection':
+      if (obj.first) {
+        cur = getAllMembers(obj.first)
+      }
+  }
+  return cur
+}
+
+async function distributeActivity(activity, owner) {
+
+  // Add it to the owner inbox!
+
+  const ownerInbox = await getObject(owner.inbox)
+  await prependObject(ownerInbox, activity, owner, [PUBLIC])
+
+  // Get all the addressees
+
+  const addressees = await getAddressees(activity.id)
+
+  // Expand public, followers, other lists
+
+  const expanded = addressees.map(async (addressee) => {
+    if (addressee === PUBLIC) {
+      return await getAllMembers(owner.followers)
+    } else {
+      const row = await get(`SELECT data, owner FROM object WHERE id = ?`, [addressee])
+      if (row &&
+          row.owner === owner.id
+          && JSON.parse(row.data).type in ["Collection", "OrderedCollection"]) {
+          return await getAllMembers(addressee)
+      }
+    }
+    return addressee
+  }).filter((v, i, a) => v && a.indexOf(v) === i && v !== owner.id).flat()
+
+  // Deliver to each of the expanded addressees
+
+  expanded.forEach(async (addressee) => {
+    const row = await get(`SELECT username FROM user WHERE actorId = ?`, [addressee])
+    if (row) {
+      // Local delivery
+      const user = await getObject(addressee);
+      const inbox = await getObject(user.inbox);
+      return prependObject(inbox, activity)
+    } else {
+      // Remote delivery
+      return null
+    }
+  })
 }
 
 app.get('/', wrap(async(req, res) => {
@@ -186,15 +320,14 @@ app.post('/register', wrap(async(req, res) => {
     const password = req.body.password
     const passwordHash = await bcrypt.hash(password, 10)
     // Create the person; self-own!
-    const actorId = await saveObject('Person', {name: username}, null, [PUBLIC])
-    // Patch with collections
-    await patchObject(actorId, {
-      'inbox': await emptyOrderedCollection(`${username}'s Inbox`, actorId, [PUBLIC]),
-      'outbox': await emptyOrderedCollection(`${username}'s Outbox`, actorId, [PUBLIC]),
-      'followers': await emptyOrderedCollection(`${username}'s Followers`, actorId, [PUBLIC]),
-      'following': await emptyOrderedCollection(`${username}'s Following`, actorId, [PUBLIC]),
-      'liked': await emptyOrderedCollection(`${username}'s Liked`, actorId, [PUBLIC])
-    })
+    const actorId = await makeId('Person')
+    const data = {name: username, id: actorId};
+    const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
+    for (let prop of props) {
+      const coll = await emptyOrderedCollection(`${username}'s ${prop}`, actorId, [PUBLIC])
+      data[prop] = coll.id
+    }
+    await saveObject('Person', data, null, [PUBLIC])
     await run('INSERT INTO user (username, passwordHash, actorId) VALUES (?, ?, ?)', [username, passwordHash, actorId])
     const token = await sign(
       {
@@ -212,7 +345,7 @@ app.post('/register', wrap(async(req, res) => {
       <title>Registered</title>
       </head>
       <body>
-      <p>Registered ${username}</p>
+      <p>Registered <a class="actor" href="${actorId}">${username}</a></p>
       <p>Personal access token is <span class="token">${token}</span>
       </body>
       </html>`)
@@ -270,7 +403,7 @@ app.get('/:type/:id',
   if (!obj.data) {
     throw new createError.InternalServerError('Invalid object')
   }
-  const addressees = await all('SELECT addresseeId FROM addressee where objectId = ?', [full])
+  const addressees = await getAddressees(full)
   if (!canRead(full, req.auth?.subject, obj.owner, addressees)) {
     if (req.auth?.subject) {
       throw new createError.Forbidden('Not authorized to read this object')
@@ -282,9 +415,45 @@ app.get('/:type/:id',
   if (data.type?.toLowerCase() !== type) {
     throw new createError.InternalServerError('Invalid object type')
   }
-  data['@context'] = data['@context'] || 'https://w3c.org/ns/activitystreams'
+  data['@context'] = data['@context'] || 'https://www.w3c.org/ns/activitystreams'
   res.set('Content-Type', 'application/activity+json')
   res.json(data)
+}))
+
+app.post('/:type/:id',
+  expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ["RS256"] }),
+  wrap(async(req, res) => {
+  const full = req.protocol + '://' + req.get('host') + req.originalUrl;
+  const type = req.params.type
+  const id = req.params.id
+  const obj = await get('SELECT data, owner FROM object WHERE id = ?', [full])
+  if (!obj) {
+    throw new createError.NotFound('Object not found')
+  }
+  if (!obj.data || !obj.owner) {
+    throw new createError.InternalServerError('Invalid object')
+  }
+  const owner = await getObject(obj.owner)
+  if (!owner) {
+    throw new createError.InternalServerError('No owner found for object')
+  }
+  if (full === owner.outbox) {
+    if (req.auth?.subject !== obj.owner) {
+      throw new createError.Forbidden('You cannot post to this outbox')
+    }
+    const activity = await saveActivity(req.body, owner.id)
+    await applyActivity(activity, owner)
+    await prependObject(obj, activity)
+    await distributeActivity(activity, owner)
+    activity['@context'] = activity['@context'] || 'https://www.w3c.org/ns/activitystreams'
+    res.status(200)
+    res.set('Content-Type', 'application/activity+json')
+    res.json(activity)
+  } else if (full === owner.inbox) {
+    throw new createError.NotImplemented('Unimplemented endpoint')
+  } else {
+    throw new createError.MethodNotAllowed('You cannot POST to this object')
+  }
 }))
 
 app.use((err, req, res, next) => {

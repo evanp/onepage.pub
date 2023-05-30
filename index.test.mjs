@@ -95,23 +95,25 @@ describe("Web API interface", () => {
     })
 
     describe("Actor", () => {
-        before(() => {
+        let actorId = null
+        before(async () => {
             const username = 'testuser3';
             const password = 'testpassword3';
-            return fetch('https://localhost:3000/register', {
+            await fetch('https://localhost:3000/register', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: querystring.stringify({username, password, confirmation: password}),
             })
-        })
-        it("can get actor data", async () => {
             const res = await fetch('https://localhost:3000/.well-known/webfinger?resource=acct:testuser3@localhost:3000')
             const obj = await res.json()
-            const actorId = obj.links[0].href
+             actorId = obj.links[0].href
+        })
+        it("can get actor data", async () => {
             const actorRes = await fetch(actorId)
-            assert.strictEqual(actorRes.status, 200)
+            const actorBody = await actorRes.text()
+            assert.strictEqual(actorRes.status, 200, `Bad status code ${actorRes.status}: ${actorBody}`)
             assert.strictEqual(actorRes.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
-            const actorObj = await actorRes.json()
+            const actorObj = JSON.parse(actorBody)
             assert.strictEqual(actorObj.id, actorId)
             assert.strictEqual(actorObj.type, 'Person')
             assert.strictEqual(actorObj.name, 'testuser3')
@@ -204,6 +206,49 @@ describe("Web API interface", () => {
             assert(obj.name)
             assert(obj.first)
             assert(obj.first.startsWith('https://localhost:3000/orderedcollectionpage/'))
+        })
+    })
+    describe("Actor streams", () => {
+        let actor = null
+        let token = null
+        before(async () => {
+            const username = 'testuser5';
+            const password = 'testpassword5';
+            const reg = await fetch('https://localhost:3000/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: querystring.stringify({username, password, confirmation: password}),
+            })
+            const text = await reg.text()
+            token = text.match(/<span class="token">(.*?)<\/span>/)[1]
+            const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
+            const obj = await res.json()
+            const actorId = obj.links[0].href
+            const actorRes = await fetch(actorId)
+            actor = await actorRes.json()
+            return
+        })
+        it("can post an activity to the outbox", async () => {
+            const activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "IntransitiveActivity",
+                "to": "https://www.w3.org/ns/activitystreams#Public"
+            }
+            const res = await fetch(actor.outbox, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(activity)
+            })
+            const body = await res.text()
+            assert.strictEqual(res.status, 200, `Bad status code ${res.status}: ${body}`)
+            assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+            const obj = JSON.parse(body)
+            assert(obj.id)
+            assert.strictEqual(obj.type, activity.type)
+            assert.strictEqual(obj.to, activity.to)
         })
     })
 })
