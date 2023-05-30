@@ -208,7 +208,7 @@ describe("Web API interface", () => {
             assert(obj.first.startsWith('https://localhost:3000/orderedcollectionpage/'))
         })
     })
-    describe("Actor streams", () => {
+    describe("Post to outbox", () => {
         let actor = null
         let token = null
         before(async () => {
@@ -249,6 +249,12 @@ describe("Web API interface", () => {
             assert(obj.id)
             assert.strictEqual(obj.type, activity.type)
             assert.strictEqual(obj.to, activity.to)
+            const inbox = await (await fetch(actor.inbox)).json()
+            const inboxPage = await (await fetch(inbox.first)).json()
+            const outbox = await (await fetch(actor.outbox)).json()
+            const outboxPage = await (await fetch(outbox.first)).json()
+            assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
+            assert.notEqual(-1, outboxPage.orderedItems.indexOf(obj.id))
         })
     })
 })

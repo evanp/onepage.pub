@@ -438,12 +438,13 @@ app.post('/:type/:id',
     throw new createError.InternalServerError('No owner found for object')
   }
   if (full === owner.outbox) {
+    const outbox = JSON.parse(obj.data)
     if (req.auth?.subject !== obj.owner) {
       throw new createError.Forbidden('You cannot post to this outbox')
     }
     const activity = await saveActivity(req.body, owner.id)
     await applyActivity(activity, owner)
-    await prependObject(obj, activity)
+    await prependObject(outbox, activity)
     await distributeActivity(activity, owner)
     activity['@context'] = activity['@context'] || 'https://www.w3c.org/ns/activitystreams'
     res.status(200)
