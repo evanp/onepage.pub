@@ -2,9 +2,35 @@ import {describe, before, after, it} from 'node:test';
 import {exec} from 'node:child_process';
 import assert from 'node:assert';
 import querystring from 'node:querystring';
-import c from 'config';
 
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
+
+const registerUser = (() => {
+    let i = 100;
+    return async() => {
+        i++;
+        const username = `testuser${i}`;
+        const password = `testpassword${i}`
+        const reg = await fetch('https://localhost:3000/register', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: querystring.stringify({username, password, confirmation: password}),
+        })
+        const text = await reg.text()
+        const token = text.match(/<span class="token">(.*?)<\/span>/)[1]
+        return [username, token]
+    }
+})()
+
+const registerActor = async() => {
+    const [username, token] = await registerUser()
+    const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
+    const obj = await res.json()
+    const actorId = obj.links[0].href
+    const actorRes = await fetch(actorId)
+    const actor = await actorRes.json()
+    return [actor, token]
+}
 
 describe("Web API interface", () => {
 
@@ -69,17 +95,13 @@ describe("Web API interface", () => {
     })
 
     describe("Webfinger", () => {
-        before(() => {
-            const username = 'testuser2';
-            const password = 'testpassword2';
-            return fetch('https://localhost:3000/register', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: querystring.stringify({username, password, confirmation: password}),
-            })
+        let username = null
+        let token = null
+        before(async() => {
+            [username, token] = await registerUser()
         })
         it("can get information about a user", async () => {
-            const res = await fetch('https://localhost:3000/.well-known/webfinger?resource=acct:testuser2@localhost:3000')
+            const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
             if (res.status !== 200) {
                 body = await res.text()
                 console.log(body)
@@ -87,7 +109,7 @@ describe("Web API interface", () => {
             assert.strictEqual(res.status, 200)
             assert.strictEqual(res.headers.get('Content-Type'), 'application/jrd+json; charset=utf-8')
             const obj = await res.json()
-            assert.strictEqual(obj.subject, 'acct:testuser2@localhost:3000')
+            assert.strictEqual(obj.subject, `acct:${username}@localhost:3000`)
             assert.strictEqual(obj.links[0].rel, 'self')
             assert.strictEqual(obj.links[0].type, 'application/activity+json')
             assert(obj.links[0].href.startsWith('https://localhost:3000/person/'))
@@ -95,16 +117,12 @@ describe("Web API interface", () => {
     })
 
     describe("Actor", () => {
+        let username = null
+        let token = null
         let actorId = null
         before(async () => {
-            const username = 'testuser3';
-            const password = 'testpassword3';
-            await fetch('https://localhost:3000/register', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: querystring.stringify({username, password, confirmation: password}),
-            })
-            const res = await fetch('https://localhost:3000/.well-known/webfinger?resource=acct:testuser3@localhost:3000')
+            [username, token] = await registerUser()
+            const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
             const obj = await res.json()
              actorId = obj.links[0].href
         })
@@ -116,7 +134,7 @@ describe("Web API interface", () => {
             const actorObj = JSON.parse(actorBody)
             assert.strictEqual(actorObj.id, actorId)
             assert.strictEqual(actorObj.type, 'Person')
-            assert.strictEqual(actorObj.name, 'testuser3')
+            assert.strictEqual(actorObj.name, username)
             assert(actorObj.inbox)
             assert(actorObj.inbox.startsWith('https://localhost:3000/orderedcollection/'))
             assert(actorObj.outbox)
@@ -132,20 +150,9 @@ describe("Web API interface", () => {
 
     describe("Actor streams", () => {
         let actor = null
+        let token = null
         before(async () => {
-            const username = 'testuser4';
-            const password = 'testpassword4';
-            await fetch('https://localhost:3000/register', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: querystring.stringify({username, password, confirmation: password}),
-            })
-            const res = await fetch('https://localhost:3000/.well-known/webfinger?resource=acct:testuser4@localhost:3000')
-            const obj = await res.json()
-            const actorId = obj.links[0].href
-            const actorRes = await fetch(actorId)
-            actor = await actorRes.json()
-            return
+            [actor, token] = await registerActor()
         })
         it("can get actor inbox", async () => {
             const res = await fetch(actor.inbox)
@@ -212,21 +219,7 @@ describe("Web API interface", () => {
         let actor = null
         let token = null
         before(async () => {
-            const username = 'testuser5';
-            const password = 'testpassword5';
-            const reg = await fetch('https://localhost:3000/register', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: querystring.stringify({username, password, confirmation: password}),
-            })
-            const text = await reg.text()
-            token = text.match(/<span class="token">(.*?)<\/span>/)[1]
-            const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
-            const obj = await res.json()
-            const actorId = obj.links[0].href
-            const actorRes = await fetch(actorId)
-            actor = await actorRes.json()
-            return
+            [actor, token] = await registerActor()
         })
         it("can post an activity to the outbox", async () => {
             const activity = {
