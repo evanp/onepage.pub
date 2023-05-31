@@ -5,13 +5,27 @@ import querystring from 'node:querystring';
 
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
 
-const registerUser = (() => {
+const startServer = ((port=3000) => {
+    return new Promise((resolve, reject) => {
+        const server = exec(`OPP_PORT=${port} node index.mjs`)
+        server.on('error', reject)
+        server.stdout.on('data', (data) => {
+            if (data.toString().includes('Listening')) {
+                resolve(server)
+            }
+            console.log(`OTHER SERVER: ${data.toString()}`)
+        })
+        server.stderr.on('data', (data) => {console.log(`OTHER SERVER ERROR: ${data.toString()}`)})
+    })
+})
+
+const registerUser = ((port=3000) => {
     let i = 100;
     return async() => {
         i++;
         const username = `testuser${i}`;
         const password = `testpassword${i}`
-        const reg = await fetch('https://localhost:3000/register', {
+        const reg = await fetch(`https://localhost:${port}/register`, {
             method: 'POST',
             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
             body: querystring.stringify({username, password, confirmation: password}),
@@ -36,18 +50,8 @@ describe("Web API interface", () => {
 
     let child = null
 
-    before(() => {
-        return new Promise((resolve, reject) => {
-            child = exec('node index.mjs')
-            child.on('error', reject)
-            child.stdout.on('data', (data) => {
-                if (data.toString().includes('Listening')) {
-                    resolve()
-                }
-                console.log(`SERVER: ${data.toString()}`)
-            })
-            child.stderr.on('data', (data) => {console.log(`SERVER ERROR: ${data.toString()}`)})
-        })
+    before(async () => {
+        child = await startServer(3000)
     })
 
     after(() => {
