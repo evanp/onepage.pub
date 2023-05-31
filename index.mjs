@@ -35,6 +35,8 @@ const run = promisify((...params) => { db.run(...params) })
 const get = promisify((...params) => { db.get(...params) })
 const all = promisify((...params) => { db.all(...params) })
 
+const isString = value => typeof value === 'string' || value instanceof String;
+
 db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255))');
 db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)');
 db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
@@ -73,6 +75,14 @@ async function getOwner(id) {
 async function getAddressees(id) {
   const rows = await all(`SELECT addresseeId FROM addressee WHERE objectId = ?`, [id])
   return rows.map((row) => row.addresseeId)
+}
+
+async function toObject(value) {
+  if (isString(value)) {
+    return getObject(value)
+  } else {
+    return value
+  }
 }
 
 async function saveObject(type, data, owner=null, addressees=[]) {
@@ -153,6 +163,11 @@ async function canRead(objectId, subjectId, ownerId, addressees) {
   return false;
 }
 
+async function isUser(id) {
+  const row = await get("SELECT username FROM user WHERE actorId = ?", [id])
+  return !!row
+}
+
 async function memberOf(objectId, collectionId) {
   const coll = getObject(collectionId)
   switch (coll.type) {
@@ -191,10 +206,30 @@ async function saveActivity(data, owner) {
 }
 
 async function applyActivity(activity, owner) {
-  return
+  switch (activity.type) {
+    case "Follow":
+      if (!activity.object) {
+        throw new createError.BadRequest("No object followed")
+      }
+      if (await memberOf(activity.object, owner.following)) {
+        throw new createError.BadRequest("Already following")
+      }
+      const following = await getObject(owner.following)
+      await prependObject(following, activity.object)
+      if (await isUser(activity.object)) {
+        const other = await getObject(activity.object)
+        const followers = await getObject(other.followers)
+        await prependObject(followers, owner)
+      }
+      return
+    default:
+      return
+  }
 }
 
 async function prependObject(collection, object) {
+  collection = await toObject(collection)
+  object = await toObject(object)
   if (collection.orderedItems) {
     await patchObject(collection.id, {totalItems: collection.totalItems + 1, orderedItems: [object.id, ...collection.orderedItems]})
   } else if (collection.first) {
@@ -244,23 +279,24 @@ async function distributeActivity(activity, owner) {
 
   // Expand public, followers, other lists
 
-  const expanded = addressees.map(async (addressee) => {
+  const expanded = (await Promise.all(addressees.map(async (addressee) => {
     if (addressee === PUBLIC) {
       return await getAllMembers(owner.followers)
     } else {
-      const row = await get(`SELECT data, owner FROM object WHERE id = ?`, [addressee])
-      if (row &&
-          row.owner === owner.id
-          && JSON.parse(row.data).type in ["Collection", "OrderedCollection"]) {
+      const obj = await getObject(addressee)
+      const objOwner = await getOwner(addressee)
+      if (obj &&
+          objOwner.id === owner.id &&
+          -1 !== ['Collection', 'OrderedCollection'].indexOf(obj.type)) {
           return await getAllMembers(addressee)
       }
     }
     return addressee
-  }).filter((v, i, a) => v && a.indexOf(v) === i && v !== owner.id).flat()
+  }))).filter((v, i, a) => v && a.indexOf(v) === i && v !== owner.id).flat()
 
   // Deliver to each of the expanded addressees
 
-  expanded.forEach(async (addressee) => {
+  await Promise.all(expanded.map((async (addressee) => {
     const row = await get(`SELECT username FROM user WHERE actorId = ?`, [addressee])
     if (row) {
       // Local delivery
@@ -271,7 +307,7 @@ async function distributeActivity(activity, owner) {
       // Remote delivery
       return null
     }
-  })
+  })))
 }
 
 app.get('/', wrap(async(req, res) => {

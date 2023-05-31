@@ -250,4 +250,110 @@ describe("Web API interface", () => {
             assert.notEqual(-1, outboxPage.orderedItems.indexOf(obj.id))
         })
     })
+    describe("Follow Activity", () => {
+        let actor1 = null
+        let token1 = null
+        let actor2 = null
+        let token2 = null
+        let activity = null
+        let obj = null
+        before(async () => {
+            [actor1, token1] = await registerActor();
+            [actor2, token2] = await registerActor();
+            activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Follow",
+                "object": actor2.id,
+                "to": ["https://www.w3.org/ns/activitystreams#Public", actor2.id]
+            }
+            const res = await fetch(actor1.outbox, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token1}`
+                },
+                body: JSON.stringify(activity)
+            })
+            const body = await res.text()
+            obj = JSON.parse(body)
+        })
+
+        it("appears in the actor's inbox", async () => {
+            assert(obj.to.every((v, i) => v == activity.to[i]))
+            let inbox1 = await (await fetch(actor1.inbox)).json()
+            let inboxPage1 = await (await fetch(inbox1.first)).json()
+            assert.notEqual(-1, inboxPage1.orderedItems.indexOf(obj.id))
+        })
+
+        it("appears in the actor's outbox", async () => {
+            const outbox1 = await (await fetch(actor1.outbox)).json()
+            const outboxPage1 = await (await fetch(outbox1.first)).json()
+            assert.notEqual(-1, outboxPage1.orderedItems.indexOf(obj.id))
+        })
+
+        it("appears in the other's inbox", async () => {
+           const inbox2 = await (await fetch(actor2.inbox)).json()
+            const inboxPage2 = await (await fetch(inbox2.first)).json()
+            assert.notEqual(-1, inboxPage2.orderedItems.indexOf(obj.id))
+        })
+
+        it("puts the actor in the other's followers", async () => {
+            const followers2 = await (await fetch(actor2.followers)).json()
+            const followersPage2 = await (await fetch(followers2.first)).json()
+            assert.notEqual(-1, followersPage2.orderedItems.indexOf(actor1.id))
+        })
+
+        it("puts the other in the actor's following", async() => {
+
+            const following1 = await (await fetch(actor1.following)).json()
+            const followingPage1 = await (await fetch(following1.first)).json()
+            assert.notEqual(-1, followingPage1.orderedItems.indexOf(actor2.id))
+        })
+
+        it("distributes to the actor when the other posts to followers", async() => {
+            const activity2 = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "IntransitiveActivity",
+                "to": actor2.followers
+            }
+            const res2 = await fetch(actor2.outbox, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token2}`
+                },
+                body: JSON.stringify(activity2)
+            })
+            const body2 = await res2.text()
+            assert.strictEqual(res2.status, 200, `Bad status code ${res2.status}: ${body2}`)
+            assert.strictEqual(res2.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+            const obj2 = JSON.parse(body2)
+            const inbox1 = await (await fetch(actor1.inbox)).json()
+            const inboxPage1 = await (await fetch(inbox1.first)).json()
+            assert.notEqual(-1, inboxPage1.orderedItems.indexOf(obj2.id))
+        })
+
+        it("distributes to the actor when the other posts to public", async() => {
+            const activity2 = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "IntransitiveActivity",
+                "to": "https://www.w3.org/ns/activitystreams#Public"
+            }
+            const res2 = await fetch(actor2.outbox, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token2}`
+                },
+                body: JSON.stringify(activity2)
+            })
+            const body2 = await res2.text()
+            assert.strictEqual(res2.status, 200, `Bad status code ${res2.status}: ${body2}`)
+            assert.strictEqual(res2.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+            const obj2 = JSON.parse(body2)
+            const inbox1 = await (await fetch(actor1.inbox)).json()
+            const inboxPage1 = await (await fetch(inbox1.first)).json()
+            assert.notEqual(-1, inboxPage1.orderedItems.indexOf(obj2.id))
+        })
+    })
 })
