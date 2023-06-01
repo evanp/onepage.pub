@@ -19,9 +19,9 @@ const startServer = ((port=3000) => {
     })
 })
 
-const registerUser = ((port=3000) => {
+const registerUser = (() => {
     let i = 100;
-    return async() => {
+    return async(port=3000) => {
         i++;
         const username = `testuser${i}`;
         const password = `testpassword${i}`
@@ -36,9 +36,9 @@ const registerUser = ((port=3000) => {
     }
 })()
 
-const registerActor = async() => {
-    const [username, token] = await registerUser()
-    const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
+const registerActor = async(port=3000) => {
+    const [username, token] = await registerUser(port)
+    const res = await fetch(`https://localhost:${port}/.well-known/webfinger?resource=acct:${username}@localhost:${port}`)
     const obj = await res.json()
     const actorId = obj.links[0].href
     const actorRes = await fetch(actorId)
@@ -254,6 +254,65 @@ describe("Web API interface", () => {
             assert.notEqual(-1, outboxPage.orderedItems.indexOf(obj.id))
         })
     })
+
+    describe("Remote delivery", () => {
+        let remote = null
+        let actor1 = null
+        let token1 = null
+        let actor2 = null
+        let token2 = null
+        before(async() => {
+            remote = await startServer(3001);
+            [actor1, token1] = await registerActor(3000);
+            [actor2, token2] = await registerActor(3001);
+        })
+        after(async() => {
+            remote.kill()
+        })
+
+        it("sends to remote addressees", async() => {
+            const activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "IntransitiveActivity",
+                "to": actor2.id
+            }
+            const res = await fetch(actor1.outbox, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token1}`
+                },
+                body: JSON.stringify(activity)
+            })
+            const body = await res.text()
+            const obj = JSON.parse(body)
+            const inbox = await (await fetch(actor2.inbox)).json()
+            const inboxPage = await (await fetch(inbox.first)).json()
+            assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
+        })
+
+        it("receives from remote senders", async() => {
+            const activity = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "IntransitiveActivity",
+                "to": actor1.id
+            }
+            const res = await fetch(actor2.outbox, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token2}`
+                },
+                body: JSON.stringify(activity)
+            })
+            const body = await res.text()
+            const obj = JSON.parse(body)
+            const inbox = await (await fetch(actor1.inbox)).json()
+            const inboxPage = await (await fetch(inbox.first)).json()
+            assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
+        })
+    })
+
     describe("Follow Activity", () => {
         let actor1 = null
         let token1 = null
