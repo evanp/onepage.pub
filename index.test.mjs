@@ -120,33 +120,64 @@ describe("Web API interface", () => {
         })
     })
 
-    describe("Actor", () => {
+    describe("Actor endpoint", () => {
+
         let username = null
         let token = null
         let actorId = null
+        let actorRes = null
+        let actorBody = null
+        let actorObj = null
+
         before(async () => {
             [username, token] = await registerUser()
             const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
             const obj = await res.json()
-             actorId = obj.links[0].href
+            actorId = obj.links[0].href
+            actorRes = await fetch(actorId)
+            actorBody = await actorRes.text()
+            actorObj = (actorRes.status === 200) ? JSON.parse(actorBody) : null
         })
-        it("can get actor data", async () => {
-            const actorRes = await fetch(actorId)
-            const actorBody = await actorRes.text()
+
+        it("can fetch the actor endpoint", async () => {
             assert.strictEqual(actorRes.status, 200, `Bad status code ${actorRes.status}: ${actorBody}`)
             assert.strictEqual(actorRes.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
-            const actorObj = JSON.parse(actorBody)
+        })
+
+        it("has the correct id", () => {
             assert.strictEqual(actorObj.id, actorId)
+        })
+
+        it("has the correct type", () => {
             assert.strictEqual(actorObj.type, 'Person')
+        })
+
+        it("has the correct name", () => {
             assert.strictEqual(actorObj.name, username)
+        })
+
+        it("has a valid inbox", () => {
             assert(actorObj.inbox)
             assert(actorObj.inbox.startsWith('https://localhost:3000/orderedcollection/'))
+        })
+
+        it("has a valid outbox", () => {
             assert(actorObj.outbox)
             assert(actorObj.outbox.startsWith('https://localhost:3000/orderedcollection/'))
+        })
+
+        it("has a valid followers", () => {
             assert(actorObj.followers)
             assert(actorObj.followers.startsWith('https://localhost:3000/orderedcollection/'))
+        })
+
+        it("has a valid following", () => {
+
             assert(actorObj.following)
             assert(actorObj.following.startsWith('https://localhost:3000/orderedcollection/'))
+        })
+
+        it("has a valid liked", () => {
             assert(actorObj.liked)
             assert(actorObj.liked.startsWith('https://localhost:3000/orderedcollection/'))
         })
