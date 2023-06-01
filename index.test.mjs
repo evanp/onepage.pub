@@ -144,6 +144,12 @@ describe("Web API interface", () => {
             assert.strictEqual(actorRes.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
         })
 
+        it("has the correct @context", () => {
+            assert(actorObj["@context"])
+            assert.notEqual(-1, actorObj["@context"].indexOf("https://www.w3.org/ns/activitystreams"))
+            assert.notEqual(-1, actorObj["@context"].indexOf("https://w3id.org/security"))
+        })
+
         it("has the correct id", () => {
             assert.strictEqual(actorObj.id, actorId)
         })

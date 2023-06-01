@@ -22,6 +22,10 @@ const CERT = process.env.OPP_CERT || 'server.crt'
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
 
+const AS_CONTEXT = 'https://www.w3.org/ns/activitystreams'
+const SEC_CONTEXT = 'https://w3id.org/security'
+const CONTEXT = [AS_CONTEXT, SEC_CONTEXT]
+
 const PUBLIC = "https://www.w3.org/ns/activitystreams#Public"
 const MAX_PAGE_SIZE = 20
 
@@ -314,7 +318,7 @@ app.get('/', wrap(async(req, res) => {
   const url = req.protocol + '://' + req.get('host') + req.originalUrl;
   res.set('Content-Type', 'application/activity+json')
   res.json({
-    '@context': 'https://w3c.org/ns/activitystreams',
+    '@context': CONTEXT,
     'id': url,
     'name': process.OPP_NAME || 'One Page Pub',
     'type': 'Service'
@@ -451,7 +455,7 @@ app.get('/:type/:id',
   if (data.type?.toLowerCase() !== type) {
     throw new createError.InternalServerError('Invalid object type')
   }
-  data['@context'] = data['@context'] || 'https://www.w3c.org/ns/activitystreams'
+  data['@context'] = data['@context'] || CONTEXT
   res.set('Content-Type', 'application/activity+json')
   res.json(data)
 }))
@@ -482,7 +486,7 @@ app.post('/:type/:id',
     await applyActivity(activity, owner)
     await prependObject(outbox, activity)
     await distributeActivity(activity, owner)
-    activity['@context'] = activity['@context'] || 'https://www.w3c.org/ns/activitystreams'
+    activity['@context'] = activity['@context'] || CONTEXT
     res.status(200)
     res.set('Content-Type', 'application/activity+json')
     res.json(activity)
