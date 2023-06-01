@@ -11,8 +11,10 @@ import bcrypt from 'bcrypt';
 import { expressjwt } from "express-jwt";
 import jwt from 'jsonwebtoken';
 import { promisify } from 'util';
+import crypto from 'crypto';
 
 const sign = promisify(jwt.sign);
+const generateKeyPair = promisify(crypto.generateKeyPair);
 
 const DATABASE = process.env.OPP_DATABASE || ':memory:'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
@@ -41,7 +43,7 @@ const all = promisify((...params) => { db.all(...params) })
 
 const isString = value => typeof value === 'string' || value instanceof String;
 
-db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255))');
+db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255), privateKey TEXT)');
 db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)');
 db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
 
@@ -367,8 +369,24 @@ app.post('/register', wrap(async(req, res) => {
       const coll = await emptyOrderedCollection(`${username}'s ${prop}`, actorId, [PUBLIC])
       data[prop] = coll.id
     }
+    const {publicKey, privateKey} = await generateKeyPair(
+      'rsa',
+      {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      }
+    )
+    const {id, type, owner, publicKeyPem} = await saveObject('Key', {owner: actorId, publicKeyPem: publicKey}, actorId, [PUBLIC])
+    data['publicKey'] = {id, type, owner, publicKeyPem}
     await saveObject('Person', data, null, [PUBLIC])
-    await run('INSERT INTO user (username, passwordHash, actorId) VALUES (?, ?, ?)', [username, passwordHash, actorId])
+    await run('INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)', [username, passwordHash, actorId, privateKey])
     const token = await sign(
       {
         subject: actorId,

@@ -13,9 +13,9 @@ const startServer = ((port=3000) => {
             if (data.toString().includes('Listening')) {
                 resolve(server)
             }
-            console.log(`OTHER SERVER: ${data.toString()}`)
+            console.log(`SERVER ${port}: ${data.toString()}`)
         })
-        server.stderr.on('data', (data) => {console.log(`OTHER SERVER ERROR: ${data.toString()}`)})
+        server.stderr.on('data', (data) => {console.log(`SERVER ${port} ERROR: ${data.toString()}`)})
     })
 })
 
@@ -89,9 +89,9 @@ describe("Web API interface", () => {
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: querystring.stringify({username, password, confirmation: password}),
             })
-            assert.strictEqual(res.status, 200)
-            assert.strictEqual(res.headers.get('Content-Type'), 'text/html; charset=utf-8')
             const body = await res.text()
+            assert.strictEqual(res.status, 200, `Bad status code ${res.status}: ${body}`)
+            assert.strictEqual(res.headers.get('Content-Type'), 'text/html; charset=utf-8')
             assert(body.includes('Registered'))
             assert(body.includes(username))
             assert(body.match('<span class="token">.+?</span>'))
@@ -186,6 +186,17 @@ describe("Web API interface", () => {
         it("has a valid liked", () => {
             assert(actorObj.liked)
             assert(actorObj.liked.startsWith('https://localhost:3000/orderedcollection/'))
+        })
+
+        it("has a public key", () => {
+            assert(actorObj.publicKey)
+            assert.equal("object", typeof actorObj.publicKey)
+            assert.equal("string", typeof actorObj.publicKey.id)
+            assert(actorObj.publicKey.id.startsWith('https://localhost:3000/key/'))
+            assert.equal("string", typeof actorObj.publicKey.type)
+            assert.equal("Key", actorObj.publicKey.type)
+            assert.equal("string", typeof actorObj.publicKey.owner)
+            assert.equal(actorObj.publicKey.owner, actorId)
         })
     })
 
