@@ -91,6 +91,33 @@ async function toObject(value) {
   }
 }
 
+async function toId(value) {
+  if (isString(value)) {
+    return value;
+  } else if (typeof value == "object") {
+    return value.id
+  } else {
+    throw new Error('cannot coerce to an ID')
+  }
+}
+
+async function getRemoteObject(value) {
+  const id = await toId(value)
+  const obj = await getObject(id)
+  if (obj) {
+    return obj
+  } else {
+    const res = await fetch(id, {
+      headers: {'Accept': 'application/activity+json, application/ld+json, application/json'}
+    })
+    if (res.status !== 200) {
+      return null
+    } else {
+      return res.json()
+    }
+  }
+}
+
 async function saveObject(type, data, owner=null, addressees=[]) {
   data = data || {};
   data.id = data.id || await makeId(type)
@@ -169,7 +196,8 @@ async function canRead(objectId, subjectId, ownerId, addressees) {
   return false;
 }
 
-async function isUser(id) {
+async function isUser(object) {
+  const id = await toId(object)
   const row = await get("SELECT username FROM user WHERE actorId = ?", [id])
   return !!row
 }
@@ -233,20 +261,37 @@ async function applyActivity(activity, owner) {
   }
 }
 
+async function applyRemoteActivity(activity, remote, owner) {
+  switch (activity.type) {
+    case "Follow":
+      if (toId(activity.object) == toId(owner)) {
+        if (await memberOf(remote, owner.followers)) {
+          throw new Error("Already following")
+        }
+        const followers = await getObject(owner.followers)
+        await prependObject(followers, remote)
+      }
+      break
+    default:
+      break
+  }
+  return
+}
+
 async function prependObject(collection, object) {
   collection = await toObject(collection)
-  object = await toObject(object)
+  const objectId = await toId(object)
   if (collection.orderedItems) {
-    await patchObject(collection.id, {totalItems: collection.totalItems + 1, orderedItems: [object.id, ...collection.orderedItems]})
+    await patchObject(collection.id, {totalItems: collection.totalItems + 1, orderedItems: [objectId, ...collection.orderedItems]})
   } else if (collection.first) {
     const first = await getObject(collection.first)
     if (first.orderedItems.length < MAX_PAGE_SIZE) {
-      await patchObject(first.id, {orderedItems: [object.id, ...first.orderedItems]})
+      await patchObject(first.id, {orderedItems: [objectId, ...first.orderedItems]})
       await patchObject(collection.id, {totalItems: collection.totalItems + 1})
     } else {
       const owner = await getOwner(collection.id)
       const addressees = await getAddressees(collection.id)
-      const newFirst = await saveObject('OrderedCollectionPage', {partOf: collection.id, 'orderedItems': [object.id], next: first.id}, owner, addressees)
+      const newFirst = await saveObject('OrderedCollectionPage', {partOf: collection.id, 'orderedItems': [objectId], next: first.id}, owner, addressees)
       await patchObject(collection.id, {totalItems: collection.totalItems + 1, first: newFirst.id})
       await patchObject(first.id, {prev: newFirst.id})
     }
@@ -270,6 +315,63 @@ async function getAllMembers(id) {
       }
   }
   return cur
+}
+
+async function signRequest(keyId, privateKey, method, url, date) {
+  url = (isString(url)) ? new URL(url) : url;
+  const target = (url.search && url.search.length) ?
+    `${url.pathname}?${url.search}` :
+    `${url.pathname}`
+  let data = `(request-target): ${method.toLowerCase()} ${target}\n`
+  data += `host: ${url.host}\n`
+  data += `date: ${date}`
+  console.dir(data)
+  const signer = crypto.createSign('sha256');
+	signer.update(data);
+	const signature = signer.sign(privateKey).toString('base64');
+	signer.end();
+  console.log(signature)
+  const header = `keyId="${keyId}",headers="(request-target) host date",signature="${signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`;
+  return header
+}
+
+async function validateSignature(sigHeader, req) {
+  const parts = Object.fromEntries(sigHeader.split(',').map((clause) => {
+    let match = clause.match(/^\s*(\w+)\s*=\s*"(.*?)"\s*$/)
+    return [match[1], match[2].replace(/\\"/, '"')]
+  }))
+  console.dir(parts)
+  if (!parts.keyId || !parts.headers || !parts.signature || !parts.algorithm) {
+    return null
+  }
+  if (parts.algorithm != 'rsa-sha256') {
+    return null
+  }
+  let lines = []
+  for (let name of parts.headers.split(' ')) {
+    if (name == '(request-target)') {
+      lines.push(`(request-target): ${req.method.toLowerCase()} ${req.originalUrl}`)
+    } else {
+      let value = req.get(name)
+      lines.push(`${name}: ${value}`)
+    }
+  }
+  let data = lines.join('\n')
+  console.dir(data)
+  const publicKey = await getRemoteObject(parts.keyId)
+  if (!publicKey || !publicKey.owner || !publicKey.publicKeyPem) {
+    return null
+  }
+  console.dir(publicKey)
+  const verifier = crypto.createVerify('sha256');
+	verifier.write(data);
+	verifier.end();
+  console.log(parts.signature)
+  if (verifier.verify(publicKey.publicKeyPem, Buffer.from(parts.signature, 'base64'))) {
+    return await getRemoteObject(publicKey.owner)
+  } else {
+    return null
+  }
 }
 
 async function distributeActivity(activity, owner) {
@@ -302,6 +404,10 @@ async function distributeActivity(activity, owner) {
 
   // Deliver to each of the expanded addressees
 
+  const body = JSON.stringify(activity)
+  const {privateKey} = await get('SELECT privateKey FROM user WHERE actorId = ?', [owner.id])
+  const keyId = owner.publicKey.id;
+
   await Promise.all(expanded.map((async (addressee) => {
     const row = await get(`SELECT username FROM user WHERE actorId = ?`, [addressee])
     if (row) {
@@ -310,8 +416,20 @@ async function distributeActivity(activity, owner) {
       const inbox = await getObject(user.inbox);
       return prependObject(inbox, activity)
     } else {
-      // Remote delivery
-      return null
+      const other = await getRemoteObject(addressee);
+      const inbox = await toId(other.inbox)
+      const date = new Date().toUTCString()
+      const signature = await signRequest(keyId, privateKey, 'POST', inbox, date)
+      const res = await fetch(inbox, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Signature': signature,
+          'Date': date
+        },
+        body: body
+      })
+      const resBody = await res.text()
     }
   })))
 }
@@ -508,8 +626,24 @@ app.post('/:type/:id',
     res.status(200)
     res.set('Content-Type', 'application/activity+json')
     res.json(activity)
-  } else if (full === owner.inbox) {
-    throw new createError.NotImplemented('Unimplemented endpoint')
+  } else if (full === owner.inbox) { // remote delivery
+    const sigHeader = req.headers['signature']
+    if (!sigHeader) {
+      throw new createError.Unauthorized('HTTP signature required')
+    }
+    const remote = await validateSignature(sigHeader, req)
+    if (!remote) {
+      throw new createError.Unauthorized('Invalid HTTP signature')
+    }
+    if (await isUser(remote)) {
+      throw new createError.Forbidden('Remote delivery only')
+    }
+    const activity = await saveActivity(req.body, remote)
+    await applyRemoteActivity(activity, remote, owner)
+    await prependObject(owner.inbox, activity)
+    res.status(202)
+    res.set('Content-Type', 'application/activity+json')
+    res.json(activity)
   } else {
     throw new createError.MethodNotAllowed('You cannot POST to this object')
   }
