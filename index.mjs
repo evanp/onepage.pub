@@ -92,12 +92,16 @@ async function toObject(value) {
 }
 
 async function toId(value) {
-  if (isString(value)) {
+  if (typeof value == "undefined") {
+    return null;
+  } else if (value == null) {
+    return null;
+  } else if (isString(value)) {
     return value;
   } else if (typeof value == "object") {
-    return value.id
+    return value.id || value['@id']
   } else {
-    throw new Error('cannot coerce to an ID')
+    throw new Error(`cannot coerce to an ID: ${value} (${typeof value})`)
   }
 }
 
@@ -171,9 +175,16 @@ const emptyOrderedCollection = async(name, owner, addressees) => {
   )
 }
 
-async function canRead(objectId, subjectId, ownerId, addressees) {
+async function canRead(object, subject, owner=null, addressees=null) {
+  const objectId = await toId(object)
+  const subjectId = await toId(subject)
+  owner = owner || await getOwner(objectId)
+  addressees = addressees || await getAddressees(objectId)
+  const ownerId = await toId(owner)
+  const addresseeIds = await Promise.all(addressees.map(toId))
   // anyone can read if it's public
-  if (PUBLIC in addressees) {
+
+  if (-1 !== addresseeIds.indexOf(PUBLIC)) {
     return true;
   }
   // otherwise, unauthenticated can't read
@@ -185,12 +196,14 @@ async function canRead(objectId, subjectId, ownerId, addressees) {
     return true;
   }
   // direct addressees can always read
-  if (subjectId in addressees) {
+  if (-1 !== addresseeIds.indexOf(subjectId)) {
     return true;
   }
   // if they're a member of any addressed collection
-  if (addressees.some(async(addresseeId) => await memberOf(subjectId, addresseeId))) {
-    return true;
+  for (let addresseeId of addresseeIds) {
+    if (await memberOf(subjectId, addresseeId)) {
+      return true
+    }
   }
   // Otherwise, can't read
   return false;
@@ -202,25 +215,31 @@ async function isUser(object) {
   return !!row
 }
 
-async function memberOf(objectId, collectionId) {
-  const coll = getObject(collectionId)
-  switch (coll.type) {
+async function memberOf(object, collection) {
+  const objectId = await toId(object)
+  collection = await toObject(collection)
+  switch (collection.type) {
     case "Collection":
     case "OrderedCollection":
-      if (coll.orderedItems) {
-        return objectId in coll.orderedItems
-      } else if (coll.first) {
-        return memberOf(objectId, coll.first)
+      if (collection.orderedItems) {
+        return -1 !== collection.orderedItems.indexOf(objectId)
+      } else if (collection.items) {
+          return -1 !== collection.items.indexOf(objectId)
+      } else if (collection.first) {
+        return await memberOf(objectId, collection.first)
       }
       break
     case "CollectionPage":
     case "OrderedCollectionPage":
-      if (coll.orderedItems && (objectId in coll.orderedItems)) {
-        return true;
+      if (collection.orderedItems) {
+        return -1 !== collection.orderedItems.indexOf(objectId)
+      } else if (collection.items) {
+          return -1 !== collection.items.indexOf(objectId)
+      } else if (collection.next) {
+        return await memberOf(objectId, collection.next)
       }
-      if (coll.next) {
-        return memberOf(objectId, coll.next)
-      }
+      return false
+    default:
       return false
   }
 }
@@ -325,12 +344,10 @@ async function signRequest(keyId, privateKey, method, url, date) {
   let data = `(request-target): ${method.toLowerCase()} ${target}\n`
   data += `host: ${url.host}\n`
   data += `date: ${date}`
-  console.dir(data)
   const signer = crypto.createSign('sha256');
 	signer.update(data);
 	const signature = signer.sign(privateKey).toString('base64');
 	signer.end();
-  console.log(signature)
   const header = `keyId="${keyId}",headers="(request-target) host date",signature="${signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`;
   return header
 }
@@ -340,7 +357,6 @@ async function validateSignature(sigHeader, req) {
     let match = clause.match(/^\s*(\w+)\s*=\s*"(.*?)"\s*$/)
     return [match[1], match[2].replace(/\\"/, '"')]
   }))
-  console.dir(parts)
   if (!parts.keyId || !parts.headers || !parts.signature || !parts.algorithm) {
     return null
   }
@@ -357,16 +373,13 @@ async function validateSignature(sigHeader, req) {
     }
   }
   let data = lines.join('\n')
-  console.dir(data)
   const publicKey = await getRemoteObject(parts.keyId)
   if (!publicKey || !publicKey.owner || !publicKey.publicKeyPem) {
     return null
   }
-  console.dir(publicKey)
   const verifier = crypto.createVerify('sha256');
 	verifier.write(data);
 	verifier.end();
-  console.log(parts.signature)
   if (verifier.verify(publicKey.publicKeyPem, Buffer.from(parts.signature, 'base64'))) {
     return await getRemoteObject(publicKey.owner)
   } else {
@@ -503,7 +516,7 @@ app.post('/register', wrap(async(req, res) => {
     )
     const {id, type, owner, publicKeyPem} = await saveObject('Key', {owner: actorId, publicKeyPem: publicKey}, actorId, [PUBLIC])
     data['publicKey'] = {id, type, owner, publicKeyPem}
-    await saveObject('Person', data, null, [PUBLIC])
+    await saveObject('Person', data, actorId, [PUBLIC])
     await run('INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)', [username, passwordHash, actorId, privateKey])
     const token = await sign(
       {
@@ -571,7 +584,6 @@ app.get('/:type/:id',
   wrap(async(req, res) => {
   const full = req.protocol + '://' + req.get('host') + req.originalUrl;
   const type = req.params.type
-  const id = req.params.id
   const obj = await get('SELECT data, owner FROM object WHERE id = ?', [full])
   if (!obj) {
     throw new createError.NotFound('Object not found')
@@ -580,7 +592,7 @@ app.get('/:type/:id',
     throw new createError.InternalServerError('Invalid object')
   }
   const addressees = await getAddressees(full)
-  if (!canRead(full, req.auth?.subject, obj.owner, addressees)) {
+  if (!(await canRead(full, req.auth?.subject, obj.owner, addressees))) {
     if (req.auth?.subject) {
       throw new createError.Forbidden('Not authorized to read this object')
     } else {
@@ -590,6 +602,18 @@ app.get('/:type/:id',
   const data = JSON.parse(obj.data)
   if (data.type?.toLowerCase() !== type) {
     throw new createError.InternalServerError('Invalid object type')
+  }
+  for (let name of ['items', 'orderedItems']) {
+    if (name in data && Array.isArray(data[name])) {
+      const len = data[name].length
+      for (let i = len - 1; i >= 0; i--) {
+        const item = data[name][i];
+        const itemId = await toId(item);
+        if (!(await canRead(itemId, req.auth?.subject))) {
+          data[name].splice(i, 1)
+        }
+      }
+    }
   }
   data['@context'] = data['@context'] || CONTEXT
   res.set('Content-Type', 'application/activity+json')

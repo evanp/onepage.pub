@@ -334,8 +334,9 @@ describe("Web API interface", () => {
             })
             const body = await res.text()
             const obj = JSON.parse(body)
-            const inbox = await (await fetch(actor2.inbox)).json()
-            const inboxPage = await (await fetch(inbox.first)).json()
+            const inbox = await (await fetch(actor2.inbox, {headers: {'Authorization': `Bearer ${token2}`}})).json()
+            const inboxPage = await (await fetch(inbox.first, {headers: {'Authorization': `Bearer ${token2}`}})).json()
+            console.dir(inboxPage)
             assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
         })
 
@@ -355,8 +356,9 @@ describe("Web API interface", () => {
             })
             const body = await res.text()
             const obj = JSON.parse(body)
-            const inbox = await (await fetch(actor1.inbox)).json()
-            const inboxPage = await (await fetch(inbox.first)).json()
+            const inbox = await (await fetch(actor1.inbox, {headers: {'Authorization': `Bearer ${token1}`}})).json()
+            const inboxPage = await (await fetch(inbox.first, {headers: {'Authorization': `Bearer ${token1}`}})).json()
+            console.dir(inboxPage)
             assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
         })
     })
@@ -439,8 +441,8 @@ describe("Web API interface", () => {
             assert.strictEqual(res2.status, 200, `Bad status code ${res2.status}: ${body2}`)
             assert.strictEqual(res2.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj2 = JSON.parse(body2)
-            const inbox1 = await (await fetch(actor1.inbox)).json()
-            const inboxPage1 = await (await fetch(inbox1.first)).json()
+            const inbox1 = await (await fetch(actor1.inbox, {headers: {'Authorization': `Bearer ${token1}`}})).json()
+            const inboxPage1 = await (await fetch(inbox1.first, {headers: {'Authorization': `Bearer ${token1}`}})).json()
             assert.notEqual(-1, inboxPage1.orderedItems.indexOf(obj2.id))
         })
 
@@ -465,6 +467,60 @@ describe("Web API interface", () => {
             const inbox1 = await (await fetch(actor1.inbox)).json()
             const inboxPage1 = await (await fetch(inbox1.first)).json()
             assert.notEqual(-1, inboxPage1.orderedItems.indexOf(obj2.id))
+        })
+    })
+    describe("Filter collections", () => {
+        let actor1 = null
+        let token1 = null
+        let actor2 = null
+        let token2 = null
+        let activity = null
+        before(async () => {
+            [actor1, token1] = await registerActor();
+            [actor2, token2] = await registerActor();
+            const input = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "IntransitiveActivity",
+                "to": [actor1.id]
+            }
+            const res = await fetch(actor1.outbox, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token1}`
+                },
+                body: JSON.stringify(input)
+            })
+            const body = await res.text()
+            activity = JSON.parse(body)
+        })
+
+        it("author can see own private activity", async () => {
+            const outbox = await (await fetch(actor1.outbox, {
+                headers: {
+                    'Authorization': `Bearer ${token1}`
+                }
+            })).json()
+            const outboxPage = await (await fetch(outbox.first, {
+                headers: {
+                    'Authorization': `Bearer ${token1}`
+                }
+            })).json()
+            assert.notEqual(-1, outboxPage.orderedItems.indexOf(activity.id))
+        })
+
+        it("others cannot see a private activity", async () => {
+            const outbox = await (await fetch(actor1.outbox, {
+                headers: {
+                    'Authorization': `Bearer ${token2}`
+                }
+            })).json()
+            const outboxPage = await (await fetch(outbox.first, {
+                headers: {
+                    'Authorization': `Bearer ${token2}`
+                }
+            })).json()
+            assert.equal(-1, outboxPage.orderedItems.indexOf(activity.id))
         })
     })
 })
