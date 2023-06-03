@@ -336,7 +336,6 @@ describe("Web API interface", () => {
             const obj = JSON.parse(body)
             const inbox = await (await fetch(actor2.inbox, {headers: {'Authorization': `Bearer ${token2}`}})).json()
             const inboxPage = await (await fetch(inbox.first, {headers: {'Authorization': `Bearer ${token2}`}})).json()
-            console.dir(inboxPage)
             assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
         })
 
@@ -358,7 +357,6 @@ describe("Web API interface", () => {
             const obj = JSON.parse(body)
             const inbox = await (await fetch(actor1.inbox, {headers: {'Authorization': `Bearer ${token1}`}})).json()
             const inboxPage = await (await fetch(inbox.first, {headers: {'Authorization': `Bearer ${token1}`}})).json()
-            console.dir(inboxPage)
             assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
         })
     })
