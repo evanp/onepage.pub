@@ -59,7 +59,11 @@ passport.use(new LocalStrategy(
 ));
 
 async function makeId(type) {
-  return `https://${HOSTNAME}:${PORT}/${type.toLowerCase()}/${await nanoid()}`;
+  if (PORT === 443) {
+    return `https://${HOSTNAME}/${type.toLowerCase()}/${await nanoid()}`;
+  } else {
+    return `https://${HOSTNAME}:${PORT}/${type.toLowerCase()}/${await nanoid()}`;
+  }
 }
 
 async function getObject(id) {
