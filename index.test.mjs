@@ -572,4 +572,85 @@ describe("Web API interface", () => {
             assert.equal("string", typeof fetched.updated)
         })
     })
+
+    describe("Update Activity", () => {
+        let actor1 = null
+        let token1 = null
+        let created = null
+        let updated = null
+        const content = "My dog has fleas."
+        const contentMap = {
+            "en": content,
+            "fr": "Mon chien a des puces."
+        }
+        before(async () => {
+            [actor1, token1] = await registerActor();
+            const source = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Create",
+                "object": {
+                    "type": "Note",
+                    "content": content
+                }
+            }
+            const res = await fetch(actor1.outbox.id, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token1}`
+                },
+                body: JSON.stringify(source)
+            })
+            created = await res.json()
+            const updateSource = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Update",
+                "object": {
+                    "id": created.object.id,
+                    "content": null,
+                    "contentMap": contentMap
+                }
+            }
+            const updateRes = await fetch(actor1.outbox.id, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token1}`
+                },
+                body: JSON.stringify(updateSource)
+            })
+            updated = await updateRes.json()
+        })
+        it("has the same object id", async() => {
+            assert.equal(created.object.id, updated.object.id)
+        })
+        it("has the previous type", async() => {
+            assert.equal("Note", updated.object.type)
+        })
+        it("has the new property", async() => {
+            assert("contentMap" in updated.object)
+            assert.equal(contentMap.en, updated.object?.contentMap?.en)
+            assert.equal(contentMap.fr, updated.object?.contentMap?.fr)
+        })
+        it("doesn't have the old property", async() => {
+            assert(!("content" in updated.object));
+        })
+        it("has the same published property", async() => {
+            assert.equal(updated.object.published, created.object.published)
+        })
+        it("has a new updated property", async() => {
+            assert.notEqual(updated.object.updated, created.object.updated)
+        })
+        it("can fetch the updated note", async() => {
+            const res = await fetch(updated.object.id, {
+                headers: {'Authorization': `Bearer ${token1}`}
+            })
+            const fetched = await res.json()
+            assert.equal(updated.object.id, fetched.id)
+            assert.equal("Note", fetched.type)
+            assert.equal(contentMap.en, fetched.contentMap.en)
+            assert.equal(contentMap.fr, fetched.contentMap.fr)
+            assert(!("content" in fetched))
+        })
+    })
 })

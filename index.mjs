@@ -174,6 +174,12 @@ async function toBriefObject(value) {
   }
 }
 
+async function toExtendedObject(value) {
+  const id = await toId(value)
+  const object = await getObject(id)
+  return await expandProperties(object)
+}
+
 const idProps = [
   "actor",
   "alsoKnownAs",
@@ -316,6 +322,12 @@ async function patchObject(id, patch) {
     throw new Error(`No object with ID ${id}`)
   }
   const merged = {...JSON.parse(row.data), ...patch, updated: new Date().toISOString()}
+  // null means delete
+  for (let prop in patch) {
+    if (patch[prop] == null) {
+      delete merged[prop]
+    }
+  }
   await run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(merged), id])
   return merged
 }
@@ -456,6 +468,21 @@ const appliers = {
     }
     const saved = await saveObject(object.type, object, owner, addressees)
     activity.object = saved.id
+    return activity
+  },
+  "Update": async(activity, owner, addressees) => {
+    let object = activity.object
+    if (!object) {
+      throw new createError.BadRequest("No object to update")
+    }
+    if (!object.id) {
+      throw new createError.BadRequest("No id for object to update")
+    }
+    const objectOwner = await getOwner(object)
+    if (!objectOwner || objectOwner.id != await toId(owner)) {
+      throw new createError.BadRequest("You can't update an object you don't own")
+    }
+    activity.object = await patchObject(object.id, object)
     return activity
   }
 }
@@ -734,6 +761,11 @@ app.post('/register', wrap(async(req, res) => {
   }
 }))
 
+function needsExtendedObject(activity) {
+  const types = ['Create', 'Update']
+  return types.includes(activity.type)
+}
+
 app.get('/.well-known/webfinger', wrap(async(req, res) => {
   const resource = req.query.resource
   if (!resource) {
@@ -811,6 +843,9 @@ app.get('/:type/:id',
       }
     }
   }
+  if (needsExtendedObject(data)) {
+    data.object = await toExtendedObject(data.object)
+  }
   data['@context'] = data['@context'] || CONTEXT
   res.set('Content-Type', 'application/activity+json')
   res.json(data)
@@ -849,10 +884,14 @@ app.post('/:type/:id',
     activity = await saveActivity(activity, owner, addressees)
     await prependObject(outbox, activity)
     await distributeActivity(activity, owner, addressees)
+    activity = await expandProperties(activity)
+    if (needsExtendedObject(activity)) {
+      activity.object = await toExtendedObject(activity.object)
+    }
     activity['@context'] = activity['@context'] || CONTEXT
     res.status(200)
     res.set('Content-Type', 'application/activity+json')
-    res.json(await expandProperties(activity))
+    res.json(activity)
   } else if (full === owner.inbox) { // remote delivery
     const sigHeader = req.headers['signature']
     if (!sigHeader) {
