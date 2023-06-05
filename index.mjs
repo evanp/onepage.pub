@@ -29,6 +29,7 @@ const SEC_CONTEXT = 'https://w3id.org/security'
 const CONTEXT = [AS_CONTEXT, SEC_CONTEXT]
 
 const PUBLIC = "https://www.w3.org/ns/activitystreams#Public"
+const PUBLIC_OBJ = {id: PUBLIC, type: "Collection"}
 const MAX_PAGE_SIZE = 20
 
 // Initialize Express
@@ -74,12 +75,13 @@ async function getObject(id) {
   return JSON.parse(row.data)
 }
 
-async function getOwner(id) {
+async function getOwner(obj) {
+  const id = await toId(obj)
   const row = await get(`SELECT owner FROM object WHERE id = ?`, [id])
   if (!row) {
     return null
   }
-  return getObject(row.owner)
+  return await getObject(row.owner)
 }
 
 async function getAddressees(id) {
@@ -89,7 +91,11 @@ async function getAddressees(id) {
 
 async function toObject(value) {
   if (isString(value)) {
-    return getObject(value)
+    if (value === PUBLIC) {
+      return PUBLIC_OBJ
+    } else {
+      return await getObject(value)
+    }
   } else {
     return value
   }
@@ -109,6 +115,156 @@ async function toId(value) {
   }
 }
 
+async function abbreviateObject(object) {
+  let brief = {
+    id: object.id || object['@id'],
+    type: object.type || object['@type'],
+    icon: object.icon
+  }
+  for (let prop of ["nameMap", "name", "summaryMap", "summary"]) {
+    if (prop in object) {
+      brief[prop] = object[prop]
+      break
+    }
+  }
+  switch (object.type) {
+    case "Key":
+      brief = {
+        ...brief,
+        owner: object.owner,
+        publicKeyPem: object.publicKeyPem
+      }
+      break
+    case "Note":
+      brief = {
+        ...brief,
+        content: object.content
+      }
+      break
+    case "OrderedCollection":
+    case "Collection":
+      brief = {
+        ...brief,
+        first: object.first
+      }
+  }
+  return brief
+}
+
+async function toBriefObject(value) {
+  if (typeof value == "undefined") {
+    return null;
+  } if (value == null) {
+    return null;
+  } else if (isString(value)) {
+    if (value === PUBLIC) {
+      return PUBLIC_OBJ
+    } else {
+      const object = await getObject(value)
+      if (object) {
+        return await abbreviateObject(object)
+      } else {
+        return {id: value}
+      }
+    }
+  } else if (typeof value == "object") {
+    return await abbreviateObject(value)
+  } else {
+    throw new Error(`cannot coerce to a brief object: ${value} (${typeof value})`)
+  }
+}
+
+const idProps = [
+  "actor",
+  "alsoKnownAs",
+  "attachment",
+  "attributedTo",
+  "anyOf",
+  "audience",
+  "cc",
+  "context",
+  "current",
+  "describes",
+  "first",
+  "following",
+  "followers",
+  "formerType",
+  "generator",
+  "href",
+  "icon",
+  "image",
+  "inbox",
+  "inReplyTo",
+  "instrument",
+  "last",
+  "liked",
+  "likes",
+  "location",
+  "next",
+  "object",
+  "oneOf",
+  "origin",
+  "outbox",
+  "partOf",
+  "prev",
+  "preview",
+  "publicKey",
+  "relationship",
+  "replies",
+  "result",
+  "shares",
+  "subject",
+  "tag",
+  "target",
+  "to",
+  "url",
+];
+
+const arrayProps = [
+  'items',
+  'orderedItems'
+]
+
+async function expandProperties(object) {
+  for (let prop of idProps) {
+    if (prop in object) {
+      if (Array.isArray(object[prop])) {
+        object[prop] = await Promise.all(object[prop].map(toBriefObject))
+      } else {
+        object[prop] = await toBriefObject(object[prop])
+      }
+    }
+  }
+  return object
+}
+
+async function toIdOrValue(value) {
+  const id = await toId(value)
+  return id || value
+}
+
+async function compressProperties(object) {
+  for (let prop of idProps) {
+    if (prop in object) {
+      if (Array.isArray(object[prop])) {
+        object[prop] = await Promise.all(object[prop].map(toIdOrValue))
+      } else {
+        object[prop] = await toIdOrValue(object[prop])
+      }
+    }
+  }
+  for (let prop of arrayProps) {
+    if (prop in object) {
+      if (Array.isArray(object[prop])) {
+        object[prop] = await Promise.all(object[prop].map(toIdOrValue))
+      } else {
+        object[prop] = await toIdOrValue(object[prop])
+      }
+    }
+  }
+  return object
+}
+
 async function getRemoteObject(value) {
   const id = await toId(value)
   const obj = await getObject(id)
@@ -126,21 +282,31 @@ async function getRemoteObject(value) {
   }
 }
 
+async function cacheRemoteObject(data, owner, addressees) {
+  const dataId = await toId(data)
+  const ownerId = await toId(owner) || data.id
+  await run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [dataId, ownerId, JSON.stringify(data)]);
+  await Promise.all(addressees.map((addressee) =>
+  run(
+    'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
+    [dataId, addressee]
+  )))
+}
+
 async function saveObject(type, data, owner=null, addressees=[]) {
-  data = data || {};
+  data = await compressProperties(data || {})
   data.id = data.id || await makeId(type)
   data.type = data.type || type || 'Object';
   data.updated = new Date().toISOString();
   data.published = data.published || data.updated;
   // self-ownership
-  owner = owner || data.id;
-  await run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [data.id, owner, JSON.stringify(data)]);
-  addressees.forEach(async(addressee) =>
-    run(
-      'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-      [data.id, addressee]
-    )
-  )
+  const ownerId = await toId(owner) || data.id
+  await run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [data.id, ownerId, JSON.stringify(data)]);
+  await Promise.all(addressees.map((addressee) =>
+  run(
+    'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
+    [data.id, addressee]
+  )))
   return data;
 }
 
@@ -222,13 +388,14 @@ async function isUser(object) {
 async function memberOf(object, collection) {
   const objectId = await toId(object)
   collection = await toObject(collection)
+  const match = (item) => ((isString(item) && item == objectId) || ((typeof item == "object") && item.id == objectId))
   switch (collection.type) {
     case "Collection":
     case "OrderedCollection":
       if (collection.orderedItems) {
-        return -1 !== collection.orderedItems.indexOf(objectId)
+        return collection.orderedItems.some(match)
       } else if (collection.items) {
-          return -1 !== collection.items.indexOf(objectId)
+          return collection.items.some(match)
       } else if (collection.first) {
         return await memberOf(objectId, collection.first)
       }
@@ -236,69 +403,91 @@ async function memberOf(object, collection) {
     case "CollectionPage":
     case "OrderedCollectionPage":
       if (collection.orderedItems) {
-        return -1 !== collection.orderedItems.indexOf(objectId)
+        return collection.orderedItems.some(match)
       } else if (collection.items) {
-          return -1 !== collection.items.indexOf(objectId)
+        return collection.items.some(match)
       } else if (collection.next) {
         return await memberOf(objectId, collection.next)
       }
-      return false
+      break
     default:
       return false
   }
 }
 
-async function saveActivity(data, owner) {
+async function saveActivity(data, owner, addressees) {
   data = data || {};
   data.type = data.type || 'Activity';
   data.id = data.id || await makeId(data.type)
-  data.actor = owner.id
-  const addressees = ['to', 'cc', 'bto', 'bcc']
-    .map((prop) => data[prop])
-    .filter((a) => a)
-    .flat()
+  data.actor = await toId(owner)
   delete data['bto']
   delete data['bcc']
-  return saveObject(data.type, data, owner, addressees)
+  return await saveObject(data.type, data, owner, addressees)
 }
 
-async function applyActivity(activity, owner) {
-  switch (activity.type) {
-    case "Follow":
-      if (!activity.object) {
-        throw new createError.BadRequest("No object followed")
+const appliers = {
+  "Follow": async(activity, owner, addressees) => {
+    if (!activity.object) {
+      throw new createError.BadRequest("No object followed")
+    }
+    if (await memberOf(activity.object, owner.following)) {
+      throw new createError.BadRequest("Already following")
+    }
+    const following = await getObject(owner.following)
+    await prependObject(following, activity.object)
+    if (await isUser(activity.object)) {
+      const other = await getObject(activity.object)
+      const followers = await getObject(other.followers)
+      await prependObject(followers, owner)
+    }
+    return activity
+  },
+  "Create": async(activity, owner, addressees) => {
+    const object = activity.object
+    if (!object) {
+      throw new createError.BadRequest("No object followed")
+    }
+    object.attributedTo = owner.id
+    object.type = object.type || "Object"
+    if (!["name", "nameMap", "summary", "summaryMap"].some(p => p in object)) {
+      object.summaryMap = {
+        "en": `A(n) ${object.type} by ${owner.name}`
       }
-      if (await memberOf(activity.object, owner.following)) {
-        throw new createError.BadRequest("Already following")
-      }
-      const following = await getObject(owner.following)
-      await prependObject(following, activity.object)
-      if (await isUser(activity.object)) {
-        const other = await getObject(activity.object)
-        const followers = await getObject(other.followers)
-        await prependObject(followers, owner)
-      }
-      return
-    default:
-      return
+    }
+    const saved = await saveObject(object.type, object, owner, addressees)
+    activity.object = saved.id
+    return activity
   }
 }
 
-async function applyRemoteActivity(activity, remote, owner) {
-  switch (activity.type) {
-    case "Follow":
-      if (toId(activity.object) == toId(owner)) {
-        if (await memberOf(remote, owner.followers)) {
-          throw new Error("Already following")
-        }
-        const followers = await getObject(owner.followers)
-        await prependObject(followers, remote)
-      }
-      break
-    default:
-      break
+async function applyActivity(activity, owner, addressees) {
+  if (activity.type in appliers) {
+    activity = await appliers[activity.type](activity, owner, addressees)
   }
-  return
+  return activity
+}
+
+const remoteAppliers = {
+  "Follow": async(activity, remote, addressees, owner) => {
+    if (toId(activity.object) == toId(owner)) {
+      if (await memberOf(remote, owner.followers)) {
+        throw new Error("Already following")
+      }
+      const followers = await getObject(owner.followers)
+      await prependObject(followers, remote)
+    }
+  },
+  "Create": async(activity, remote, addressees, owner) => {
+    if (activity.object) {
+      await cacheRemoteObject(activity.object, remote, addressees)
+    }
+  }
+}
+
+async function applyRemoteActivity(activity, remote, owner, addressees) {
+  if (activity.type in remoteAppliers) {
+    await remoteAppliers[activity.type](activity, remote, addressees, owner)
+  }
 }
 
 async function prependObject(collection, object) {
@@ -306,8 +495,10 @@ async function prependObject(collection, object) {
   const objectId = await toId(object)
   if (collection.orderedItems) {
     await patchObject(collection.id, {totalItems: collection.totalItems + 1, orderedItems: [objectId, ...collection.orderedItems]})
+  } else if (collection.items) {
+      await patchObject(collection.id, {totalItems: collection.totalItems + 1, items: [objectId, ...collection.items]})
   } else if (collection.first) {
-    const first = await getObject(collection.first)
+    const first = await getObject(await toId(collection.first))
     if (first.orderedItems.length < MAX_PAGE_SIZE) {
       await patchObject(first.id, {orderedItems: [objectId, ...first.orderedItems]})
       await patchObject(collection.id, {totalItems: collection.totalItems + 1})
@@ -321,8 +512,8 @@ async function prependObject(collection, object) {
   }
 }
 
-async function getAllMembers(id) {
-  const obj = await getObject(id)
+async function getAllMembers(obj) {
+  obj = await toObject(obj)
   let cur = []
   switch (obj.type) {
     case 'CollectionPage':
@@ -391,16 +582,14 @@ async function validateSignature(sigHeader, req) {
   }
 }
 
-async function distributeActivity(activity, owner) {
+async function distributeActivity(activity, owner, addressees) {
+
+  owner = await toObject(owner)
 
   // Add it to the owner inbox!
 
   const ownerInbox = await getObject(owner.inbox)
   await prependObject(ownerInbox, activity, owner, [PUBLIC])
-
-  // Get all the addressees
-
-  const addressees = await getAddressees(activity.id)
 
   // Expand public, followers, other lists
 
@@ -408,7 +597,7 @@ async function distributeActivity(activity, owner) {
     if (addressee === PUBLIC) {
       return await getAllMembers(owner.followers)
     } else {
-      const obj = await getObject(addressee)
+      const obj = await toObject(addressee)
       const objOwner = await getOwner(addressee)
       if (obj &&
           objOwner.id === owner.id &&
@@ -423,7 +612,7 @@ async function distributeActivity(activity, owner) {
 
   const body = JSON.stringify(activity)
   const {privateKey} = await get('SELECT privateKey FROM user WHERE actorId = ?', [owner.id])
-  const keyId = owner.publicKey.id;
+  const keyId = await toId(owner.publicKey)
 
   await Promise.all(expanded.map((async (addressee) => {
     const row = await get(`SELECT username FROM user WHERE actorId = ?`, [addressee])
@@ -603,10 +792,11 @@ app.get('/:type/:id',
       throw new createError.Unauthorized('You must provide credentials to read this object')
     }
   }
-  const data = JSON.parse(obj.data)
+  let data = JSON.parse(obj.data)
   if (data.type?.toLowerCase() !== type) {
     throw new createError.InternalServerError('Invalid object type')
   }
+  data = await expandProperties(data)
   for (let name of ['items', 'orderedItems']) {
     if (name in data && Array.isArray(data[name])) {
       const len = data[name].length
@@ -615,6 +805,8 @@ app.get('/:type/:id',
         const itemId = await toId(item);
         if (!(await canRead(itemId, req.auth?.subject))) {
           data[name].splice(i, 1)
+        } else {
+          data[name][i] = await toBriefObject(item)
         }
       }
     }
@@ -646,14 +838,21 @@ app.post('/:type/:id',
     if (req.auth?.subject !== obj.owner) {
       throw new createError.Forbidden('You cannot post to this outbox')
     }
-    const activity = await saveActivity(req.body, owner.id)
-    await applyActivity(activity, owner)
+    const data = req.body
+    const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
+    .map((prop) => data[prop])
+    .filter((a) => a)
+    .flat()
+    .map(toId))
+    data.id = await makeId(data.type || "Activity")
+    let activity = await applyActivity(data, owner, addressees)
+    activity = await saveActivity(activity, owner, addressees)
     await prependObject(outbox, activity)
-    await distributeActivity(activity, owner)
+    await distributeActivity(activity, owner, addressees)
     activity['@context'] = activity['@context'] || CONTEXT
     res.status(200)
     res.set('Content-Type', 'application/activity+json')
-    res.json(activity)
+    res.json(await expandProperties(activity))
   } else if (full === owner.inbox) { // remote delivery
     const sigHeader = req.headers['signature']
     if (!sigHeader) {
@@ -666,12 +865,17 @@ app.post('/:type/:id',
     if (await isUser(remote)) {
       throw new createError.Forbidden('Remote delivery only')
     }
-    const activity = await saveActivity(req.body, remote)
-    await applyRemoteActivity(activity, remote, owner)
-    await prependObject(owner.inbox, activity)
+    const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
+    .map((prop) => req.body[prop])
+    .filter((a) => a)
+    .flat()
+    .map(toId))
+    await applyRemoteActivity(req.body, remote, addressees, owner)
+    await cacheRemoteObject(req.body, remote, addressees)
+    await prependObject(owner.inbox, await toId(req.body))
     res.status(202)
     res.set('Content-Type', 'application/activity+json')
-    res.json(activity)
+    res.json(req.body)
   } else {
     throw new createError.MethodNotAllowed('You cannot POST to this object')
   }

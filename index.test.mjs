@@ -163,29 +163,33 @@ describe("Web API interface", () => {
         })
 
         it("has a valid inbox", () => {
-            assert(actorObj.inbox)
-            assert(actorObj.inbox.startsWith('https://localhost:3000/orderedcollection/'))
+            assert.equal("object", typeof actorObj.inbox)
+            assert.equal("string", typeof actorObj.inbox.id)
+            assert(actorObj.inbox.id.startsWith('https://localhost:3000/orderedcollection/'))
         })
 
         it("has a valid outbox", () => {
-            assert(actorObj.outbox)
-            assert(actorObj.outbox.startsWith('https://localhost:3000/orderedcollection/'))
+            assert.equal("object", typeof actorObj.outbox)
+            assert.equal("string", typeof actorObj.outbox.id)
+            assert(actorObj.outbox.id.startsWith('https://localhost:3000/orderedcollection/'))
         })
 
         it("has a valid followers", () => {
-            assert(actorObj.followers)
-            assert(actorObj.followers.startsWith('https://localhost:3000/orderedcollection/'))
+            assert.equal("object", typeof actorObj.followers)
+            assert.equal("string", typeof actorObj.followers.id)
+            assert(actorObj.followers.id.startsWith('https://localhost:3000/orderedcollection/'))
         })
 
         it("has a valid following", () => {
-
-            assert(actorObj.following)
-            assert(actorObj.following.startsWith('https://localhost:3000/orderedcollection/'))
+            assert.equal("object", typeof actorObj.following)
+            assert.equal("string", typeof actorObj.following.id)
+            assert(actorObj.following.id.startsWith('https://localhost:3000/orderedcollection/'))
         })
 
         it("has a valid liked", () => {
-            assert(actorObj.liked)
-            assert(actorObj.liked.startsWith('https://localhost:3000/orderedcollection/'))
+            assert.equal("object", typeof actorObj.liked)
+            assert.equal("string", typeof actorObj.liked.id)
+            assert(actorObj.liked.id.startsWith('https://localhost:3000/orderedcollection/'))
         })
 
         it("has a public key", () => {
@@ -207,64 +211,64 @@ describe("Web API interface", () => {
             [actor, token] = await registerActor()
         })
         it("can get actor inbox", async () => {
-            const res = await fetch(actor.inbox)
+            const res = await fetch(actor.inbox.id)
             assert.strictEqual(res.status, 200)
             assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
-            assert.strictEqual(obj.id, actor.inbox)
+            assert.strictEqual(obj.id, actor.inbox.id)
             assert.strictEqual(obj.type, 'OrderedCollection')
             assert.strictEqual(obj.totalItems, 0)
             assert(obj.name)
             assert(obj.first)
-            assert(obj.first.startsWith('https://localhost:3000/orderedcollectionpage/'))
+            assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
         })
         it("can get actor outbox", async () => {
-            const res = await fetch(actor.outbox)
+            const res = await fetch(actor.outbox.id)
             assert.strictEqual(res.status, 200)
             assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
-            assert.strictEqual(obj.id, actor.outbox)
+            assert.strictEqual(obj.id, actor.outbox.id)
             assert.strictEqual(obj.type, 'OrderedCollection')
             assert.strictEqual(obj.totalItems, 0)
             assert(obj.name)
             assert(obj.first)
-            assert(obj.first.startsWith('https://localhost:3000/orderedcollectionpage/'))
+            assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
         })
         it("can get actor followers", async () => {
-            const res = await fetch(actor.followers)
+            const res = await fetch(actor.followers.id)
             assert.strictEqual(res.status, 200)
             assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
-            assert.strictEqual(obj.id, actor.followers)
+            assert.strictEqual(obj.id, actor.followers.id)
             assert.strictEqual(obj.type, 'OrderedCollection')
             assert.strictEqual(obj.totalItems, 0)
             assert(obj.name)
             assert(obj.first)
-            assert(obj.first.startsWith('https://localhost:3000/orderedcollectionpage/'))
+            assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
         })
         it("can get actor following", async () => {
-            const res = await fetch(actor.following)
+            const res = await fetch(actor.following.id)
             assert.strictEqual(res.status, 200)
             assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
-            assert.strictEqual(obj.id, actor.following)
+            assert.strictEqual(obj.id, actor.following.id)
             assert.strictEqual(obj.type, 'OrderedCollection')
             assert.strictEqual(obj.totalItems, 0)
             assert(obj.name)
             assert(obj.first)
-            assert(obj.first.startsWith('https://localhost:3000/orderedcollectionpage/'))
+            assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
         })
         it("can get actor liked", async () => {
-            const res = await fetch(actor.liked)
+            const res = await fetch(actor.liked.id)
             assert.strictEqual(res.status, 200)
             assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj = await res.json()
-            assert.strictEqual(obj.id, actor.liked)
+            assert.strictEqual(obj.id, actor.liked.id)
             assert.strictEqual(obj.type, 'OrderedCollection')
             assert.strictEqual(obj.totalItems, 0)
             assert(obj.name)
             assert(obj.first)
-            assert(obj.first.startsWith('https://localhost:3000/orderedcollectionpage/'))
+            assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
         })
     })
     describe("Post to outbox", () => {
@@ -279,7 +283,7 @@ describe("Web API interface", () => {
                 "type": "IntransitiveActivity",
                 "to": "https://www.w3.org/ns/activitystreams#Public"
             }
-            const res = await fetch(actor.outbox, {
+            const res = await fetch(actor.outbox.id, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/activity+json; charset=utf-8',
@@ -293,13 +297,13 @@ describe("Web API interface", () => {
             const obj = JSON.parse(body)
             assert(obj.id)
             assert.strictEqual(obj.type, activity.type)
-            assert.strictEqual(obj.to, activity.to)
-            const inbox = await (await fetch(actor.inbox)).json()
-            const inboxPage = await (await fetch(inbox.first)).json()
-            const outbox = await (await fetch(actor.outbox)).json()
-            const outboxPage = await (await fetch(outbox.first)).json()
-            assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
-            assert.notEqual(-1, outboxPage.orderedItems.indexOf(obj.id))
+            assert.strictEqual(obj.to.id, activity.to)
+            const inbox = await (await fetch(actor.inbox.id)).json()
+            const inboxPage = await (await fetch(inbox.first.id)).json()
+            const outbox = await (await fetch(actor.outbox.id)).json()
+            const outboxPage = await (await fetch(outbox.first.id)).json()
+            assert(inboxPage.orderedItems.some(act => act.id === obj.id))
+            assert(outboxPage.orderedItems.some(act => act.id === obj.id))
         })
     })
 
@@ -324,7 +328,7 @@ describe("Web API interface", () => {
                 "type": "IntransitiveActivity",
                 "to": actor2.id
             }
-            const res = await fetch(actor1.outbox, {
+            const res = await fetch(actor1.outbox.id, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/activity+json; charset=utf-8',
@@ -334,9 +338,9 @@ describe("Web API interface", () => {
             })
             const body = await res.text()
             const obj = JSON.parse(body)
-            const inbox = await (await fetch(actor2.inbox, {headers: {'Authorization': `Bearer ${token2}`}})).json()
-            const inboxPage = await (await fetch(inbox.first, {headers: {'Authorization': `Bearer ${token2}`}})).json()
-            assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
+            const inbox = await (await fetch(actor2.inbox.id, {headers: {'Authorization': `Bearer ${token2}`}})).json()
+            const inboxPage = await (await fetch(inbox.first.id, {headers: {'Authorization': `Bearer ${token2}`}})).json()
+            assert(inboxPage.orderedItems.some(act => act.id == obj.id))
         })
 
         it("receives from remote senders", async() => {
@@ -345,7 +349,7 @@ describe("Web API interface", () => {
                 "type": "IntransitiveActivity",
                 "to": actor1.id
             }
-            const res = await fetch(actor2.outbox, {
+            const res = await fetch(actor2.outbox.id, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/activity+json; charset=utf-8',
@@ -355,9 +359,9 @@ describe("Web API interface", () => {
             })
             const body = await res.text()
             const obj = JSON.parse(body)
-            const inbox = await (await fetch(actor1.inbox, {headers: {'Authorization': `Bearer ${token1}`}})).json()
-            const inboxPage = await (await fetch(inbox.first, {headers: {'Authorization': `Bearer ${token1}`}})).json()
-            assert.notEqual(-1, inboxPage.orderedItems.indexOf(obj.id))
+            const inbox = await (await fetch(actor1.inbox.id, {headers: {'Authorization': `Bearer ${token1}`}})).json()
+            const inboxPage = await (await fetch(inbox.first.id, {headers: {'Authorization': `Bearer ${token1}`}})).json()
+            assert(inboxPage.orderedItems.some(act => act.id == obj.id))
         })
     })
 
@@ -377,7 +381,7 @@ describe("Web API interface", () => {
                 "object": actor2.id,
                 "to": ["https://www.w3.org/ns/activitystreams#Public", actor2.id]
             }
-            const res = await fetch(actor1.outbox, {
+            const res = await fetch(actor1.outbox.id, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/activity+json; charset=utf-8',
@@ -390,35 +394,34 @@ describe("Web API interface", () => {
         })
 
         it("appears in the actor's inbox", async () => {
-            assert(obj.to.every((v, i) => v == activity.to[i]))
-            let inbox1 = await (await fetch(actor1.inbox)).json()
-            let inboxPage1 = await (await fetch(inbox1.first)).json()
-            assert.notEqual(-1, inboxPage1.orderedItems.indexOf(obj.id))
+            const inbox1 = await (await fetch(actor1.inbox.id)).json()
+            let inboxPage1 = await (await fetch(inbox1.first.id)).json()
+            assert(inboxPage1.orderedItems.some(act => act.id == obj.id))
         })
 
         it("appears in the actor's outbox", async () => {
-            const outbox1 = await (await fetch(actor1.outbox)).json()
-            const outboxPage1 = await (await fetch(outbox1.first)).json()
-            assert.notEqual(-1, outboxPage1.orderedItems.indexOf(obj.id))
+            const outbox1 = await (await fetch(actor1.outbox.id)).json()
+            const outboxPage1 = await (await fetch(outbox1.first.id)).json()
+            assert(outboxPage1.orderedItems.some(act => act.id == obj.id))
         })
 
         it("appears in the other's inbox", async () => {
-           const inbox2 = await (await fetch(actor2.inbox)).json()
-            const inboxPage2 = await (await fetch(inbox2.first)).json()
-            assert.notEqual(-1, inboxPage2.orderedItems.indexOf(obj.id))
+           const inbox2 = await (await fetch(actor2.inbox.id)).json()
+            const inboxPage2 = await (await fetch(inbox2.first.id)).json()
+            assert(inboxPage2.orderedItems.some(act => act.id == obj.id))
         })
 
         it("puts the actor in the other's followers", async () => {
-            const followers2 = await (await fetch(actor2.followers)).json()
-            const followersPage2 = await (await fetch(followers2.first)).json()
-            assert.notEqual(-1, followersPage2.orderedItems.indexOf(actor1.id))
+            const followers2 = await (await fetch(actor2.followers.id)).json()
+            const followersPage2 = await (await fetch(followers2.first.id)).json()
+            assert(followersPage2.orderedItems.some(val => val.id == actor1.id))
         })
 
         it("puts the other in the actor's following", async() => {
 
-            const following1 = await (await fetch(actor1.following)).json()
-            const followingPage1 = await (await fetch(following1.first)).json()
-            assert.notEqual(-1, followingPage1.orderedItems.indexOf(actor2.id))
+            const following1 = await (await fetch(actor1.following.id)).json()
+            const followingPage1 = await (await fetch(following1.first.id)).json()
+            assert(followingPage1.orderedItems.some(val => val.id == actor2.id))
         })
 
         it("distributes to the actor when the other posts to followers", async() => {
@@ -427,7 +430,7 @@ describe("Web API interface", () => {
                 "type": "IntransitiveActivity",
                 "to": actor2.followers
             }
-            const res2 = await fetch(actor2.outbox, {
+            const res2 = await fetch(actor2.outbox.id, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/activity+json; charset=utf-8',
@@ -439,9 +442,9 @@ describe("Web API interface", () => {
             assert.strictEqual(res2.status, 200, `Bad status code ${res2.status}: ${body2}`)
             assert.strictEqual(res2.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj2 = JSON.parse(body2)
-            const inbox1 = await (await fetch(actor1.inbox, {headers: {'Authorization': `Bearer ${token1}`}})).json()
-            const inboxPage1 = await (await fetch(inbox1.first, {headers: {'Authorization': `Bearer ${token1}`}})).json()
-            assert.notEqual(-1, inboxPage1.orderedItems.indexOf(obj2.id))
+            const inbox1 = await (await fetch(actor1.inbox.id, {headers: {'Authorization': `Bearer ${token1}`}})).json()
+            const inboxPage1 = await (await fetch(inbox1.first.id, {headers: {'Authorization': `Bearer ${token1}`}})).json()
+            assert(inboxPage1.orderedItems.some(val => val.id == obj2.id))
         })
 
         it("distributes to the actor when the other posts to public", async() => {
@@ -450,7 +453,7 @@ describe("Web API interface", () => {
                 "type": "IntransitiveActivity",
                 "to": "https://www.w3.org/ns/activitystreams#Public"
             }
-            const res2 = await fetch(actor2.outbox, {
+            const res2 = await fetch(actor2.outbox.id, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/activity+json; charset=utf-8',
@@ -462,11 +465,12 @@ describe("Web API interface", () => {
             assert.strictEqual(res2.status, 200, `Bad status code ${res2.status}: ${body2}`)
             assert.strictEqual(res2.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
             const obj2 = JSON.parse(body2)
-            const inbox1 = await (await fetch(actor1.inbox)).json()
-            const inboxPage1 = await (await fetch(inbox1.first)).json()
-            assert.notEqual(-1, inboxPage1.orderedItems.indexOf(obj2.id))
+            const inbox1 = await (await fetch(actor1.inbox.id)).json()
+            const inboxPage1 = await (await fetch(inbox1.first.id)).json()
+            assert(inboxPage1.orderedItems.some(val => val.id == obj2.id))
         })
     })
+
     describe("Filter collections", () => {
         let actor1 = null
         let token1 = null
@@ -481,7 +485,7 @@ describe("Web API interface", () => {
                 "type": "IntransitiveActivity",
                 "to": [actor1.id]
             }
-            const res = await fetch(actor1.outbox, {
+            const res = await fetch(actor1.outbox.id, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/activity+json; charset=utf-8',
@@ -494,31 +498,78 @@ describe("Web API interface", () => {
         })
 
         it("author can see own private activity", async () => {
-            const outbox = await (await fetch(actor1.outbox, {
+            const outbox = await (await fetch(actor1.outbox.id, {
                 headers: {
                     'Authorization': `Bearer ${token1}`
                 }
             })).json()
-            const outboxPage = await (await fetch(outbox.first, {
+            const outboxPage = await (await fetch(outbox.first.id, {
                 headers: {
                     'Authorization': `Bearer ${token1}`
                 }
             })).json()
-            assert.notEqual(-1, outboxPage.orderedItems.indexOf(activity.id))
+            assert(outboxPage.orderedItems.some(val => val.id == activity.id))
         })
 
         it("others cannot see a private activity", async () => {
-            const outbox = await (await fetch(actor1.outbox, {
+            const outbox = await (await fetch(actor1.outbox.id, {
                 headers: {
                     'Authorization': `Bearer ${token2}`
                 }
             })).json()
-            const outboxPage = await (await fetch(outbox.first, {
+            const outboxPage = await (await fetch(outbox.first.id, {
                 headers: {
                     'Authorization': `Bearer ${token2}`
                 }
             })).json()
-            assert.equal(-1, outboxPage.orderedItems.indexOf(activity.id))
+            assert(outboxPage.orderedItems.every(val => val.id != activity.id))
+        })
+    })
+
+    describe("Create Activity", () => {
+        let actor1 = null
+        let token1 = null
+        let activity = null
+        const content = "My dog has fleas."
+        before(async () => {
+            [actor1, token1] = await registerActor();
+            const source = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Create",
+                "object": {
+                    "type": "Note",
+                    "content": content
+                }
+            }
+            const res = await fetch(actor1.outbox.id, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token1}`
+                },
+                body: JSON.stringify(source)
+            })
+            activity = await res.json()
+        })
+        it("has a new object ID", async() => {
+            assert.equal("object", typeof activity.object)
+            assert.equal("string", typeof activity.object.id)
+        })
+        it("can fetch the new note", async() => {
+            assert.equal("object", typeof activity.object)
+            assert.equal("string", typeof activity.object.id)
+            const res = await fetch(activity.object.id, {
+                headers: {
+                    'Authorization': `Bearer ${token1}`
+                }
+            })
+            assert.equal(200, res.status)
+            const fetched = await res.json()
+            assert.equal(activity.object?.id, fetched.id)
+            assert.equal("Note", fetched.type)
+            assert.equal(content, fetched.content)
+            assert.equal("string", typeof fetched.published)
+            assert.equal("string", typeof fetched.updated)
         })
     })
 })
