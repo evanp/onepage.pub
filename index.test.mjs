@@ -307,6 +307,61 @@ describe("Web API interface", () => {
         })
     })
 
+    describe("Filter collections", () => {
+        let actor1 = null
+        let token1 = null
+        let actor2 = null
+        let token2 = null
+        let activity = null
+        before(async () => {
+            [actor1, token1] = await registerActor();
+            [actor2, token2] = await registerActor();
+            const input = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "IntransitiveActivity",
+                "to": [actor1.id]
+            }
+            const res = await fetch(actor1.outbox.id, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token1}`
+                },
+                body: JSON.stringify(input)
+            })
+            const body = await res.text()
+            activity = JSON.parse(body)
+        })
+
+        it("author can see own private activity", async () => {
+            const outbox = await (await fetch(actor1.outbox.id, {
+                headers: {
+                    'Authorization': `Bearer ${token1}`
+                }
+            })).json()
+            const outboxPage = await (await fetch(outbox.first.id, {
+                headers: {
+                    'Authorization': `Bearer ${token1}`
+                }
+            })).json()
+            assert(outboxPage.orderedItems.some(val => val.id == activity.id))
+        })
+
+        it("others cannot see a private activity", async () => {
+            const outbox = await (await fetch(actor1.outbox.id, {
+                headers: {
+                    'Authorization': `Bearer ${token2}`
+                }
+            })).json()
+            const outboxPage = await (await fetch(outbox.first.id, {
+                headers: {
+                    'Authorization': `Bearer ${token2}`
+                }
+            })).json()
+            assert(outboxPage.orderedItems.every(val => val.id != activity.id))
+        })
+    })
+
     describe("Remote delivery", () => {
         let remote = null
         let actor1 = null
@@ -468,61 +523,6 @@ describe("Web API interface", () => {
             const inbox1 = await (await fetch(actor1.inbox.id)).json()
             const inboxPage1 = await (await fetch(inbox1.first.id)).json()
             assert(inboxPage1.orderedItems.some(val => val.id == obj2.id))
-        })
-    })
-
-    describe("Filter collections", () => {
-        let actor1 = null
-        let token1 = null
-        let actor2 = null
-        let token2 = null
-        let activity = null
-        before(async () => {
-            [actor1, token1] = await registerActor();
-            [actor2, token2] = await registerActor();
-            const input = {
-                "@context": "https://www.w3.org/ns/activitystreams",
-                "type": "IntransitiveActivity",
-                "to": [actor1.id]
-            }
-            const res = await fetch(actor1.outbox.id, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/activity+json; charset=utf-8',
-                    'Authorization': `Bearer ${token1}`
-                },
-                body: JSON.stringify(input)
-            })
-            const body = await res.text()
-            activity = JSON.parse(body)
-        })
-
-        it("author can see own private activity", async () => {
-            const outbox = await (await fetch(actor1.outbox.id, {
-                headers: {
-                    'Authorization': `Bearer ${token1}`
-                }
-            })).json()
-            const outboxPage = await (await fetch(outbox.first.id, {
-                headers: {
-                    'Authorization': `Bearer ${token1}`
-                }
-            })).json()
-            assert(outboxPage.orderedItems.some(val => val.id == activity.id))
-        })
-
-        it("others cannot see a private activity", async () => {
-            const outbox = await (await fetch(actor1.outbox.id, {
-                headers: {
-                    'Authorization': `Bearer ${token2}`
-                }
-            })).json()
-            const outboxPage = await (await fetch(outbox.first.id, {
-                headers: {
-                    'Authorization': `Bearer ${token2}`
-                }
-            })).json()
-            assert(outboxPage.orderedItems.every(val => val.id != activity.id))
         })
     })
 
