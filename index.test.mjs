@@ -46,6 +46,22 @@ const registerActor = async(port=3000) => {
     return [actor, token]
 }
 
+const doActivity = async(actor, token, activity) => {
+    const res = await fetch(actor.outbox.id, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/activity+json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(activity),
+    })
+    if (res.status !== 200) {
+        const body = await res.text()
+        throw new Error(`Bad status code ${res.status}: ${body}`)
+    }
+    return await res.json()
+}
+
 describe("Web API interface", () => {
 
     let child = null
@@ -692,7 +708,6 @@ describe("Web API interface", () => {
                 body: JSON.stringify(deleteSource)
             })
             deleted = await deleteRes.json()
-            console.dir(deleted)
         })
         it("has the same object id", async() => {
             assert.equal(created.object.id, deleted.object.id)
@@ -716,6 +731,51 @@ describe("Web API interface", () => {
             assert(fetched.updated)
             assert(fetched.published)
             assert(fetched.summaryMap?.en)
+        })
+    })
+
+    describe("Add Activity", () => {
+        let actor1 = null
+        let token1 = null
+        let createdCollection = null
+        let createdNote = null
+        let added = null
+        before(async () => {
+            [actor1, token1] = await registerActor();
+            createdNote = await doActivity(actor1, token1, {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Create",
+                "object": {
+                    "type": "Note",
+                    "contentMap": {
+                        "en": "Buy some milk"
+                    }
+                }
+            })
+            createdCollection = await doActivity(actor1, token1, {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Create",
+                "object": {
+                    "type": "Collection",
+                    "nameMap": {
+                        "en": "TODO list"
+                    },
+                    "items": []
+                }
+            })
+            added = await doActivity(actor1, token1, {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Add",
+                "object": createdNote.object.id,
+                "target": createdCollection.object.id
+            })
+        })
+        it("adds an object to a collection", async() => {
+            const res = await fetch(createdCollection.object.id, {
+                headers: {'Authorization': `Bearer ${token1}`}
+            })
+            const fetched = await res.json()
+            assert(fetched.items.some(item => item.id === createdNote.object.id))
         })
     })
 })

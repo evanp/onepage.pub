@@ -514,6 +514,39 @@ const appliers = {
       }
     })
     return activity
+  },
+  "Add": async(activity, owner, addressees) => {
+    if (!activity.object) {
+      throw new createError.BadRequest("No object to add")
+    }
+    let object = await toObject(activity.object)
+    if (!object.id) {
+      throw new createError.BadRequest("No id for object to add")
+    }
+    if (!activity.target) {
+      throw new createError.BadRequest("No target to add to")
+    }
+    let target = await getObject(await toId(activity.target))
+    if (!target.id) {
+      throw new createError.BadRequest("No id for object to add to")
+    }
+    if (!["Collection", "OrderedCollection"].includes(target.type)) {
+      throw new createError.BadRequest("Can't add to a non-collection")
+    }
+    const targetOwner = await getOwner(target)
+    if (!targetOwner || targetOwner.id != await toId(owner)) {
+      throw new createError.BadRequest("You can't delete an object you don't own")
+    }
+    for (let prop of ["inbox", "outbox", "followers", "following", "liked"]) {
+      if (target.id == await toId(owner[prop])) {
+        throw new createError.BadRequest(`Can't add an object directly to your ${prop}`)
+      }
+    }
+    if (await memberOf(object.id, target)) {
+      throw new createError.BadRequest("Already a member")
+    }
+    await prependObject(target, object)
+    return activity
   }
 }
 
