@@ -547,6 +547,39 @@ const appliers = {
     }
     await prependObject(target, object)
     return activity
+  },
+  "Remove": async(activity, owner, addressees) => {
+    if (!activity.object) {
+      throw new createError.BadRequest("No object to remove")
+    }
+    let object = await toObject(activity.object)
+    if (!object.id) {
+      throw new createError.BadRequest("No id for object to remove")
+    }
+    if (!activity.target) {
+      throw new createError.BadRequest("No target to remove from")
+    }
+    let target = await getObject(await toId(activity.target))
+    if (!target.id) {
+      throw new createError.BadRequest("No id for object to remove from")
+    }
+    if (!["Collection", "OrderedCollection"].includes(target.type)) {
+      throw new createError.BadRequest("Can't remove from a non-collection")
+    }
+    const targetOwner = await getOwner(target)
+    if (!targetOwner || targetOwner.id != await toId(owner)) {
+      throw new createError.BadRequest("You can't remove an object you don't own")
+    }
+    for (let prop of ["inbox", "outbox", "followers", "following", "liked"]) {
+      if (target.id == await toId(owner[prop])) {
+        throw new createError.BadRequest(`Can't remove an object directly from your ${prop}`)
+      }
+    }
+    if (!(await memberOf(object.id, target))) {
+      throw new createError.BadRequest("Not a member")
+    }
+    target = await removeObject(target, object)
+    return activity
   }
 }
 
@@ -600,6 +633,39 @@ async function prependObject(collection, object) {
       await patchObject(first.id, {prev: newFirst.id})
     }
   }
+}
+
+async function removeObject(collection, object) {
+  collection = await toObject(collection)
+  const objectId = await toId(object)
+  if (collection.orderedItems) {
+    const i = collection.orderedItems.indexOf(objectId)
+    if (i !== -1) {
+      return await patchObject(collection.id, {totalItems: collection.totalItems - 1, orderedItems: collection.orderedItems.toSpliced(i, 1)})
+    }
+  } else if (collection.items) {
+    const i = collection.items.indexOf(objectId)
+    if (i !== -1) {
+      return await patchObject(collection.id, {totalItems: collection.totalItems - 1, items: collection.items.toSpliced(i, 1)})
+    }
+  } else if (collection.first) {
+    for (let page = await getObject(await toId(collection.first)); page; page = await getObject(await toId(page.next))) {
+      if (page.orderedItems) {
+        const i = page.orderedItems.indexOf(objectId)
+        if (i !== -1) {
+          await patchObject(page, {orderedItems: page.orderedItems.splice(i, 1)})
+          return await patchObject(collection, {totalItems: collection.totalItems - 1})
+        }
+      } else if (page.items) {
+        const i = page.items.indexOf(objectId)
+        if (i !== -1) {
+          await patchObject(page, {items: page.items.splice(i, 1)})
+          return await patchObject(collection, {totalItems: collection.totalItems - 1})
+        }
+      }
+    }
+  }
+  return collection
 }
 
 async function getAllMembers(obj) {

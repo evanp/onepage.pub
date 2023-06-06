@@ -778,4 +778,81 @@ describe("Web API interface", () => {
             assert(fetched.items.some(item => item.id === createdNote.object.id))
         })
     })
+
+    describe("Remove Activity", () => {
+        let actor1 = null
+        let token1 = null
+        let createdCollection = null
+        let createdNote1 = null
+        let createdNote2 = null
+        let added1 = null
+        let added2 = null
+        let removed = null
+        before(async () => {
+            [actor1, token1] = await registerActor();
+            createdNote1 = await doActivity(actor1, token1, {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Create",
+                "object": {
+                    "type": "Note",
+                    "contentMap": {
+                        "en": "Buy some milk"
+                    }
+                }
+            })
+            createdNote2 = await doActivity(actor1, token1, {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Create",
+                "object": {
+                    "type": "Note",
+                    "contentMap": {
+                        "en": "Clean the garage"
+                    }
+                }
+            })
+            createdCollection = await doActivity(actor1, token1, {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Create",
+                "object": {
+                    "type": "Collection",
+                    "nameMap": {
+                        "en": "TODO list"
+                    },
+                    "items": []
+                }
+            })
+            added1 = await doActivity(actor1, token1, {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Add",
+                "object": createdNote1.object.id,
+                "target": createdCollection.object.id
+            })
+            added2 = await doActivity(actor1, token1, {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Add",
+                "object": createdNote2.object.id,
+                "target": createdCollection.object.id
+            })
+            removed = await doActivity(actor1, token1, {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Remove",
+                "object": createdNote1.object.id,
+                "target": createdCollection.object.id
+            })
+        })
+        it("removes an object from a collection", async() => {
+            const res = await fetch(createdCollection.object.id, {
+                headers: {'Authorization': `Bearer ${token1}`}
+            })
+            const fetched = await res.json()
+            assert(fetched.items.every(item => item.id !== createdNote1.object.id))
+        })
+        it("leaves other objects in the collection", async() => {
+            const res = await fetch(createdCollection.object.id, {
+                headers: {'Authorization': `Bearer ${token1}`}
+            })
+            const fetched = await res.json()
+            assert(fetched.items.some(item => item.id === createdNote2.object.id))
+        })
+    })
 })
