@@ -194,7 +194,6 @@ const idProps = [
   "first",
   "following",
   "followers",
-  "formerType",
   "generator",
   "href",
   "icon",
@@ -330,6 +329,11 @@ async function patchObject(id, patch) {
   }
   await run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(merged), id])
   return merged
+}
+
+async function replaceObject(id, replace) {
+  await run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(replace), id])
+  return replace
 }
 
 const emptyOrderedCollection = async(name, owner, addressees) => {
@@ -483,6 +487,32 @@ const appliers = {
       throw new createError.BadRequest("You can't update an object you don't own")
     }
     activity.object = await patchObject(object.id, object)
+    return activity
+  },
+  "Delete": async(activity, owner, addressees) => {
+    if (!activity.object) {
+      throw new createError.BadRequest("No object to delete")
+    }
+    let object = await toObject(activity.object)
+    if (!object.id) {
+      throw new createError.BadRequest("No id for object to delete")
+    }
+    const objectOwner = await getOwner(object)
+    if (!objectOwner || objectOwner.id != await toId(owner)) {
+      throw new createError.BadRequest("You can't delete an object you don't own")
+    }
+    const timestamp = new Date().toISOString();
+    activity.object = await replaceObject(object.id, {
+      id: object.id,
+      formerType: object.type,
+      type: "Tombstone",
+      published: object.published,
+      updated: timestamp,
+      deleted: timestamp,
+      summaryMap: {
+        "en": `A deleted ${object.type} by ${owner.name}`
+      }
+    })
     return activity
   }
 }
@@ -825,7 +855,7 @@ app.get('/:type/:id',
     }
   }
   let data = JSON.parse(obj.data)
-  if (data.type?.toLowerCase() !== type) {
+  if (data.type?.toLowerCase() !== type && data.type !== "Tombstone") {
     throw new createError.InternalServerError('Invalid object type')
   }
   data = await expandProperties(data)
@@ -845,6 +875,9 @@ app.get('/:type/:id',
   }
   if (needsExtendedObject(data)) {
     data.object = await toExtendedObject(data.object)
+  }
+  if (data.type === 'Tombstone') {
+    res.status(410)
   }
   data['@context'] = data['@context'] || CONTEXT
   res.set('Content-Type', 'application/activity+json')
@@ -921,6 +954,7 @@ app.post('/:type/:id',
 }))
 
 app.use((err, req, res, next) => {
+  console.error(err)
   if (createError.isHttpError(err)) {
     res.status(err.statusCode)
     if (res.expose) {

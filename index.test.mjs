@@ -653,4 +653,69 @@ describe("Web API interface", () => {
             assert(!("content" in fetched))
         })
     })
+
+    describe("Delete Activity", () => {
+        let actor1 = null
+        let token1 = null
+        let created = null
+        let deleted = null
+        before(async () => {
+            [actor1, token1] = await registerActor();
+            const source = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Create",
+                "object": {
+                    "type": "Note",
+                    "content": "My dog has fleas."
+                }
+            }
+            const res = await fetch(actor1.outbox.id, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token1}`
+                },
+                body: JSON.stringify(source)
+            })
+            created = await res.json()
+            const deleteSource = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "type": "Delete",
+                "object": created.object.id
+            }
+            const deleteRes = await fetch(actor1.outbox.id, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/activity+json; charset=utf-8',
+                    'Authorization': `Bearer ${token1}`
+                },
+                body: JSON.stringify(deleteSource)
+            })
+            deleted = await deleteRes.json()
+            console.dir(deleted)
+        })
+        it("has the same object id", async() => {
+            assert.equal(created.object.id, deleted.object.id)
+        })
+        it("is a Tombstone", async() => {
+            assert.equal("Tombstone", deleted.object.type)
+        })
+        it("has a summaryMap property", async() => {
+            assert(deleted.object?.summaryMap?.en)
+        })
+        it("can fetch the Tombstone", async() => {
+            const res = await fetch(deleted.object.id, {
+                headers: {'Authorization': `Bearer ${token1}`}
+            })
+            assert.equal(410, res.status)
+            const fetched = await res.json()
+            assert.equal(deleted.object.id, fetched.id)
+            assert.equal("Tombstone", fetched.type)
+            assert.equal("Note", fetched.formerType)
+            assert(fetched.deleted)
+            assert(fetched.updated)
+            assert(fetched.published)
+            assert(fetched.summaryMap?.en)
+        })
+    })
 })
