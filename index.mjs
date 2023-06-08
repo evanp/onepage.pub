@@ -13,8 +13,7 @@ import jwt from 'jsonwebtoken';
 import { promisify } from 'util';
 import crypto from 'crypto';
 
-const sign = promisify(jwt.sign);
-const generateKeyPair = promisify(crypto.generateKeyPair);
+// Constants
 
 const DATABASE = process.env.OPP_DATABASE || ':memory:'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
@@ -32,32 +31,28 @@ const PUBLIC = "https://www.w3.org/ns/activitystreams#Public"
 const PUBLIC_OBJ = {id: PUBLIC, type: "Collection"}
 const MAX_PAGE_SIZE = 20
 
-// Initialize Express
-const app = express();
+// Classes
 
-// Initialize SQLite
-const db = new sqlite3.Database(DATABASE);
+class Database {
+    constructor(path) {
+        let db = new sqlite3.Database(path);
 
-const run = promisify((...params) => { db.run(...params) })
-const get = promisify((...params) => { db.get(...params) })
-const all = promisify((...params) => { db.all(...params) })
+        db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255), privateKey TEXT)');
+        db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)');
+        db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
+
+        this.run = promisify((...params) => { db.run(...params) })
+        this.get = promisify((...params) => { db.get(...params) })
+        this.all = promisify((...params) => { db.all(...params) })
+    }
+}
+
+// Functions
+
+const sign = promisify(jwt.sign);
+const generateKeyPair = promisify(crypto.generateKeyPair);
 
 const isString = value => typeof value === 'string' || value instanceof String;
-
-db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255), privateKey TEXT)');
-db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)');
-db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
-
-app.use(passport.initialize()); // Initialize Passport
-app.use(express.json({type: ['application/json', 'application/activity+json']})) // for parsing application/json
-app.use(express.urlencoded({ extended: true })) // for HTML forms
-
-// Local Strategy for login/logout
-passport.use(new LocalStrategy(
-  function(username, password, done) {
-
-  }
-));
 
 async function makeId(type) {
   if (PORT === 443) {
@@ -68,7 +63,7 @@ async function makeId(type) {
 }
 
 async function getObject(id) {
-  const row = await get(`SELECT data FROM object WHERE id = ?`, [id])
+  const row = await db.get(`SELECT data FROM object WHERE id = ?`, [id])
   if (!row) {
     return null
   }
@@ -77,7 +72,7 @@ async function getObject(id) {
 
 async function getOwner(obj) {
   const id = await toId(obj)
-  const row = await get(`SELECT owner FROM object WHERE id = ?`, [id])
+  const row = await db.get(`SELECT owner FROM object WHERE id = ?`, [id])
   if (!row) {
     return null
   }
@@ -85,7 +80,7 @@ async function getOwner(obj) {
 }
 
 async function getAddressees(id) {
-  const rows = await all(`SELECT addresseeId FROM addressee WHERE objectId = ?`, [id])
+  const rows = await db.all(`SELECT addresseeId FROM addressee WHERE objectId = ?`, [id])
   return rows.map((row) => row.addresseeId)
 }
 
@@ -290,9 +285,9 @@ async function getRemoteObject(value) {
 async function cacheRemoteObject(data, owner, addressees) {
   const dataId = await toId(data)
   const ownerId = await toId(owner) || data.id
-  await run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [dataId, ownerId, JSON.stringify(data)]);
+  await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [dataId, ownerId, JSON.stringify(data)]);
   await Promise.all(addressees.map((addressee) =>
-  run(
+  db.run(
     'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
     [dataId, addressee]
   )))
@@ -306,9 +301,9 @@ async function saveObject(type, data, owner=null, addressees=[]) {
   data.published = data.published || data.updated;
   // self-ownership
   const ownerId = await toId(owner) || data.id
-  await run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [data.id, ownerId, JSON.stringify(data)]);
+  await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [data.id, ownerId, JSON.stringify(data)]);
   await Promise.all(addressees.map((addressee) =>
-  run(
+  db.run(
     'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
     [data.id, addressee]
   )))
@@ -316,7 +311,7 @@ async function saveObject(type, data, owner=null, addressees=[]) {
 }
 
 async function patchObject(id, patch) {
-  let row = await get(`SELECT data from object WHERE id = ?`, [id])
+  let row = await db.get(`SELECT data from object WHERE id = ?`, [id])
   if (!row) {
     throw new Error(`No object with ID ${id}`)
   }
@@ -327,12 +322,12 @@ async function patchObject(id, patch) {
       delete merged[prop]
     }
   }
-  await run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(merged), id])
+  await db.run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(merged), id])
   return merged
 }
 
 async function replaceObject(id, replace) {
-  await run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(replace), id])
+  await db.run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(replace), id])
   return replace
 }
 
@@ -397,7 +392,7 @@ async function canRead(object, subject, owner=null, addressees=null) {
 
 async function isUser(object) {
   const id = await toId(object)
-  const row = await get("SELECT username FROM user WHERE actorId = ?", [id])
+  const row = await db.get("SELECT username FROM user WHERE actorId = ?", [id])
   return !!row
 }
 
@@ -771,11 +766,11 @@ async function distributeActivity(activity, owner, addressees) {
   // Deliver to each of the expanded addressees
 
   const body = JSON.stringify(activity)
-  const {privateKey} = await get('SELECT privateKey FROM user WHERE actorId = ?', [owner.id])
+  const {privateKey} = await db.get('SELECT privateKey FROM user WHERE actorId = ?', [owner.id])
   const keyId = await toId(owner.publicKey)
 
   await Promise.all(expanded.map((async (addressee) => {
-    const row = await get(`SELECT username FROM user WHERE actorId = ?`, [addressee])
+    const row = await db.get(`SELECT username FROM user WHERE actorId = ?`, [addressee])
     if (row) {
       // Local delivery
       const user = await getObject(addressee);
@@ -799,6 +794,25 @@ async function distributeActivity(activity, owner, addressees) {
     }
   })))
 }
+
+// Server
+
+// Initialize Express
+const app = express();
+
+// Initialize SQLite
+const db = new Database(DATABASE);
+
+app.use(passport.initialize()); // Initialize Passport
+app.use(express.json({type: ['application/json', 'application/activity+json']})) // for parsing application/json
+app.use(express.urlencoded({ extended: true })) // for HTML forms
+
+// Local Strategy for login/logout
+passport.use(new LocalStrategy(
+  function(username, password, done) {
+
+  }
+));
 
 app.get('/', wrap(async(req, res) => {
   const url = req.protocol + '://' + req.get('host') + req.originalUrl;
@@ -870,7 +884,7 @@ app.post('/register', wrap(async(req, res) => {
     const {id, type, owner, publicKeyPem} = await saveObject('Key', {owner: actorId, publicKeyPem: publicKey}, actorId, [PUBLIC])
     data['publicKey'] = {id, type, owner, publicKeyPem}
     await saveObject('Person', data, actorId, [PUBLIC])
-    await run('INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)', [username, passwordHash, actorId, privateKey])
+    await db.run('INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)', [username, passwordHash, actorId, privateKey])
     const token = await sign(
       {
         subject: actorId,
@@ -914,7 +928,7 @@ app.get('/.well-known/webfinger', wrap(async(req, res) => {
   if (hostname !== req.get('host')) {
     throw new createError.NotFound('Hostname does not match')
   }
-  const user = await get('SELECT username, actorId FROM user WHERE username = ?', [username])
+  const user = await db.get('SELECT username, actorId FROM user WHERE username = ?', [username])
   if (!user) {
     throw new createError.NotFound('User not found')
   }
@@ -942,7 +956,7 @@ app.get('/:type/:id',
   wrap(async(req, res) => {
   const full = req.protocol + '://' + req.get('host') + req.originalUrl;
   const type = req.params.type
-  const obj = await get('SELECT data, owner FROM object WHERE id = ?', [full])
+  const obj = await db.get('SELECT data, owner FROM object WHERE id = ?', [full])
   if (!obj) {
     throw new createError.NotFound('Object not found')
   }
@@ -993,7 +1007,7 @@ app.post('/:type/:id',
   const full = req.protocol + '://' + req.get('host') + req.originalUrl;
   const type = req.params.type
   const id = req.params.id
-  const obj = await get('SELECT data, owner FROM object WHERE id = ?', [full])
+  const obj = await db.get('SELECT data, owner FROM object WHERE id = ?', [full])
   if (!obj) {
     throw new createError.NotFound('Object not found')
   }
