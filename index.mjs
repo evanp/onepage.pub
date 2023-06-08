@@ -47,6 +47,59 @@ class Database {
     }
 }
 
+class HTTPSignature {
+  static async sign(keyId, privateKey, method, url, date) {
+    url = (isString(url)) ? new URL(url) : url;
+    const target = (url.search && url.search.length) ?
+      `${url.pathname}?${url.search}` :
+      `${url.pathname}`
+    let data = `(request-target): ${method.toLowerCase()} ${target}\n`
+    data += `host: ${url.host}\n`
+    data += `date: ${date}`
+    const signer = crypto.createSign('sha256');
+    signer.update(data);
+    const signature = signer.sign(privateKey).toString('base64');
+    signer.end();
+    const header = `keyId="${keyId}",headers="(request-target) host date",signature="${signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`;
+    return header
+  }
+
+  static async validate(sigHeader, req) {
+    const parts = Object.fromEntries(sigHeader.split(',').map((clause) => {
+      let match = clause.match(/^\s*(\w+)\s*=\s*"(.*?)"\s*$/)
+      return [match[1], match[2].replace(/\\"/, '"')]
+    }))
+    if (!parts.keyId || !parts.headers || !parts.signature || !parts.algorithm) {
+      return null
+    }
+    if (parts.algorithm != 'rsa-sha256') {
+      return null
+    }
+    let lines = []
+    for (let name of parts.headers.split(' ')) {
+      if (name == '(request-target)') {
+        lines.push(`(request-target): ${req.method.toLowerCase()} ${req.originalUrl}`)
+      } else {
+        let value = req.get(name)
+        lines.push(`${name}: ${value}`)
+      }
+    }
+    let data = lines.join('\n')
+    const publicKey = await getRemoteObject(parts.keyId)
+    if (!publicKey || !publicKey.owner || !publicKey.publicKeyPem) {
+      return null
+    }
+    const verifier = crypto.createVerify('sha256');
+    verifier.write(data);
+    verifier.end();
+    if (verifier.verify(publicKey.publicKeyPem, Buffer.from(parts.signature, 'base64'))) {
+      return await getRemoteObject(publicKey.owner)
+    } else {
+      return null
+    }
+  }
+}
+
 // Functions
 
 const sign = promisify(jwt.sign);
@@ -686,57 +739,6 @@ async function getAllMembers(obj) {
   return cur
 }
 
-async function signRequest(keyId, privateKey, method, url, date) {
-  url = (isString(url)) ? new URL(url) : url;
-  const target = (url.search && url.search.length) ?
-    `${url.pathname}?${url.search}` :
-    `${url.pathname}`
-  let data = `(request-target): ${method.toLowerCase()} ${target}\n`
-  data += `host: ${url.host}\n`
-  data += `date: ${date}`
-  const signer = crypto.createSign('sha256');
-	signer.update(data);
-	const signature = signer.sign(privateKey).toString('base64');
-	signer.end();
-  const header = `keyId="${keyId}",headers="(request-target) host date",signature="${signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`;
-  return header
-}
-
-async function validateSignature(sigHeader, req) {
-  const parts = Object.fromEntries(sigHeader.split(',').map((clause) => {
-    let match = clause.match(/^\s*(\w+)\s*=\s*"(.*?)"\s*$/)
-    return [match[1], match[2].replace(/\\"/, '"')]
-  }))
-  if (!parts.keyId || !parts.headers || !parts.signature || !parts.algorithm) {
-    return null
-  }
-  if (parts.algorithm != 'rsa-sha256') {
-    return null
-  }
-  let lines = []
-  for (let name of parts.headers.split(' ')) {
-    if (name == '(request-target)') {
-      lines.push(`(request-target): ${req.method.toLowerCase()} ${req.originalUrl}`)
-    } else {
-      let value = req.get(name)
-      lines.push(`${name}: ${value}`)
-    }
-  }
-  let data = lines.join('\n')
-  const publicKey = await getRemoteObject(parts.keyId)
-  if (!publicKey || !publicKey.owner || !publicKey.publicKeyPem) {
-    return null
-  }
-  const verifier = crypto.createVerify('sha256');
-	verifier.write(data);
-	verifier.end();
-  if (verifier.verify(publicKey.publicKeyPem, Buffer.from(parts.signature, 'base64'))) {
-    return await getRemoteObject(publicKey.owner)
-  } else {
-    return null
-  }
-}
-
 async function distributeActivity(activity, owner, addressees) {
 
   owner = await toObject(owner)
@@ -780,7 +782,7 @@ async function distributeActivity(activity, owner, addressees) {
       const other = await getRemoteObject(addressee);
       const inbox = await toId(other.inbox)
       const date = new Date().toUTCString()
-      const signature = await signRequest(keyId, privateKey, 'POST', inbox, date)
+      const signature = await HTTPSignature.sign(keyId, privateKey, 'POST', inbox, date)
       const res = await fetch(inbox, {
         method: 'POST',
         headers: {
@@ -1047,7 +1049,7 @@ app.post('/:type/:id',
     if (!sigHeader) {
       throw new createError.Unauthorized('HTTP signature required')
     }
-    const remote = await validateSignature(sigHeader, req)
+    const remote = await HTTPSignature.validate(sigHeader, req)
     if (!remote) {
       throw new createError.Unauthorized('Invalid HTTP signature')
     }
