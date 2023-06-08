@@ -122,20 +122,110 @@ class HTTPSignature {
   }
 }
 
+class ActivityObject {
+  #id;
+  #json;
+  constructor(data) {
+    if (!data) {
+      throw new Error('No data provided');
+    } else if (isString(data)) {
+      this.#id = data;
+    } else {
+      this.#json = data;
+    }
+  }
+  static async makeId(type) {
+    if (PORT === 443) {
+      return `https://${HOSTNAME}/${type.toLowerCase()}/${await nanoid()}`;
+    } else {
+      return `https://${HOSTNAME}:${PORT}/${type.toLowerCase()}/${await nanoid()}`;
+    }
+  }
+  static async getJSON(id) {
+    const row = await db.get(`SELECT data FROM object WHERE id = ?`, [id])
+    if (!row) {
+      return null
+    } else {
+      return JSON.parse(row.data)
+    }
+  }
+  static async get(id) {
+    return new ActivityObject(ActivityObject.getJSON(id))
+  }
+
+  async json() {
+    if (!this.#json) {
+      this.#json = await ActivityObject.getJSON(this.#id)
+    }
+    return this.#json;
+  }
+
+  async id() {
+    if (this.#id) {
+      return this.#id
+    } else if (this.#json) {
+      return this.#json.id || this.#json['@id'] || null
+    }
+  }
+
+  async type() {
+    const json = await this.json()
+    return json.type
+  }
+
+  async isCollection() {
+    return ['Collection', 'OrderedCollection'].includes(await this.type())
+  }
+}
+
+class Activity extends ActivityObject {
+  constructor(data) {
+    super(data)
+  }
+}
+
+class Collection extends ActivityObject {
+  constructor(data) {
+    super(data)
+  }
+
+  async hasMember(object) {
+    const objectId = await toId(object)
+    const collection = await this.json()
+    const match = (item) => ((isString(item) && item == objectId) || ((typeof item == "object") && item.id == objectId))
+    switch (collection.type) {
+      case "Collection":
+      case "OrderedCollection":
+        if (collection.orderedItems) {
+          return collection.orderedItems.some(match)
+        } else if (collection.items) {
+            return collection.items.some(match)
+        } else if (collection.first) {
+          return await (new Collection(collection.first)).hasMember(objectId)
+        }
+        break
+      case "CollectionPage":
+      case "OrderedCollectionPage":
+        if (collection.orderedItems) {
+          return collection.orderedItems.some(match)
+        } else if (collection.items) {
+          return collection.items.some(match)
+        } else if (collection.next) {
+          return await (new Collection(collection.next)).hasMember(objectId)
+        }
+        break
+      default:
+        return false
+    }
+  }
+}
+
 // Functions
 
 const sign = promisify(jwt.sign);
 const generateKeyPair = promisify(crypto.generateKeyPair);
 
 const isString = value => typeof value === 'string' || value instanceof String;
-
-async function makeId(type) {
-  if (PORT === 443) {
-    return `https://${HOSTNAME}/${type.toLowerCase()}/${await nanoid()}`;
-  } else {
-    return `https://${HOSTNAME}:${PORT}/${type.toLowerCase()}/${await nanoid()}`;
-  }
-}
 
 async function getObject(id) {
   const row = await db.get(`SELECT data FROM object WHERE id = ?`, [id])
@@ -370,7 +460,7 @@ async function cacheRemoteObject(data, owner, addressees) {
 
 async function saveObject(type, data, owner=null, addressees=[]) {
   data = await compressProperties(data || {})
-  data.id = data.id || await makeId(type)
+  data.id = data.id || await ActivityObject.makeId(type)
   data.type = data.type || type || 'Object';
   data.updated = new Date().toISOString();
   data.published = data.published || data.updated;
@@ -407,7 +497,7 @@ async function replaceObject(id, replace) {
 }
 
 const emptyOrderedCollection = async(name, owner, addressees) => {
-  const id = await makeId('OrderedCollection')
+  const id = await ActivityObject.makeId('OrderedCollection')
   const page = await saveObject(
     'OrderedCollectionPage',
     {
@@ -457,8 +547,12 @@ async function canRead(object, subject, owner=null, addressees=null) {
   }
   // if they're a member of any addressed collection
   for (let addresseeId of addresseeIds) {
-    if (await memberOf(subjectId, addresseeId)) {
-      return true
+    const obj = new ActivityObject(addresseeId)
+    if (await obj.isCollection()) {
+      const coll = new Collection(obj.json())
+      if (await coll.hasMember(subjectId)) {
+        return true
+      }
     }
   }
   // Otherwise, can't read
@@ -471,40 +565,11 @@ async function isUser(object) {
   return !!row
 }
 
-async function memberOf(object, collection) {
-  const objectId = await toId(object)
-  collection = await toObject(collection)
-  const match = (item) => ((isString(item) && item == objectId) || ((typeof item == "object") && item.id == objectId))
-  switch (collection.type) {
-    case "Collection":
-    case "OrderedCollection":
-      if (collection.orderedItems) {
-        return collection.orderedItems.some(match)
-      } else if (collection.items) {
-          return collection.items.some(match)
-      } else if (collection.first) {
-        return await memberOf(objectId, collection.first)
-      }
-      break
-    case "CollectionPage":
-    case "OrderedCollectionPage":
-      if (collection.orderedItems) {
-        return collection.orderedItems.some(match)
-      } else if (collection.items) {
-        return collection.items.some(match)
-      } else if (collection.next) {
-        return await memberOf(objectId, collection.next)
-      }
-      break
-    default:
-      return false
-  }
-}
 
 async function saveActivity(data, owner, addressees) {
   data = data || {};
   data.type = data.type || 'Activity';
-  data.id = data.id || await makeId(data.type)
+  data.id = data.id || await ActivityObject.makeId(data.type)
   data.actor = await toId(owner)
   delete data['bto']
   delete data['bcc']
@@ -516,11 +581,11 @@ const appliers = {
     if (!activity.object) {
       throw new createError.BadRequest("No object followed")
     }
-    if (await memberOf(activity.object, owner.following)) {
+    const following = new Collection(owner.following)
+    if (await following.hasMember(activity.object)) {
       throw new createError.BadRequest("Already following")
     }
-    const following = await getObject(owner.following)
-    await prependObject(following, activity.object)
+    await prependObject(await following.json(), activity.object)
     if (await isUser(activity.object)) {
       const other = await getObject(activity.object)
       const followers = await getObject(other.followers)
@@ -612,7 +677,7 @@ const appliers = {
         throw new createError.BadRequest(`Can't add an object directly to your ${prop}`)
       }
     }
-    if (await memberOf(object.id, target)) {
+    if (await (new Collection(target)).hasMember(object.id)) {
       throw new createError.BadRequest("Already a member")
     }
     await prependObject(target, object)
@@ -645,7 +710,7 @@ const appliers = {
         throw new createError.BadRequest(`Can't remove an object directly from your ${prop}`)
       }
     }
-    if (!(await memberOf(object.id, target))) {
+    if (!(await (new Collection(target))).hasMember(object.id)) {
       throw new createError.BadRequest("Not a member")
     }
     target = await removeObject(target, object)
@@ -663,7 +728,7 @@ async function applyActivity(activity, owner, addressees) {
 const remoteAppliers = {
   "Follow": async(activity, remote, addressees, owner) => {
     if (toId(activity.object) == toId(owner)) {
-      if (await memberOf(remote, owner.followers)) {
+      if (await (new Collection(owner.followers)).hasMember(remote)) {
         throw new Error("Already following")
       }
       const followers = await getObject(owner.followers)
@@ -884,7 +949,7 @@ app.post('/register', wrap(async(req, res) => {
     const password = req.body.password
     const passwordHash = await bcrypt.hash(password, 10)
     // Create the person; self-own!
-    const actorId = await makeId('Person')
+    const actorId = await ActivityObject.makeId('Person')
     const data = {name: username, id: actorId};
     const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
     for (let prop of props) {
@@ -1053,7 +1118,7 @@ app.post('/:type/:id',
     .filter((a) => a)
     .flat()
     .map(toId))
-    data.id = await makeId(data.type || "Activity")
+    data.id = await ActivityObject.makeId(data.type || "Activity")
     let activity = await applyActivity(data, owner, addressees)
     activity = await saveActivity(activity, owner, addressees)
     await prependObject(outbox, activity)
