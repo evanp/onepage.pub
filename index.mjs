@@ -638,15 +638,19 @@ async function prependObject(collection, object) {
 async function removeObject(collection, object) {
   collection = await toObject(collection)
   const objectId = await toId(object)
-  if (collection.orderedItems) {
+  if (Array.isArray(collection.orderedItems)) {
     const i = collection.orderedItems.indexOf(objectId)
     if (i !== -1) {
-      return await patchObject(collection.id, {totalItems: collection.totalItems - 1, orderedItems: collection.orderedItems.toSpliced(i, 1)})
+      collection.orderedItems.splice(i, 1)
+      return await patchObject(collection.id,
+        {totalItems: collection.totalItems - 1,
+          orderedItems: collection.orderedItems})
     }
-  } else if (collection.items) {
+  } else if (Array.isArray(collection.items)) {
     const i = collection.items.indexOf(objectId)
     if (i !== -1) {
-      return await patchObject(collection.id, {totalItems: collection.totalItems - 1, items: collection.items.toSpliced(i, 1)})
+      collection.items.splice(i, 1)
+      return await patchObject(collection.id, {totalItems: collection.totalItems - 1, items: collection.items})
     }
   } else if (collection.first) {
     for (let page = await getObject(await toId(collection.first)); page; page = await getObject(await toId(page.next))) {
