@@ -48,35 +48,56 @@ class Database {
 }
 
 class HTTPSignature {
-  static async sign(keyId, privateKey, method, url, date) {
-    url = (isString(url)) ? new URL(url) : url;
-    const target = (url.search && url.search.length) ?
-      `${url.pathname}?${url.search}` :
-      `${url.pathname}`
-    let data = `(request-target): ${method.toLowerCase()} ${target}\n`
-    data += `host: ${url.host}\n`
-    data += `date: ${date}`
-    const signer = crypto.createSign('sha256');
-    signer.update(data);
-    const signature = signer.sign(privateKey).toString('base64');
-    signer.end();
-    const header = `keyId="${keyId}",headers="(request-target) host date",signature="${signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`;
-    return header
+  constructor(keyId, privateKey=null, method=null, url=null, date=null) {
+    if (!privateKey) {
+      const sigHeader = keyId;
+      const parts = Object.fromEntries(sigHeader.split(',').map((clause) => {
+        let match = clause.match(/^\s*(\w+)\s*=\s*"(.*?)"\s*$/)
+        return [match[1], match[2].replace(/\\"/, '"')]
+      }))
+      if (!parts.keyId || !parts.headers || !parts.signature || !parts.algorithm) {
+        throw new Error('Invalid signature header')
+      }
+      if (parts.algorithm != 'rsa-sha256') {
+        throw new Error('unsupported algorithm')
+      }
+      this.keyId = parts.keyId
+      this.headers = parts.headers
+      this.signature = parts.signature
+      this.algorithm = parts.algorithm
+    } else {
+      this.keyId = keyId
+      this.privateKey = privateKey
+      this.method = method
+      this.url = (isString(url)) ? new URL(url) : url;
+      this.date = date
+      this.signature = this.sign(this.signableData())
+      this.header = `keyId="${this.keyId}",headers="(request-target) host date",signature="${this.signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`;
+    }
   }
 
-  static async validate(sigHeader, req) {
-    const parts = Object.fromEntries(sigHeader.split(',').map((clause) => {
-      let match = clause.match(/^\s*(\w+)\s*=\s*"(.*?)"\s*$/)
-      return [match[1], match[2].replace(/\\"/, '"')]
-    }))
-    if (!parts.keyId || !parts.headers || !parts.signature || !parts.algorithm) {
-      return null
-    }
-    if (parts.algorithm != 'rsa-sha256') {
-      return null
-    }
+  signableData() {
+    const target = (this.url.search && this.url.search.length) ?
+    `${this.url.pathname}?${this.url.search}` :
+    `${this.url.pathname}`
+    let data = `(request-target): ${this.method.toLowerCase()} ${target}\n`
+    data += `host: ${this.url.host}\n`
+    data += `date: ${this.date}`
+    return data
+  }
+
+  sign(data) {
+    const signer = crypto.createSign('sha256');
+    signer.update(data);
+    const signature = signer.sign(this.privateKey).toString('base64');
+    signer.end();
+    return signature;
+  }
+
+  async validate(req) {
+
     let lines = []
-    for (let name of parts.headers.split(' ')) {
+    for (let name of this.headers.split(' ')) {
       if (name == '(request-target)') {
         lines.push(`(request-target): ${req.method.toLowerCase()} ${req.originalUrl}`)
       } else {
@@ -85,14 +106,15 @@ class HTTPSignature {
       }
     }
     let data = lines.join('\n')
-    const publicKey = await getRemoteObject(parts.keyId)
+
+    const publicKey = await getRemoteObject(this.keyId)
     if (!publicKey || !publicKey.owner || !publicKey.publicKeyPem) {
       return null
     }
     const verifier = crypto.createVerify('sha256');
     verifier.write(data);
     verifier.end();
-    if (verifier.verify(publicKey.publicKeyPem, Buffer.from(parts.signature, 'base64'))) {
+    if (verifier.verify(publicKey.publicKeyPem, Buffer.from(this.signature, 'base64'))) {
       return await getRemoteObject(publicKey.owner)
     } else {
       return null
@@ -782,12 +804,12 @@ async function distributeActivity(activity, owner, addressees) {
       const other = await getRemoteObject(addressee);
       const inbox = await toId(other.inbox)
       const date = new Date().toUTCString()
-      const signature = await HTTPSignature.sign(keyId, privateKey, 'POST', inbox, date)
+      const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date)
       const res = await fetch(inbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/activity+json; charset=utf-8',
-          'Signature': signature,
+          'Signature': signature.header,
           'Date': date
         },
         body: body
@@ -1049,7 +1071,8 @@ app.post('/:type/:id',
     if (!sigHeader) {
       throw new createError.Unauthorized('HTTP signature required')
     }
-    const remote = await HTTPSignature.validate(sigHeader, req)
+    const header = new HTTPSignature(sigHeader)
+    const remote = await header.validate(req)
     if (!remote) {
       throw new createError.Unauthorized('Invalid HTTP signature')
     }
