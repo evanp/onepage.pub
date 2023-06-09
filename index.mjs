@@ -132,6 +132,7 @@ class ActivityObject {
       this.#id = data;
     } else {
       this.#json = data;
+      this.#id = this.#json.id || this.#json['@id'] || null
     }
   }
   static async makeId(type) {
@@ -161,20 +162,109 @@ class ActivityObject {
   }
 
   async id() {
-    if (this.#id) {
-      return this.#id
-    } else if (this.#json) {
-      return this.#json.id || this.#json['@id'] || null
-    }
+    return this.#id
   }
 
   async type() {
+    return this.prop('type')
+  }
+
+  async prop(name) {
     const json = await this.json()
-    return json.type
+    if (json) {
+      return json[name]
+    } else {
+      return null
+    }
   }
 
   async isCollection() {
     return ['Collection', 'OrderedCollection'].includes(await this.type())
+  }
+
+  async isCollectionPage() {
+    return ['CollectionPage', 'OrderedCollectionPage'].includes(await this.type())
+  }
+
+  async save(owner, addressees) {
+    const data = await compressProperties(await this.json() || {})
+    data.type = data.type || 'Object';
+    data.id = data.id || await ActivityObject.makeId(data.type)
+    data.updated = new Date().toISOString();
+    data.published = data.published || data.updated;
+    // self-ownership
+    const ownerId = owner || data.id
+    await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [data.id, ownerId, JSON.stringify(data)]);
+    await Promise.all(addressees.map((addressee) =>
+      db.run(
+        'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
+        [data.id, addressee]
+      )))
+    this.#id = data.id
+    this.#json = data
+  }
+
+  async patch(patch) {
+    const merged = {...await this.json(), ...patch, updated: new Date().toISOString()}
+    // null means delete
+    for (let prop in patch) {
+      if (patch[prop] == null) {
+        delete merged[prop]
+      }
+    }
+    await db.run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(merged), await this.id()])
+    this.#json = merged
+  }
+
+  async owner() {
+    const row = await db.get(`SELECT owner FROM object WHERE id = ?`, [await this.id()])
+    if (!row) {
+      return null
+    }
+    return new ActivityObject(row.owner)
+  }
+
+  async addressees() {
+    const id = await this.id()
+    const rows = await db.all(`SELECT addresseeId FROM addressee WHERE objectId = ?`, [id])
+    return rows.map((row) => new ActivityObject(row.addresseeId))
+  }
+
+  async canRead(subject) {
+
+    const owner = await this.owner()
+    const addressees = await this.addressees()
+    const addresseeIds = await Promise.all(addressees.map((addressee) => addressee.id()))
+
+    // anyone can read if it's public
+
+    if (addresseeIds.includes(PUBLIC)) {
+      return true;
+    }
+    // otherwise, unauthenticated can't read
+    if (!subject) {
+      return false;
+    }
+    // owner can always read
+    if (subject === await owner.id()) {
+      return true;
+    }
+    // direct addressees can always read
+    if (addresseeIds.includes(subject)) {
+      return true;
+    }
+    // if they're a member of any addressed collection
+    for (let addresseeId of addresseeIds) {
+      const obj = new ActivityObject(addresseeId)
+      if (await obj.isCollection()) {
+        const coll = new Collection(obj.json())
+        if (await coll.hasMember(subject)) {
+          return true
+        }
+      }
+    }
+    // Otherwise, can't read
+    return false;
   }
 }
 
@@ -218,6 +308,95 @@ class Collection extends ActivityObject {
         return false
     }
   }
+
+  async prependData(data) {
+    return this.prepend(new ActivityObject(data))
+  }
+
+  async prepend(object) {
+    const collection = await this.json()
+    const objectId = await object.id()
+    const collectionId = await this.id()
+    if (collection.orderedItems) {
+      await this.patch({totalItems: collection.totalItems + 1, orderedItems: [objectId, ...collection.orderedItems]})
+    } else if (collection.items) {
+      await this.patch({totalItems: collection.totalItems + 1, items: [objectId, ...collection.items]})
+    } else if (collection.first) {
+      const first = await new ActivityObject(collection.first)
+      const firstJson = await first.json()
+      if (firstJson.orderedItems.length < MAX_PAGE_SIZE) {
+        await first.patch({orderedItems: [objectId, ...firstJson.orderedItems]})
+        await this.patch({totalItems: collection.totalItems + 1})
+      } else {
+        const owner = await this.owner()
+        const addressees = await this.addressees()
+        const newFirst = new ActivityObject({type: "OrderedCollectionPage", partOf: collection.id, 'orderedItems': [objectId], next: first.id})
+        await newFirst.save(owner, addressees)
+        await this.patch({totalItems: collection.totalItems + 1, first: await newFirst.id()})
+        await first.patch({prev: await newFirst.id()})
+      }
+    }
+  }
+
+  async removeData(data) {
+    return this.remove(new ActivityObject(data))
+  }
+
+  async remove(object) {
+    const collection = await this.json()
+    const objectId = await object.id()
+    if (Array.isArray(collection.orderedItems)) {
+      const i = collection.orderedItems.indexOf(objectId)
+      if (i !== -1) {
+        collection.orderedItems.splice(i, 1)
+        await this.patch({totalItems: collection.totalItems - 1,
+            orderedItems: collection.orderedItems})
+      }
+    } else if (Array.isArray(collection.items)) {
+      const i = collection.items.indexOf(objectId)
+      if (i !== -1) {
+        collection.items.splice(i, 1)
+        await this.patch({totalItems: collection.totalItems - 1, items: collection.items})
+      }
+    } else {
+      let ref = collection.first
+      while (ref) {
+        const page = new ActivityObject(ref)
+        const json = await page.json()
+        for (let prop of ['items', 'orderedItems']) {
+          if (json[prop]) {
+            const i = json[prop].indexOf(objectId)
+            if (i !== -1) {
+              let patch = {}
+              json[prop].splice(i, 1)
+              patch[prop] = json[prop]
+              await page.patch(patch)
+              await this.patch({totalItems: collection.totalItems - 1})
+              return
+            }
+          }
+        }
+        ref = json.next
+      }
+    }
+    return collection
+  }
+
+  async members() {
+    const obj = await this.json()
+    let cur = obj.items || obj.orderedItems || [];
+    let ref = obj.first
+    while (ref) {
+      const page = new ActivityObject(ref)
+      if (!await page.isCollectionPage()) {
+        break
+      }
+      const pageJson = await page.json()
+      cur = cur.concat(pageJson.items || pageJson.orderedItems || [])
+      ref = pageJson.next
+    }
+    return cur
+  }
 }
 
 // Functions
@@ -236,17 +415,15 @@ async function getObject(id) {
 }
 
 async function getOwner(obj) {
-  const id = await toId(obj)
-  const row = await db.get(`SELECT owner FROM object WHERE id = ?`, [id])
-  if (!row) {
-    return null
-  }
-  return await getObject(row.owner)
+  const ao = new ActivityObject(obj)
+  const owner = await ao.owner()
+  return (owner) ? await owner.json() : null
 }
 
 async function getAddressees(id) {
-  const rows = await db.all(`SELECT addresseeId FROM addressee WHERE objectId = ?`, [id])
-  return rows.map((row) => row.addresseeId)
+  const ao = new ActivityObject(id)
+  const addressees = await ao.addressees()
+  return Promise.all(addressees.map(a => a.id()))
 }
 
 async function toObject(value) {
@@ -459,36 +636,16 @@ async function cacheRemoteObject(data, owner, addressees) {
 }
 
 async function saveObject(type, data, owner=null, addressees=[]) {
-  data = await compressProperties(data || {})
-  data.id = data.id || await ActivityObject.makeId(type)
   data.type = data.type || type || 'Object';
-  data.updated = new Date().toISOString();
-  data.published = data.published || data.updated;
-  // self-ownership
-  const ownerId = await toId(owner) || data.id
-  await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [data.id, ownerId, JSON.stringify(data)]);
-  await Promise.all(addressees.map((addressee) =>
-  db.run(
-    'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-    [data.id, addressee]
-  )))
-  return data;
+  const ao = new ActivityObject(data)
+  await ao.save(owner, addressees)
+  return await ao.json()
 }
 
 async function patchObject(id, patch) {
-  let row = await db.get(`SELECT data from object WHERE id = ?`, [id])
-  if (!row) {
-    throw new Error(`No object with ID ${id}`)
-  }
-  const merged = {...JSON.parse(row.data), ...patch, updated: new Date().toISOString()}
-  // null means delete
-  for (let prop in patch) {
-    if (patch[prop] == null) {
-      delete merged[prop]
-    }
-  }
-  await db.run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(merged), id])
-  return merged
+  const obj = new ActivityObject(id)
+  await obj.patch(patch)
+  return await obj.json()
 }
 
 async function replaceObject(id, replace) {
@@ -507,7 +664,7 @@ const emptyOrderedCollection = async(name, owner, addressees) => {
     owner,
     addressees
   )
-  return await saveObject(
+  const coll = await saveObject(
     'OrderedCollection',
     {
       id: id,
@@ -519,44 +676,12 @@ const emptyOrderedCollection = async(name, owner, addressees) => {
     owner,
     addressees
   )
+  return coll
 }
 
 async function canRead(object, subject, owner=null, addressees=null) {
-  const objectId = await toId(object)
-  const subjectId = await toId(subject)
-  owner = owner || await getOwner(objectId)
-  addressees = addressees || await getAddressees(objectId)
-  const ownerId = await toId(owner)
-  const addresseeIds = await Promise.all(addressees.map(toId))
-  // anyone can read if it's public
-
-  if (-1 !== addresseeIds.indexOf(PUBLIC)) {
-    return true;
-  }
-  // otherwise, unauthenticated can't read
-  if (!subjectId) {
-    return false;
-  }
-  // owner can always read
-  if (subjectId === ownerId) {
-    return true;
-  }
-  // direct addressees can always read
-  if (-1 !== addresseeIds.indexOf(subjectId)) {
-    return true;
-  }
-  // if they're a member of any addressed collection
-  for (let addresseeId of addresseeIds) {
-    const obj = new ActivityObject(addresseeId)
-    if (await obj.isCollection()) {
-      const coll = new Collection(obj.json())
-      if (await coll.hasMember(subjectId)) {
-        return true
-      }
-    }
-  }
-  // Otherwise, can't read
-  return false;
+  const ao = new ActivityObject(object)
+  return await ao.canRead(subject)
 }
 
 async function isUser(object) {
@@ -564,7 +689,6 @@ async function isUser(object) {
   const row = await db.get("SELECT username FROM user WHERE actorId = ?", [id])
   return !!row
 }
-
 
 async function saveActivity(data, owner, addressees) {
   data = data || {};
@@ -585,11 +709,16 @@ const appliers = {
     if (await following.hasMember(activity.object)) {
       throw new createError.BadRequest("Already following")
     }
-    await prependObject(await following.json(), activity.object)
+    await following.prependData(activity.object)
     if (await isUser(activity.object)) {
-      const other = await getObject(activity.object)
-      const followers = await getObject(other.followers)
-      await prependObject(followers, owner)
+      const other = new ActivityObject(activity.object)
+      const followers = new Collection(await other.prop('followers'))
+      if (await followers.hasMember(owner.id)) {
+        throw new Error("Already followed")
+      }
+      await followers.prependData(owner)
+    } else {
+      // Figure out how to follow this thing
     }
     return activity
   },
@@ -605,23 +734,25 @@ const appliers = {
         "en": `A(n) ${object.type} by ${owner.name}`
       }
     }
-    const saved = await saveObject(object.type, object, owner, addressees)
-    activity.object = saved.id
+    const saved = new ActivityObject(object)
+    await saved.save(owner.id, addressees)
+    activity.object = await saved.id()
     return activity
   },
   "Update": async(activity, owner, addressees) => {
-    let object = activity.object
-    if (!object) {
+    if (!activity.object) {
       throw new createError.BadRequest("No object to update")
     }
-    if (!object.id) {
+    if (!activity?.object?.id) {
       throw new createError.BadRequest("No id for object to update")
     }
-    const objectOwner = await getOwner(object)
-    if (!objectOwner || objectOwner.id != await toId(owner)) {
+    let object = new ActivityObject(activity?.object?.id)
+    const objectOwner = await object.owner()
+    if (!objectOwner || await objectOwner.id() != owner.id) {
       throw new createError.BadRequest("You can't update an object you don't own")
     }
-    activity.object = await patchObject(object.id, object)
+    await object.patch(activity.object)
+    activity.object = await object.json()
     return activity
   },
   "Delete": async(activity, owner, addressees) => {
@@ -654,66 +785,66 @@ const appliers = {
     if (!activity.object) {
       throw new createError.BadRequest("No object to add")
     }
-    let object = await toObject(activity.object)
-    if (!object.id) {
+    let object = new ActivityObject(activity.object)
+    if (!await object.id()) {
       throw new createError.BadRequest("No id for object to add")
     }
     if (!activity.target) {
       throw new createError.BadRequest("No target to add to")
     }
-    let target = await getObject(await toId(activity.target))
-    if (!target.id) {
+    let target = new Collection(activity.target)
+    if (!await target.id()) {
       throw new createError.BadRequest("No id for object to add to")
     }
-    if (!["Collection", "OrderedCollection"].includes(target.type)) {
+    if (!await target.isCollection()) {
       throw new createError.BadRequest("Can't add to a non-collection")
     }
-    const targetOwner = await getOwner(target)
-    if (!targetOwner || targetOwner.id != await toId(owner)) {
-      throw new createError.BadRequest("You can't delete an object you don't own")
+    const targetOwner = await target.owner()
+    if (!targetOwner || await targetOwner.id() != owner.id) {
+      throw new createError.BadRequest("You can't add to an object you don't own")
     }
     for (let prop of ["inbox", "outbox", "followers", "following", "liked"]) {
-      if (target.id == await toId(owner[prop])) {
+      if (await target.id() == await toId(owner[prop])) {
         throw new createError.BadRequest(`Can't add an object directly to your ${prop}`)
       }
     }
-    if (await (new Collection(target)).hasMember(object.id)) {
+    if (await target.hasMember(await object.id())) {
       throw new createError.BadRequest("Already a member")
     }
-    await prependObject(target, object)
+    await target.prepend(object)
     return activity
   },
   "Remove": async(activity, owner, addressees) => {
     if (!activity.object) {
       throw new createError.BadRequest("No object to remove")
     }
-    let object = await toObject(activity.object)
-    if (!object.id) {
+    let object = new ActivityObject(activity.object)
+    if (!await object.id()) {
       throw new createError.BadRequest("No id for object to remove")
     }
     if (!activity.target) {
       throw new createError.BadRequest("No target to remove from")
     }
-    let target = await getObject(await toId(activity.target))
-    if (!target.id) {
+    let target = new Collection(activity.target)
+    if (!await target.id()) {
       throw new createError.BadRequest("No id for object to remove from")
     }
-    if (!["Collection", "OrderedCollection"].includes(target.type)) {
+    if (!await target.isCollection()) {
       throw new createError.BadRequest("Can't remove from a non-collection")
     }
-    const targetOwner = await getOwner(target)
-    if (!targetOwner || targetOwner.id != await toId(owner)) {
-      throw new createError.BadRequest("You can't remove an object you don't own")
+    const targetOwner = await target.owner()
+    if (!targetOwner || await targetOwner.id() != owner.id) {
+      throw new createError.BadRequest("You can't remove from an object you don't own")
     }
     for (let prop of ["inbox", "outbox", "followers", "following", "liked"]) {
-      if (target.id == await toId(owner[prop])) {
+      if (await target.id() == await toId(owner[prop])) {
         throw new createError.BadRequest(`Can't remove an object directly from your ${prop}`)
       }
     }
-    if (!(await (new Collection(target))).hasMember(object.id)) {
+    if (!await target.hasMember(await object.id())) {
       throw new createError.BadRequest("Not a member")
     }
-    target = await removeObject(target, object)
+    await target.remove(object)
     return activity
   }
 }
@@ -727,12 +858,13 @@ async function applyActivity(activity, owner, addressees) {
 
 const remoteAppliers = {
   "Follow": async(activity, remote, addressees, owner) => {
-    if (toId(activity.object) == toId(owner)) {
-      if (await (new Collection(owner.followers)).hasMember(remote)) {
+    const object = new ActivityObject(activity.object)
+    if (await object.id() == toId(owner)) {
+      const followers = new Collection(owner.followers)
+      if (await followers.hasMember(remote)) {
         throw new Error("Already following")
       }
-      const followers = await getObject(owner.followers)
-      await prependObject(followers, remote)
+      await followers.prependData(remote)
     }
   },
   "Create": async(activity, remote, addressees, owner) => {
@@ -748,105 +880,30 @@ async function applyRemoteActivity(activity, remote, owner, addressees) {
   }
 }
 
-async function prependObject(collection, object) {
-  collection = await toObject(collection)
-  const objectId = await toId(object)
-  if (collection.orderedItems) {
-    await patchObject(collection.id, {totalItems: collection.totalItems + 1, orderedItems: [objectId, ...collection.orderedItems]})
-  } else if (collection.items) {
-      await patchObject(collection.id, {totalItems: collection.totalItems + 1, items: [objectId, ...collection.items]})
-  } else if (collection.first) {
-    const first = await getObject(await toId(collection.first))
-    if (first.orderedItems.length < MAX_PAGE_SIZE) {
-      await patchObject(first.id, {orderedItems: [objectId, ...first.orderedItems]})
-      await patchObject(collection.id, {totalItems: collection.totalItems + 1})
-    } else {
-      const owner = await getOwner(collection.id)
-      const addressees = await getAddressees(collection.id)
-      const newFirst = await saveObject('OrderedCollectionPage', {partOf: collection.id, 'orderedItems': [objectId], next: first.id}, owner, addressees)
-      await patchObject(collection.id, {totalItems: collection.totalItems + 1, first: newFirst.id})
-      await patchObject(first.id, {prev: newFirst.id})
-    }
-  }
-}
-
-async function removeObject(collection, object) {
-  collection = await toObject(collection)
-  const objectId = await toId(object)
-  if (Array.isArray(collection.orderedItems)) {
-    const i = collection.orderedItems.indexOf(objectId)
-    if (i !== -1) {
-      collection.orderedItems.splice(i, 1)
-      return await patchObject(collection.id,
-        {totalItems: collection.totalItems - 1,
-          orderedItems: collection.orderedItems})
-    }
-  } else if (Array.isArray(collection.items)) {
-    const i = collection.items.indexOf(objectId)
-    if (i !== -1) {
-      collection.items.splice(i, 1)
-      return await patchObject(collection.id, {totalItems: collection.totalItems - 1, items: collection.items})
-    }
-  } else if (collection.first) {
-    for (let page = await getObject(await toId(collection.first)); page; page = await getObject(await toId(page.next))) {
-      if (page.orderedItems) {
-        const i = page.orderedItems.indexOf(objectId)
-        if (i !== -1) {
-          await patchObject(page, {orderedItems: page.orderedItems.splice(i, 1)})
-          return await patchObject(collection, {totalItems: collection.totalItems - 1})
-        }
-      } else if (page.items) {
-        const i = page.items.indexOf(objectId)
-        if (i !== -1) {
-          await patchObject(page, {items: page.items.splice(i, 1)})
-          return await patchObject(collection, {totalItems: collection.totalItems - 1})
-        }
-      }
-    }
-  }
-  return collection
-}
-
-async function getAllMembers(obj) {
-  obj = await toObject(obj)
-  let cur = []
-  switch (obj.type) {
-    case 'CollectionPage':
-    case 'OrderedCollectionPage':
-      cur = obj.items || obj.orderedItems || [];
-      if (obj.next) {
-        cur = cur.concat(await getAllMembers(obj.next))
-      }
-    case 'Collection':
-    case 'OrderedCollection':
-      if (obj.first) {
-        cur = getAllMembers(obj.first)
-      }
-  }
-  return cur
-}
-
 async function distributeActivity(activity, owner, addressees) {
 
   owner = await toObject(owner)
 
   // Add it to the owner inbox!
 
-  const ownerInbox = await getObject(owner.inbox)
-  await prependObject(ownerInbox, activity, owner, [PUBLIC])
+  const ownerInbox = new Collection(owner.inbox)
+  await ownerInbox.prependData(activity)
 
   // Expand public, followers, other lists
 
   const expanded = (await Promise.all(addressees.map(async (addressee) => {
     if (addressee === PUBLIC) {
-      return await getAllMembers(owner.followers)
+      const followers = new Collection(owner.followers)
+      return await followers.members()
     } else {
-      const obj = await toObject(addressee)
-      const objOwner = await getOwner(addressee)
-      if (obj &&
-          objOwner.id === owner.id &&
-          -1 !== ['Collection', 'OrderedCollection'].indexOf(obj.type)) {
-          return await getAllMembers(addressee)
+      const obj = new ActivityObject(addressee)
+      if (await obj.isCollection()) {
+        const coll = new Collection(addressee)
+        const objOwner = await obj.owner()
+        if (coll &&
+            await objOwner.id() === owner.id) {
+            return await coll.members()
+        }
       }
     }
     return addressee
@@ -858,13 +915,12 @@ async function distributeActivity(activity, owner, addressees) {
   const {privateKey} = await db.get('SELECT privateKey FROM user WHERE actorId = ?', [owner.id])
   const keyId = await toId(owner.publicKey)
 
-  await Promise.all(expanded.map((async (addressee) => {
-    const row = await db.get(`SELECT username FROM user WHERE actorId = ?`, [addressee])
-    if (row) {
+  await Promise.all(expanded.map(async (addressee) => {
+    if (await isUser(addressee)) {
       // Local delivery
-      const user = await getObject(addressee);
-      const inbox = await getObject(user.inbox);
-      return prependObject(inbox, activity)
+      const user = new ActivityObject(addressee)
+      const inbox = new Collection(await user.prop('inbox'))
+      await inbox.prependData(activity)
     } else {
       const other = await getRemoteObject(addressee);
       const inbox = await toId(other.inbox)
@@ -881,7 +937,7 @@ async function distributeActivity(activity, owner, addressees) {
       })
       const resBody = await res.text()
     }
-  })))
+  }))
 }
 
 // Server
@@ -1055,6 +1111,7 @@ app.get('/:type/:id',
   const addressees = await getAddressees(full)
   if (!(await canRead(full, req.auth?.subject, obj.owner, addressees))) {
     if (req.auth?.subject) {
+      console.dir(JSON.stringify({full, subject: req.auth?.subject, owner: obj.owner, addressees}))
       throw new createError.Forbidden('Not authorized to read this object')
     } else {
       throw new createError.Unauthorized('You must provide credentials to read this object')
@@ -1108,10 +1165,10 @@ app.post('/:type/:id',
     throw new createError.InternalServerError('No owner found for object')
   }
   if (full === owner.outbox) {
-    const outbox = JSON.parse(obj.data)
     if (req.auth?.subject !== obj.owner) {
       throw new createError.Forbidden('You cannot post to this outbox')
     }
+    const outbox = new Collection(JSON.parse(obj.data))
     const data = req.body
     const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
     .map((prop) => data[prop])
@@ -1121,7 +1178,7 @@ app.post('/:type/:id',
     data.id = await ActivityObject.makeId(data.type || "Activity")
     let activity = await applyActivity(data, owner, addressees)
     activity = await saveActivity(activity, owner, addressees)
-    await prependObject(outbox, activity)
+    await outbox.prependData(activity)
     await distributeActivity(activity, owner, addressees)
     activity = await expandProperties(activity)
     if (needsExtendedObject(activity)) {
@@ -1151,7 +1208,8 @@ app.post('/:type/:id',
     .map(toId))
     await applyRemoteActivity(req.body, remote, addressees, owner)
     await cacheRemoteObject(req.body, remote, addressees)
-    await prependObject(owner.inbox, await toId(req.body))
+    const inbox = new Collection(owner.inbox)
+    await inbox.prependData(req.body)
     res.status(202)
     res.set('Content-Type', 'application/activity+json')
     res.json(req.body)
