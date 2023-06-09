@@ -1111,7 +1111,6 @@ app.get('/:type/:id',
   const addressees = await getAddressees(full)
   if (!(await canRead(full, req.auth?.subject, obj.owner, addressees))) {
     if (req.auth?.subject) {
-      console.dir(JSON.stringify({full, subject: req.auth?.subject, owner: obj.owner, addressees}))
       throw new createError.Forbidden('Not authorized to read this object')
     } else {
       throw new createError.Unauthorized('You must provide credentials to read this object')
