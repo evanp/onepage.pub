@@ -28,7 +28,7 @@ const SEC_CONTEXT = 'https://w3id.org/security'
 const CONTEXT = [AS_CONTEXT, SEC_CONTEXT]
 
 const PUBLIC = "https://www.w3.org/ns/activitystreams#Public"
-const PUBLIC_OBJ = {id: PUBLIC, type: "Collection"}
+const PUBLIC_OBJ = {id: PUBLIC, nameMap: {"en": "Public"}, type: "Collection"}
 const MAX_PAGE_SIZE = 20
 
 // Classes
@@ -125,6 +125,8 @@ class HTTPSignature {
 class ActivityObject {
   #id;
   #json;
+  #owner;
+  #addressees;
   constructor(data) {
     if (!data) {
       throw new Error('No data provided');
@@ -143,6 +145,9 @@ class ActivityObject {
     }
   }
   static async getJSON(id) {
+    if (id == PUBLIC) {
+      return PUBLIC_OBJ
+    }
     const row = await db.get(`SELECT data FROM object WHERE id = ?`, [id])
     if (!row) {
       return null
@@ -212,22 +217,40 @@ class ActivityObject {
         delete merged[prop]
       }
     }
-    await db.run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(merged), await this.id()])
+    await db.run(
+      `UPDATE object SET data = ? WHERE id = ?`,
+      [JSON.stringify(merged), await this.id()]
+    )
     this.#json = merged
   }
 
+  async replace(replacement) {
+    await db.run(
+      `UPDATE object SET data = ? WHERE id = ?`,
+      [JSON.stringify(replacement), await this.id()]
+    )
+    this.#json = replacement
+  }
+
   async owner() {
-    const row = await db.get(`SELECT owner FROM object WHERE id = ?`, [await this.id()])
-    if (!row) {
-      return null
+    if (!this.#owner) {
+      const row = await db.get(`SELECT owner FROM object WHERE id = ?`, [await this.id()])
+      if (!row) {
+        this.#owner = null;
+      } else {
+        this.#owner = new ActivityObject(row.owner)
+      }
     }
-    return new ActivityObject(row.owner)
+    return this.#owner
   }
 
   async addressees() {
-    const id = await this.id()
-    const rows = await db.all(`SELECT addresseeId FROM addressee WHERE objectId = ?`, [id])
-    return rows.map((row) => new ActivityObject(row.addresseeId))
+    if (!this.#addressees) {
+      const id = await this.id()
+      const rows = await db.all(`SELECT addresseeId FROM addressee WHERE objectId = ?`, [id])
+      this.#addressees = rows.map((row) => new ActivityObject(row.addresseeId))
+    }
+    return this.#addressees
   }
 
   async canRead(subject) {
@@ -265,6 +288,153 @@ class ActivityObject {
     }
     // Otherwise, can't read
     return false;
+  }
+
+  async brief() {
+    const object = await this.json()
+    if (!object) {
+      return await this.id()
+    }
+    let brief = {
+      id: await this.id(),
+      type: await this.type(),
+      icon: await this.prop('icon'),
+    }
+    for (let prop of ["nameMap", "name", "summaryMap", "summary"]) {
+      if (prop in object) {
+        brief[prop] = object[prop]
+        break
+      }
+    }
+    switch (object.type) {
+      case "Key":
+        brief = {
+          ...brief,
+          owner: object.owner,
+          publicKeyPem: object.publicKeyPem
+        }
+        break
+      case "Note":
+        brief = {
+          ...brief,
+          content: object.content,
+          contentMap: object.contentMap
+        }
+        break
+      case "OrderedCollection":
+      case "Collection":
+        brief = {
+          ...brief,
+          first: object.first
+        }
+    }
+    return brief
+  }
+
+  static #idProps = [
+    "actor",
+    "alsoKnownAs",
+    "attachment",
+    "attributedTo",
+    "anyOf",
+    "audience",
+    "cc",
+    "context",
+    "current",
+    "describes",
+    "first",
+    "following",
+    "followers",
+    "generator",
+    "href",
+    "icon",
+    "image",
+    "inbox",
+    "inReplyTo",
+    "instrument",
+    "last",
+    "liked",
+    "likes",
+    "location",
+    "next",
+    "object",
+    "oneOf",
+    "origin",
+    "outbox",
+    "partOf",
+    "prev",
+    "preview",
+    "publicKey",
+    "relationship",
+    "replies",
+    "result",
+    "shares",
+    "subject",
+    "tag",
+    "target",
+    "to",
+    "url",
+  ];
+
+  static #arrayProps = [
+    'items',
+    'orderedItems'
+  ]
+
+  async expanded() {
+    const object = await this.json()
+    const toBrief = async (value) => {
+      if (value) {
+        const obj = new ActivityObject(value)
+        return await obj.brief()
+      } else {
+        return value
+      }
+    }
+
+    for (let prop of ActivityObject.#idProps) {
+      if (prop in object) {
+        if (Array.isArray(object[prop])) {
+          object[prop] = await Promise.all(object[prop].map(toBrief))
+        } else {
+          object[prop] = await toBrief(object[prop])
+        }
+      }
+    }
+    return object
+  }
+
+  async compressed() {
+    const object = this.json()
+    const toIdOrValue = async (value) => {
+      const id = await new ActivityObject(value).id()
+      if (id) {
+        return id;
+      } else {
+        return value;
+      }
+    }
+
+    for (let prop of ActivityObject.#idProps) {
+      if (prop in object) {
+        if(Array.isArray(object[prop])) {
+          object[prop] = await Promise.all(object[prop].map(toIdOrValue))
+        } else {
+          object[prop] = await toIdOrValue(object[prop])
+        }
+      }
+    }
+
+    for (let prop of ActivityObject.#arrayProps) {
+      if (prop in object) {
+        if (Array.isArray(object[prop])) {
+          object[prop] = await Promise.all(object[prop].map(toIdOrValue))
+        } else {
+          object[prop] = await toIdOrValue(object[prop])
+        }
+      }
+    }
+    return object
   }
 }
 
@@ -407,11 +577,7 @@ const generateKeyPair = promisify(crypto.generateKeyPair);
 const isString = value => typeof value === 'string' || value instanceof String;
 
 async function getObject(id) {
-  const row = await db.get(`SELECT data FROM object WHERE id = ?`, [id])
-  if (!row) {
-    return null
-  }
-  return JSON.parse(row.data)
+  return await ActivityObject.getJSON(id)
 }
 
 async function getOwner(obj) {
@@ -427,15 +593,8 @@ async function getAddressees(id) {
 }
 
 async function toObject(value) {
-  if (isString(value)) {
-    if (value === PUBLIC) {
-      return PUBLIC_OBJ
-    } else {
-      return await getObject(value)
-    }
-  } else {
-    return value
-  }
+  const obj = new ActivityObject(value)
+  return await obj.json()
 }
 
 async function toId(value) {
@@ -443,168 +602,26 @@ async function toId(value) {
     return null;
   } else if (value == null) {
     return null;
-  } else if (isString(value)) {
-    return value;
-  } else if (typeof value == "object") {
-    return value.id || value['@id']
   } else {
-    throw new Error(`cannot coerce to an ID: ${value} (${typeof value})`)
+    const obj = new ActivityObject(value)
+    return await obj.id()
   }
-}
-
-async function abbreviateObject(object) {
-  let brief = {
-    id: object.id || object['@id'],
-    type: object.type || object['@type'],
-    icon: object.icon
-  }
-  for (let prop of ["nameMap", "name", "summaryMap", "summary"]) {
-    if (prop in object) {
-      brief[prop] = object[prop]
-      break
-    }
-  }
-  switch (object.type) {
-    case "Key":
-      brief = {
-        ...brief,
-        owner: object.owner,
-        publicKeyPem: object.publicKeyPem
-      }
-      break
-    case "Note":
-      brief = {
-        ...brief,
-        content: object.content
-      }
-      break
-    case "OrderedCollection":
-    case "Collection":
-      brief = {
-        ...brief,
-        first: object.first
-      }
-  }
-  return brief
 }
 
 async function toBriefObject(value) {
-  if (typeof value == "undefined") {
-    return null;
-  } if (value == null) {
-    return null;
-  } else if (isString(value)) {
-    if (value === PUBLIC) {
-      return PUBLIC_OBJ
-    } else {
-      const object = await getObject(value)
-      if (object) {
-        return await abbreviateObject(object)
-      } else {
-        return {id: value}
-      }
-    }
-  } else if (typeof value == "object") {
-    return await abbreviateObject(value)
-  } else {
-    throw new Error(`cannot coerce to a brief object: ${value} (${typeof value})`)
-  }
+  const obj = new ActivityObject(value)
+  return await obj.brief()
 }
 
 async function toExtendedObject(value) {
-  const id = await toId(value)
-  const object = await getObject(id)
-  return await expandProperties(object)
-}
-
-const idProps = [
-  "actor",
-  "alsoKnownAs",
-  "attachment",
-  "attributedTo",
-  "anyOf",
-  "audience",
-  "cc",
-  "context",
-  "current",
-  "describes",
-  "first",
-  "following",
-  "followers",
-  "generator",
-  "href",
-  "icon",
-  "image",
-  "inbox",
-  "inReplyTo",
-  "instrument",
-  "last",
-  "liked",
-  "likes",
-  "location",
-  "next",
-  "object",
-  "oneOf",
-  "origin",
-  "outbox",
-  "partOf",
-  "prev",
-  "preview",
-  "publicKey",
-  "relationship",
-  "replies",
-  "result",
-  "shares",
-  "subject",
-  "tag",
-  "target",
-  "to",
-  "url",
-];
-
-const arrayProps = [
-  'items',
-  'orderedItems'
-]
-
-async function expandProperties(object) {
-  for (let prop of idProps) {
-    if (prop in object) {
-      if (Array.isArray(object[prop])) {
-        object[prop] = await Promise.all(object[prop].map(toBriefObject))
-      } else {
-        object[prop] = await toBriefObject(object[prop])
-      }
-    }
-  }
-  return object
-}
-
-async function toIdOrValue(value) {
-  const id = await toId(value)
-  return id || value
+  const obj = new ActivityObject(value)
+  const id = obj.id()
+  return await obj.expanded()
 }
 
 async function compressProperties(object) {
-  for (let prop of idProps) {
-    if (prop in object) {
-      if (Array.isArray(object[prop])) {
-        object[prop] = await Promise.all(object[prop].map(toIdOrValue))
-      } else {
-        object[prop] = await toIdOrValue(object[prop])
-      }
-    }
-  }
-  for (let prop of arrayProps) {
-    if (prop in object) {
-      if (Array.isArray(object[prop])) {
-        object[prop] = await Promise.all(object[prop].map(toIdOrValue))
-      } else {
-        object[prop] = await toIdOrValue(object[prop])
-      }
-    }
-  }
-  return object
+  const obj = new ActivityObject(object)
+  return await obj.compressed()
 }
 
 async function getRemoteObject(value) {
@@ -643,8 +660,9 @@ async function saveObject(type, data, owner=null, addressees=[]) {
 }
 
 async function replaceObject(id, replace) {
-  await db.run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(replace), id])
-  return replace
+  const obj = new ActivityObject(id)
+  await obj.replace(replace)
+  return await obj.json()
 }
 
 const emptyOrderedCollection = async(name, owner, addressees) => {
@@ -1114,7 +1132,7 @@ app.get('/:type/:id',
   if (data.type?.toLowerCase() !== type && data.type !== "Tombstone") {
     throw new createError.InternalServerError('Invalid object type')
   }
-  data = await expandProperties(data)
+  data = await toExtendedObject(data)
   for (let name of ['items', 'orderedItems']) {
     if (name in data && Array.isArray(data[name])) {
       const len = data[name].length
@@ -1130,7 +1148,7 @@ app.get('/:type/:id',
     }
   }
   if (needsExtendedObject(data)) {
-    data.object = await toExtendedObject(data.object)
+    data.object = await toExtendedObject(data.object.id)
   }
   if (data.type === 'Tombstone') {
     res.status(410)
@@ -1173,9 +1191,9 @@ app.post('/:type/:id',
     activity = await saveActivity(activity, owner, addressees)
     await outbox.prependData(activity)
     await distributeActivity(activity, owner, addressees)
-    activity = await expandProperties(activity)
+    activity = await toExtendedObject(activity)
     if (needsExtendedObject(activity)) {
-      activity.object = await toExtendedObject(activity.object)
+      activity.object = await toExtendedObject(activity.object.id)
     }
     activity['@context'] = activity['@context'] || CONTEXT
     res.status(200)

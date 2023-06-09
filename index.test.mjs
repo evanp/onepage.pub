@@ -655,6 +655,7 @@ describe("Web API interface", () => {
             assert.equal(updated.object.published, created.object.published)
         })
         it("has a new updated property", async() => {
+            console.dir(JSON.stringify(updated.object))
             assert.notEqual(updated.object.updated, created.object.updated)
         })
         it("can fetch the updated note", async() => {
