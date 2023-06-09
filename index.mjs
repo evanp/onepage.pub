@@ -642,12 +642,6 @@ async function saveObject(type, data, owner=null, addressees=[]) {
   return await ao.json()
 }
 
-async function patchObject(id, patch) {
-  const obj = new ActivityObject(id)
-  await obj.patch(patch)
-  return await obj.json()
-}
-
 async function replaceObject(id, replace) {
   await db.run(`UPDATE object SET data = ? WHERE id = ?`, [JSON.stringify(replace), id])
   return replace
