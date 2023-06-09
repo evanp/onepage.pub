@@ -436,17 +436,28 @@ class ActivityObject {
     }
     return object
   }
+
+  static async fromActivityObject(object) {
+    return new ActivityObject(await object.json())
+  }
 }
 
 class Activity extends ActivityObject {
   constructor(data) {
     super(data)
   }
+  static async fromActivityObject(object) {
+    return new Activity(await object.json())
+  }
 }
 
 class Collection extends ActivityObject {
   constructor(data) {
     super(data)
+  }
+
+  static async fromActivityObject(object) {
+    return new Collection(await object.json())
   }
 
   async hasMember(object) {
@@ -1162,24 +1173,24 @@ app.post('/:type/:id',
   expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ["RS256"] }),
   wrap(async(req, res) => {
   const full = req.protocol + '://' + req.get('host') + req.originalUrl;
-  const type = req.params.type
-  const id = req.params.id
-  const obj = await db.get('SELECT data, owner FROM object WHERE id = ?', [full])
+  const obj = new ActivityObject(full)
   if (!obj) {
     throw new createError.NotFound('Object not found')
   }
-  if (!obj.data || !obj.owner) {
+  const owner = await obj.owner()
+  if (!await obj.json() || !owner) {
     throw new createError.InternalServerError('Invalid object')
   }
-  const owner = await getObject(obj.owner)
   if (!owner) {
     throw new createError.InternalServerError('No owner found for object')
   }
-  if (full === owner.outbox) {
-    if (req.auth?.subject !== obj.owner) {
+  if (full === await owner.prop('outbox')) {
+    if (req.auth?.subject !== await owner.id()) {
       throw new createError.Forbidden('You cannot post to this outbox')
     }
-    const outbox = new Collection(JSON.parse(obj.data))
+    const ownerId = await owner.id()
+    const ownerJson = await owner.json()
+    const outbox = await Collection.fromActivityObject(obj)
     const data = req.body
     const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
     .map((prop) => data[prop])
@@ -1187,10 +1198,10 @@ app.post('/:type/:id',
     .flat()
     .map(toId))
     data.id = await ActivityObject.makeId(data.type || "Activity")
-    let activity = await applyActivity(data, owner, addressees)
-    activity = await saveActivity(activity, owner, addressees)
+    let activity = await applyActivity(data, ownerJson, addressees)
+    activity = await saveActivity(activity, ownerId, addressees)
     await outbox.prependData(activity)
-    await distributeActivity(activity, owner, addressees)
+    await distributeActivity(activity, ownerJson, addressees)
     activity = await toExtendedObject(activity)
     if (needsExtendedObject(activity)) {
       activity.object = await toExtendedObject(activity.object.id)
@@ -1199,7 +1210,7 @@ app.post('/:type/:id',
     res.status(200)
     res.set('Content-Type', 'application/activity+json')
     res.json(activity)
-  } else if (full === owner.inbox) { // remote delivery
+  } else if (full === await owner.prop('inbox')) { // remote delivery
     const sigHeader = req.headers['signature']
     if (!sigHeader) {
       throw new createError.Unauthorized('HTTP signature required')
@@ -1217,9 +1228,9 @@ app.post('/:type/:id',
     .filter((a) => a)
     .flat()
     .map(toId))
-    await applyRemoteActivity(req.body, remote, addressees, owner)
+    await applyRemoteActivity(req.body, remote, addressees, await owner.json())
     await cacheRemoteObject(req.body, remote, addressees)
-    const inbox = new Collection(owner.inbox)
+    const inbox = new Collection(await owner.prop('inbox'))
     await inbox.prependData(req.body)
     res.status(202)
     res.set('Content-Type', 'application/activity+json')
