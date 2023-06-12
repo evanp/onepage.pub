@@ -107,15 +107,18 @@ class HTTPSignature {
     }
     let data = lines.join('\n')
 
-    const publicKey = await getRemoteObject(this.keyId)
-    if (!publicKey || !publicKey.owner || !publicKey.publicKeyPem) {
+    const publicKey = await ActivityObject.fromRemote(this.keyId)
+
+    if (!await publicKey.json() || !await publicKey.prop('owner') || !await publicKey.prop('publicKeyPem')) {
       return null
     }
+
     const verifier = crypto.createVerify('sha256');
     verifier.write(data);
     verifier.end();
-    if (verifier.verify(publicKey.publicKeyPem, Buffer.from(this.signature, 'base64'))) {
-      return ActivityObject.fromRemote(publicKey.owner)
+
+    if (verifier.verify(await publicKey.prop('publicKeyPem'), Buffer.from(this.signature, 'base64'))) {
+      return ActivityObject.fromRemote(publicKey.prop('owner'))
     } else {
       return null
     }
@@ -220,6 +223,18 @@ class ActivityObject {
       )))
     this.#id = data.id
     this.#json = data
+  }
+
+  async cache(owner, addressees) {
+    const dataId = await this.id()
+    const data = await this.json()
+    const ownerId = owner || data.id
+    await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [dataId, ownerId, JSON.stringify(data)]);
+    await Promise.all(addressees.map((addressee) =>
+    db.run(
+      'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
+      [dataId, addressee]
+    )))
   }
 
   async patch(patch) {
@@ -693,8 +708,8 @@ class Activity extends ActivityObject {
         const inbox = new Collection(await user.prop('inbox'))
         await inbox.prependData(activity)
       } else {
-        const other = await getRemoteObject(addressee);
-        const inbox = await toId(other.inbox)
+        const other = await ActivityObject.fromRemote(addressee);
+        const inbox = await toId(await other.prop('inbox'))
         const date = new Date().toUTCString()
         const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date)
         const res = await fetch(inbox, {
@@ -877,7 +892,8 @@ class RemoteActivity extends Activity {
       },
       "Create": async() => {
         if (activity.object) {
-          await cacheRemoteObject(activity.object, remote, addressees)
+          const ao = new ActivityObject(activity.object)
+          await ao.cache(remote, addressees)
         }
       }
     }
@@ -909,22 +925,6 @@ async function toId(value) {
     const obj = new ActivityObject(value)
     return await obj.id()
   }
-}
-
-async function getRemoteObject(value) {
-  const ao = await ActivityObject.fromRemote(value)
-  return await ao.json()
-}
-
-async function cacheRemoteObject(data, owner, addressees) {
-  const dataId = await toId(data)
-  const ownerId = await toId(owner) || data.id
-  await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [dataId, ownerId, JSON.stringify(data)]);
-  await Promise.all(addressees.map((addressee) =>
-  db.run(
-    'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-    [dataId, addressee]
-  )))
 }
 
 async function saveObject(type, data, owner=null, addressees=[]) {
