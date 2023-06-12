@@ -508,7 +508,7 @@ class Activity extends ActivityObject {
     return 'Activity'
   }
 
-  async  apply(owner, addressees, ...args) {
+  async apply(owner, addressees, ...args) {
     let activity = await this.json()
     const appliers = {
       "Follow": async () => {
@@ -519,9 +519,9 @@ class Activity extends ActivityObject {
         if (await following.hasMember(activity.object)) {
           throw new createError.BadRequest("Already following")
         }
-        await following.prependData(activity.object)
-        if (await isUser(activity.object)) {
-          const other = new ActivityObject(activity.object)
+        const other = new ActivityObject(activity.object)
+        await following.prepend(other)
+        if (await User.isUser(other)) {
           const followers = new Collection(await other.prop('followers'))
           if (await followers.hasMember(owner.id)) {
             throw new createError.BadRequest("Already followed")
@@ -702,13 +702,13 @@ class Activity extends ActivityObject {
     const keyId = await toId(await owner.prop('publicKey'))
 
     await Promise.all(expanded.map(async (addressee) => {
-      if (await isUser(addressee)) {
+      let other = new ActivityObject(addressee)
+      if (await User.isUser(other)) {
         // Local delivery
-        const user = new ActivityObject(addressee)
-        const inbox = new Collection(await user.prop('inbox'))
+        const inbox = new Collection(await other.prop('inbox'))
         await inbox.prependData(activity)
       } else {
-        const other = await ActivityObject.fromRemote(addressee);
+        other = await ActivityObject.fromRemote(addressee);
         const inbox = await toId(await other.prop('inbox'))
         const date = new Date().toUTCString()
         const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date)
@@ -925,6 +925,55 @@ class RemoteActivity extends Activity {
   }
 }
 
+class User {
+  constructor(username, password=null) {
+    this.username = username
+    this.password = password
+  }
+
+  async save() {
+    this.actorId = await ActivityObject.makeId('Person')
+    const data = {name: this.username, id: this.actorId, type: 'Person', preferredUsername: this.username};
+    const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
+    for (let prop of props) {
+      const coll = await Collection.empty(this.actorId, [PUBLIC], {'nameMap': {'en': `${this.username}'s ${prop}`}})
+      data[prop] = await coll.id()
+    }
+    const {publicKey, privateKey} = await generateKeyPair(
+      'rsa',
+      {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      }
+    )
+    const pkey = new ActivityObject({type: 'Key', owner: this.actorId, publicKeyPem: publicKey})
+    await pkey.save(this.actorId, [PUBLIC])
+    data['publicKey'] = await pkey.brief()
+    const person = new ActivityObject(data)
+    await person.save(this.actorId, [PUBLIC])
+    const passwordHash = await bcrypt.hash(this.password, 10)
+    await db.run('INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)', [this.username, passwordHash, this.actorId, privateKey])
+  }
+
+  static async isUser(object) {
+    const id = await object.id()
+    const row = await db.get("SELECT actorId FROM user WHERE actorId = ?", [id])
+    return !!row
+  }
+
+  static async usernameExists(username) {
+    const row = await db.get("SELECT username FROM user WHERE username = ?", [username])
+    return !!row
+  }
+}
+
 // Functions
 
 const sign = promisify(jwt.sign);
@@ -941,12 +990,6 @@ async function toId(value) {
     const obj = new ActivityObject(value)
     return await obj.id()
   }
-}
-
-async function isUser(object) {
-  const id = await toId(object)
-  const row = await db.get("SELECT username FROM user WHERE actorId = ?", [id])
-  return !!row
 }
 
 // Server
@@ -1009,59 +1052,36 @@ app.post('/register', wrap(async(req, res) => {
   }
   if (req.body.password !== req.body.confirmation) {
     throw new createError.BadRequest('Passwords do not match')
-  } else {
-    const username = req.body.username
-    const password = req.body.password
-    const passwordHash = await bcrypt.hash(password, 10)
-    // Create the person; self-own!
-    const actorId = await ActivityObject.makeId('Person')
-    const data = {name: username, id: actorId, type: 'Person', preferredUsername: username};
-    const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
-    for (let prop of props) {
-      const coll = await Collection.empty(actorId, [PUBLIC], {'nameMap': {'en': `${username}'s ${prop}`}})
-      data[prop] = await coll.id()
-    }
-    const {publicKey, privateKey} = await generateKeyPair(
-      'rsa',
-      {
-        modulusLength: 2048,
-        privateKeyEncoding: {
-          type: 'pkcs1',
-          format: 'pem'
-        },
-        publicKeyEncoding: {
-          type: 'pkcs1',
-          format: 'pem'
-        }
-      }
-    )
-    const pkey = new ActivityObject({type: 'Key', owner: actorId, publicKeyPem: publicKey})
-    await pkey.save(actorId, [PUBLIC])
-    data['publicKey'] = await pkey.brief()
-    const person = new ActivityObject(data)
-    await person.save(actorId, [PUBLIC])
-    await db.run('INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)', [username, passwordHash, actorId, privateKey])
-    const token = await sign(
-      {
-        subject: actorId,
-        issuer: req.protocol + '://' + req.get('host') + req.originalUrl
-      },
-      KEY_DATA,
-      { algorithm: 'RS256' }
-    )
-    res.type('html')
-    res.status(200)
-    res.end(`
-      <html>
-      <head>
-      <title>Registered</title>
-      </head>
-      <body>
-      <p>Registered <a class="actor" href="${actorId}">${username}</a></p>
-      <p>Personal access token is <span class="token">${token}</span>
-      </body>
-      </html>`)
   }
+  const username = req.body.username
+
+  if (await User.usernameExists(username)) {
+    throw new createError.BadRequest('Username already exists')
+  }
+
+  const password = req.body.password
+  const user = new User(username, password)
+  await user.save()
+  const token = await sign(
+    {
+      subject: user.actorId,
+      issuer: req.protocol + '://' + req.get('host') + '/'
+    },
+    KEY_DATA,
+    { algorithm: 'RS256' }
+  )
+  res.type('html')
+  res.status(200)
+  res.end(`
+    <html>
+    <head>
+    <title>Registered</title>
+    </head>
+    <body>
+    <p>Registered <a class="actor" href="${user.actorId}">${username}</a></p>
+    <p>Personal access token is <span class="token">${token}</span>
+    </body>
+    </html>`)
 }))
 
 app.get('/.well-known/webfinger', wrap(async(req, res) => {
@@ -1202,7 +1222,7 @@ app.post('/:type/:id',
     if (!remote) {
       throw new createError.Unauthorized('Invalid HTTP signature')
     }
-    if (await isUser(await remote.id())) {
+    if (await User.isUser(remote)) {
       throw new createError.Forbidden('Remote delivery only')
     }
     const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
