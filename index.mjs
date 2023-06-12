@@ -159,6 +159,11 @@ class ActivityObject {
     return new ActivityObject(ActivityObject.getJSON(id))
   }
 
+  static async exists(id) {
+    const row = await db.get(`SELECT id FROM object WHERE id = ?`, [id])
+    return !!row
+  }
+
   async json() {
     if (!this.#json) {
       this.#json = await ActivityObject.getJSON(this.#id)
@@ -993,11 +998,6 @@ const emptyOrderedCollection = async(name, owner, addressees) => {
   return coll
 }
 
-async function canRead(object, subject, owner=null, addressees=null) {
-  const ao = new ActivityObject(object)
-  return await ao.canRead(subject)
-}
-
 async function isUser(object) {
   const id = await toId(object)
   const row = await db.get("SELECT username FROM user WHERE actorId = ?", [id])
@@ -1117,11 +1117,6 @@ app.post('/register', wrap(async(req, res) => {
   }
 }))
 
-function needsExpandedObject(activity) {
-  const types = ['Create', 'Update']
-  return types.includes(activity.type)
-}
-
 app.get('/.well-known/webfinger', wrap(async(req, res) => {
   const resource = req.query.resource
   if (!resource) {
@@ -1165,49 +1160,45 @@ app.get('/:type/:id',
   wrap(async(req, res) => {
   const full = req.protocol + '://' + req.get('host') + req.originalUrl;
   const type = req.params.type
-  const obj = await db.get('SELECT data, owner FROM object WHERE id = ?', [full])
-  if (!obj) {
+  if (!(await ActivityObject.exists(full))) {
     throw new createError.NotFound('Object not found')
   }
-  if (!obj.data) {
-    throw new createError.InternalServerError('Invalid object')
-  }
-  const addressees = await getAddressees(full)
-  if (!(await canRead(full, req.auth?.subject, obj.owner, addressees))) {
+  const obj = new ActivityObject(full)
+  if (!(await obj.canRead(req.auth?.subject))) {
     if (req.auth?.subject) {
       throw new createError.Forbidden('Not authorized to read this object')
     } else {
       throw new createError.Unauthorized('You must provide credentials to read this object')
     }
   }
-  let data = JSON.parse(obj.data)
-  if (data.type?.toLowerCase() !== type && data.type !== "Tombstone") {
+  let objType = await obj.type()
+  if (objType.toLowerCase() !== type && objType !== "Tombstone") {
     throw new createError.InternalServerError('Invalid object type')
   }
-  data = await toExtendedObject(data)
+  let output = await obj.expanded()
   for (let name of ['items', 'orderedItems']) {
-    if (name in data && Array.isArray(data[name])) {
-      const len = data[name].length
+    if (name in output && Array.isArray(output[name])) {
+      const len = output[name].length
       for (let i = len - 1; i >= 0; i--) {
-        const item = data[name][i];
-        const itemId = await toId(item);
-        if (!(await canRead(itemId, req.auth?.subject))) {
-          data[name].splice(i, 1)
+        const item = new ActivityObject(output[name][i])
+        if (!(await item.canRead(req.auth?.subject))) {
+          output[name].splice(i, 1)
         } else {
-          data[name][i] = await toBriefObject(item)
+          output[name][i] = await item.expanded()
         }
       }
     }
   }
-  if (needsExpandedObject(data)) {
-    data.object = await toExtendedObject(data.object.id)
+  if (await obj.needsExpandedObject()) {
+    const activityObject = new ActivityObject(await obj.prop('object'))
+    output.object = await activityObject.expanded()
   }
-  if (data.type === 'Tombstone') {
+  if (output.type === 'Tombstone') {
     res.status(410)
   }
-  data['@context'] = data['@context'] || CONTEXT
+  output['@context'] = output['@context'] || CONTEXT
   res.set('Content-Type', 'application/activity+json')
-  res.json(data)
+  res.json(output)
 }))
 
 app.post('/:type/:id',
