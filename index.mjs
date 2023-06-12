@@ -31,6 +31,13 @@ const PUBLIC = "https://www.w3.org/ns/activitystreams#Public"
 const PUBLIC_OBJ = {id: PUBLIC, nameMap: {"en": "Public"}, type: "Collection"}
 const MAX_PAGE_SIZE = 20
 
+// Functions
+
+const sign = promisify(jwt.sign);
+const generateKeyPair = promisify(crypto.generateKeyPair);
+
+const isString = value => typeof value === 'string' || value instanceof String;
+
 // Classes
 
 class Database {
@@ -973,13 +980,6 @@ class User {
     return !!row
   }
 }
-
-// Functions
-
-const sign = promisify(jwt.sign);
-const generateKeyPair = promisify(crypto.generateKeyPair);
-
-const isString = value => typeof value === 'string' || value instanceof String;
 
 async function toId(value) {
   if (typeof value == "undefined") {
