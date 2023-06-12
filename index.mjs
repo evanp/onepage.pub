@@ -1177,7 +1177,7 @@ app.post('/:type/:id',
     throw new createError.NotFound('Object not found')
   }
   const owner = await obj.owner()
-  if (!await obj.json() || !owner) {
+  if (!await obj.json()) {
     throw new createError.InternalServerError('Invalid object')
   }
   if (!owner) {
