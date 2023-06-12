@@ -855,6 +855,27 @@ class Collection extends ActivityObject {
     return cur
   }
 
+  static async empty(owner, addressees, props = {}, pageProps = {}) {
+    const id = await ActivityObject.makeId('OrderedCollection')
+    const page = new ActivityObject({
+      type: 'OrderedCollectionPage',
+      'orderedItems': [],
+      'partOf': id,
+      ...pageProps
+    });
+    await page.save(owner, addressees)
+    const coll = new ActivityObject({
+        id: id,
+        type: 'OrderedCollection',
+        totalItems: 0,
+        first: await page.id(),
+        last: await page.id(),
+        ...props
+    })
+    await coll.save(owner, addressees)
+    return coll
+  }
+
   defaultType() {
     return 'OrderedCollection'
   }
@@ -934,32 +955,6 @@ async function saveObject(type, data, owner=null, addressees=[]) {
   return await ao.json()
 }
 
-const emptyOrderedCollection = async(name, owner, addressees) => {
-  const id = await ActivityObject.makeId('OrderedCollection')
-  const page = await saveObject(
-    'OrderedCollectionPage',
-    {
-      'orderedItems': [],
-      'partOf': id
-    },
-    owner,
-    addressees
-  )
-  const coll = await saveObject(
-    'OrderedCollection',
-    {
-      id: id,
-      name: name,
-      totalItems: 0,
-      first: page.id,
-      last: page.id
-    },
-    owner,
-    addressees
-  )
-  return coll
-}
-
 async function isUser(object) {
   const id = await toId(object)
   const row = await db.get("SELECT username FROM user WHERE actorId = ?", [id])
@@ -1035,8 +1030,8 @@ app.post('/register', wrap(async(req, res) => {
     const data = {name: username, id: actorId};
     const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
     for (let prop of props) {
-      const coll = await emptyOrderedCollection(`${username}'s ${prop}`, actorId, [PUBLIC])
-      data[prop] = coll.id
+      const coll = await Collection.empty(actorId, [PUBLIC], {'nameMap': {'en': `${username}'s ${prop}`}})
+      data[prop] = await coll.id()
     }
     const {publicKey, privateKey} = await generateKeyPair(
       'rsa',
