@@ -665,21 +665,21 @@ class Activity extends ActivityObject {
     }
   }
 
-  async distribute(owner, addressees) {
+  async distribute(addressees) {
 
     const activity = await this.json()
-    owner = await toObject(owner)
+    const owner = await this.owner()
 
     // Add it to the owner inbox!
 
-    const ownerInbox = new Collection(owner.inbox)
+    const ownerInbox = new Collection(await owner.prop('inbox'))
     await ownerInbox.prependData(activity)
 
     // Expand public, followers, other lists
 
     const expanded = (await Promise.all(addressees.map(async (addressee) => {
       if (addressee === PUBLIC) {
-        const followers = new Collection(owner.followers)
+        const followers = new Collection(await owner.prop('followers'))
         return await followers.members()
       } else {
         const obj = new ActivityObject(addressee)
@@ -687,7 +687,7 @@ class Activity extends ActivityObject {
           const coll = new Collection(addressee)
           const objOwner = await obj.owner()
           if (coll &&
-              await objOwner.id() === owner.id) {
+              await objOwner.id() === await owner.id()) {
               return await coll.members()
           }
         }
@@ -698,8 +698,8 @@ class Activity extends ActivityObject {
     // Deliver to each of the expanded addressees
 
     const body = JSON.stringify(activity)
-    const {privateKey} = await db.get('SELECT privateKey FROM user WHERE actorId = ?', [owner.id])
-    const keyId = await toId(owner.publicKey)
+    const {privateKey} = await db.get('SELECT privateKey FROM user WHERE actorId = ?', [await owner.id()])
+    const keyId = await toId(await owner.prop('publicKey'))
 
     await Promise.all(expanded.map(async (addressee) => {
       if (await isUser(addressee)) {
@@ -932,11 +932,6 @@ const generateKeyPair = promisify(crypto.generateKeyPair);
 
 const isString = value => typeof value === 'string' || value instanceof String;
 
-async function toObject(value) {
-  const obj = new ActivityObject(value)
-  return await obj.json()
-}
-
 async function toId(value) {
   if (typeof value == "undefined") {
     return null;
@@ -946,13 +941,6 @@ async function toId(value) {
     const obj = new ActivityObject(value)
     return await obj.id()
   }
-}
-
-async function saveObject(type, data, owner=null, addressees=[]) {
-  data.type = data.type || type || 'Object';
-  const ao = new ActivityObject(data)
-  await ao.save(owner, addressees)
-  return await ao.json()
 }
 
 async function isUser(object) {
@@ -1027,7 +1015,7 @@ app.post('/register', wrap(async(req, res) => {
     const passwordHash = await bcrypt.hash(password, 10)
     // Create the person; self-own!
     const actorId = await ActivityObject.makeId('Person')
-    const data = {name: username, id: actorId};
+    const data = {name: username, id: actorId, type: 'Person', preferredUsername: username};
     const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
     for (let prop of props) {
       const coll = await Collection.empty(actorId, [PUBLIC], {'nameMap': {'en': `${username}'s ${prop}`}})
@@ -1047,9 +1035,11 @@ app.post('/register', wrap(async(req, res) => {
         }
       }
     )
-    const {id, type, owner, publicKeyPem} = await saveObject('Key', {owner: actorId, publicKeyPem: publicKey}, actorId, [PUBLIC])
-    data['publicKey'] = {id, type, owner, publicKeyPem}
-    await saveObject('Person', data, actorId, [PUBLIC])
+    const pkey = new ActivityObject({type: 'Key', owner: actorId, publicKeyPem: publicKey})
+    await pkey.save(actorId, [PUBLIC])
+    data['publicKey'] = await pkey.brief()
+    const person = new ActivityObject(data)
+    await person.save(actorId, [PUBLIC])
     await db.run('INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)', [username, passwordHash, actorId, privateKey])
     const token = await sign(
       {
@@ -1192,7 +1182,7 @@ app.post('/:type/:id',
     await activity.apply(ownerJson, addressees)
     await activity.save(ownerId, addressees)
     await outbox.prepend(activity)
-    await activity.distribute(ownerJson, addressees)
+    await activity.distribute(addressees)
     const output = await activity.expanded()
     if (await activity.needsExpandedObject()) {
       const activityObject = new ActivityObject(await activity.prop('object'))
