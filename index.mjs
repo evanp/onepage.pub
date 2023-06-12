@@ -509,7 +509,7 @@ class Activity extends ActivityObject {
           const other = new ActivityObject(activity.object)
           const followers = new Collection(await other.prop('followers'))
           if (await followers.hasMember(owner.id)) {
-            throw new Error("Already followed")
+            throw new createError.BadRequest("Already followed")
           }
           await followers.prependData(owner)
         } else {
