@@ -895,20 +895,10 @@ const generateKeyPair = promisify(crypto.generateKeyPair);
 
 const isString = value => typeof value === 'string' || value instanceof String;
 
-async function getObject(id) {
-  return await ActivityObject.getJSON(id)
-}
-
 async function getOwner(obj) {
   const ao = new ActivityObject(obj)
   const owner = await ao.owner()
   return (owner) ? await owner.json() : null
-}
-
-async function getAddressees(id) {
-  const ao = new ActivityObject(id)
-  const addressees = await ao.addressees()
-  return Promise.all(addressees.map(a => a.id()))
 }
 
 async function toObject(value) {
@@ -925,17 +915,6 @@ async function toId(value) {
     const obj = new ActivityObject(value)
     return await obj.id()
   }
-}
-
-async function toBriefObject(value) {
-  const obj = new ActivityObject(value)
-  return await obj.brief()
-}
-
-async function toExtendedObject(value) {
-  const obj = new ActivityObject(value)
-  const id = obj.id()
-  return await obj.expanded()
 }
 
 async function compressProperties(object) {
