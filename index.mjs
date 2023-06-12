@@ -115,7 +115,7 @@ class HTTPSignature {
     verifier.write(data);
     verifier.end();
     if (verifier.verify(publicKey.publicKeyPem, Buffer.from(this.signature, 'base64'))) {
-      return await getRemoteObject(publicKey.owner)
+      return ActivityObject.fromRemote(publicKey.owner)
     } else {
       return null
     }
@@ -166,6 +166,14 @@ class ActivityObject {
     return this.#json;
   }
 
+  async _setJson(json) {
+    this.#json = json;
+  }
+
+  async _hasJson() {
+    return !!this.#json;
+  }
+
   async id() {
     return this.#id
   }
@@ -193,7 +201,7 @@ class ActivityObject {
 
   async save(owner, addressees) {
     const data = await compressProperties(await this.json() || {})
-    data.type = data.type || 'Object';
+    data.type = data.type ||  this.defaultType()
     data.id = data.id || await ActivityObject.makeId(data.type)
     data.updated = new Date().toISOString();
     data.published = data.published || data.updated;
@@ -382,7 +390,8 @@ class ActivityObject {
   ]
 
   async expanded() {
-    const object = await this.json()
+    // force a full read
+    const object = await ActivityObject.getJSON(await this.id())
     const toBrief = async (value) => {
       if (value) {
         const obj = new ActivityObject(value)
@@ -440,6 +449,31 @@ class ActivityObject {
   static async fromActivityObject(object) {
     return new ActivityObject(await object.json())
   }
+
+  defaultType() {
+    return 'Object'
+  }
+
+  static async fromRemote(value) {
+    const ao = new ActivityObject(value)
+    const obj = await ao.json()
+    if (!obj) {
+      const id = await ao.id()
+      const res = await fetch(id, {
+        headers: {'Accept': 'application/activity+json, application/ld+json, application/json'}
+      })
+      if (res.status !== 200) {
+        throw new Error(`Error fetching ${id}: ${res.status}`)
+      } else {
+        ao.#json = await res.json()
+      }
+    }
+    return ao;
+  }
+
+  async needsExpandedObject() {
+    return ['Create', 'Update'].includes(await this.type())
+  }
 }
 
 class Activity extends ActivityObject {
@@ -448,6 +482,228 @@ class Activity extends ActivityObject {
   }
   static async fromActivityObject(object) {
     return new Activity(await object.json())
+  }
+
+  defaultType() {
+    return 'Activity'
+  }
+
+  async  apply(owner, addressees, ...args) {
+    let activity = await this.json()
+    const appliers = {
+      "Follow": async () => {
+        if (!activity.object) {
+          throw new createError.BadRequest("No object followed")
+        }
+        const following = new Collection(owner.following)
+        if (await following.hasMember(activity.object)) {
+          throw new createError.BadRequest("Already following")
+        }
+        await following.prependData(activity.object)
+        if (await isUser(activity.object)) {
+          const other = new ActivityObject(activity.object)
+          const followers = new Collection(await other.prop('followers'))
+          if (await followers.hasMember(owner.id)) {
+            throw new Error("Already followed")
+          }
+          await followers.prependData(owner)
+        } else {
+          // Figure out how to follow this thing
+        }
+        return activity
+      },
+      "Create": async () => {
+        const object = activity.object
+        if (!object) {
+          throw new createError.BadRequest("No object to create")
+        }
+        object.attributedTo = owner.id
+        object.type = object.type || "Object"
+        if (!["name", "nameMap", "summary", "summaryMap"].some(p => p in object)) {
+          object.summaryMap = {
+            "en": `A(n) ${object.type} by ${owner.name}`
+          }
+        }
+        const saved = new ActivityObject(object)
+        await saved.save(owner.id, addressees)
+        activity.object = await saved.id()
+        return activity
+      },
+      "Update": async() => {
+        if (!activity.object) {
+          throw new createError.BadRequest("No object to update")
+        }
+        if (!activity?.object?.id) {
+          throw new createError.BadRequest("No id for object to update")
+        }
+        let object = new ActivityObject(activity?.object?.id)
+        const objectOwner = await object.owner()
+        if (!objectOwner || await objectOwner.id() != owner.id) {
+          throw new createError.BadRequest("You can't update an object you don't own")
+        }
+        await object.patch(activity.object)
+        activity.object = await object.json()
+        return activity
+      },
+      "Delete": async() => {
+        if (!activity.object) {
+          throw new createError.BadRequest("No object to delete")
+        }
+        let object = await toObject(activity.object)
+        if (!object.id) {
+          throw new createError.BadRequest("No id for object to delete")
+        }
+        const objectOwner = await getOwner(object)
+        if (!objectOwner || objectOwner.id != await toId(owner)) {
+          throw new createError.BadRequest("You can't delete an object you don't own")
+        }
+        const timestamp = new Date().toISOString();
+        activity.object = await replaceObject(object.id, {
+          id: object.id,
+          formerType: object.type,
+          type: "Tombstone",
+          published: object.published,
+          updated: timestamp,
+          deleted: timestamp,
+          summaryMap: {
+            "en": `A deleted ${object.type} by ${owner.name}`
+          }
+        })
+        return activity
+      },
+      "Add": async() => {
+        if (!activity.object) {
+          throw new createError.BadRequest("No object to add")
+        }
+        let object = new ActivityObject(activity.object)
+        if (!await object.id()) {
+          throw new createError.BadRequest("No id for object to add")
+        }
+        if (!activity.target) {
+          throw new createError.BadRequest("No target to add to")
+        }
+        let target = new Collection(activity.target)
+        if (!await target.id()) {
+          throw new createError.BadRequest("No id for object to add to")
+        }
+        if (!await target.isCollection()) {
+          throw new createError.BadRequest("Can't add to a non-collection")
+        }
+        const targetOwner = await target.owner()
+        if (!targetOwner || await targetOwner.id() != owner.id) {
+          throw new createError.BadRequest("You can't add to an object you don't own")
+        }
+        for (let prop of ["inbox", "outbox", "followers", "following", "liked"]) {
+          if (await target.id() == await toId(owner[prop])) {
+            throw new createError.BadRequest(`Can't add an object directly to your ${prop}`)
+          }
+        }
+        if (await target.hasMember(await object.id())) {
+          throw new createError.BadRequest("Already a member")
+        }
+        await target.prepend(object)
+        return activity
+      },
+      "Remove": async() => {
+        if (!activity.object) {
+          throw new createError.BadRequest("No object to remove")
+        }
+        let object = new ActivityObject(activity.object)
+        if (!await object.id()) {
+          throw new createError.BadRequest("No id for object to remove")
+        }
+        if (!activity.target) {
+          throw new createError.BadRequest("No target to remove from")
+        }
+        let target = new Collection(activity.target)
+        if (!await target.id()) {
+          throw new createError.BadRequest("No id for object to remove from")
+        }
+        if (!await target.isCollection()) {
+          throw new createError.BadRequest("Can't remove from a non-collection")
+        }
+        const targetOwner = await target.owner()
+        if (!targetOwner || await targetOwner.id() != owner.id) {
+          throw new createError.BadRequest("You can't remove from an object you don't own")
+        }
+        for (let prop of ["inbox", "outbox", "followers", "following", "liked"]) {
+          if (await target.id() == await toId(owner[prop])) {
+            throw new createError.BadRequest(`Can't remove an object directly from your ${prop}`)
+          }
+        }
+        if (!await target.hasMember(await object.id())) {
+          throw new createError.BadRequest("Not a member")
+        }
+        await target.remove(object)
+        return activity
+      }
+    }
+
+    if (await this.type() in appliers) {
+      activity = await appliers[await this.type()]()
+      this._setJson(activity)
+    }
+  }
+
+  async distribute(owner, addressees) {
+
+    const activity = await this.json()
+    owner = await toObject(owner)
+
+    // Add it to the owner inbox!
+
+    const ownerInbox = new Collection(owner.inbox)
+    await ownerInbox.prependData(activity)
+
+    // Expand public, followers, other lists
+
+    const expanded = (await Promise.all(addressees.map(async (addressee) => {
+      if (addressee === PUBLIC) {
+        const followers = new Collection(owner.followers)
+        return await followers.members()
+      } else {
+        const obj = new ActivityObject(addressee)
+        if (await obj.isCollection()) {
+          const coll = new Collection(addressee)
+          const objOwner = await obj.owner()
+          if (coll &&
+              await objOwner.id() === owner.id) {
+              return await coll.members()
+          }
+        }
+      }
+      return addressee
+    }))).filter((v, i, a) => v && a.indexOf(v) === i && v !== owner.id).flat()
+
+    // Deliver to each of the expanded addressees
+
+    const body = JSON.stringify(activity)
+    const {privateKey} = await db.get('SELECT privateKey FROM user WHERE actorId = ?', [owner.id])
+    const keyId = await toId(owner.publicKey)
+
+    await Promise.all(expanded.map(async (addressee) => {
+      if (await isUser(addressee)) {
+        // Local delivery
+        const user = new ActivityObject(addressee)
+        const inbox = new Collection(await user.prop('inbox'))
+        await inbox.prependData(activity)
+      } else {
+        const other = await getRemoteObject(addressee);
+        const inbox = await toId(other.inbox)
+        const date = new Date().toUTCString()
+        const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date)
+        const res = await fetch(inbox, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/activity+json; charset=utf-8',
+            'Signature': signature.header,
+            'Date': date
+          },
+          body: body
+        })
+        const resBody = await res.text()
+      }
+    }))
   }
 }
 
@@ -578,6 +834,53 @@ class Collection extends ActivityObject {
     }
     return cur
   }
+
+  defaultType() {
+    return 'OrderedCollection'
+  }
+}
+
+class RemoteActivity extends Activity {
+
+  async save(owner, addressees) {
+    const dataId = await this.id()
+    const ownerId = await owner.id() || dataId
+    await db.run(
+      'INSERT INTO object (id, owner, data) VALUES (?, ?, ?)',
+      [await dataId, ownerId, JSON.stringify(await this.json())]
+    );
+    await Promise.all(addressees.map((addressee) =>
+      db.run(
+        'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
+        [dataId, addressee]
+      )))
+  }
+
+  async apply(remote, addressees, ...args) {
+    const owner = args[0]
+    const activity = await this.json()
+    const remoteAppliers = {
+      "Follow": async() => {
+        const object = new ActivityObject(activity.object)
+        if (await object.id() == toId(owner)) {
+          const followers = new Collection(owner.followers)
+          if (await followers.hasMember(remote)) {
+            throw new Error("Already following")
+          }
+          await followers.prependData(remote)
+        }
+      },
+      "Create": async() => {
+        if (activity.object) {
+          await cacheRemoteObject(activity.object, remote, addressees)
+        }
+      }
+    }
+
+    if (activity.type in remoteAppliers) {
+      await remoteAppliers[activity.type]()
+    }
+  }
 }
 
 // Functions
@@ -636,20 +939,8 @@ async function compressProperties(object) {
 }
 
 async function getRemoteObject(value) {
-  const id = await toId(value)
-  const obj = await getObject(id)
-  if (obj) {
-    return obj
-  } else {
-    const res = await fetch(id, {
-      headers: {'Accept': 'application/activity+json, application/ld+json, application/json'}
-    })
-    if (res.status !== 200) {
-      return null
-    } else {
-      return res.json()
-    }
-  }
+  const ao = await ActivityObject.fromRemote(value)
+  return await ao.json()
 }
 
 async function cacheRemoteObject(data, owner, addressees) {
@@ -711,256 +1002,6 @@ async function isUser(object) {
   const id = await toId(object)
   const row = await db.get("SELECT username FROM user WHERE actorId = ?", [id])
   return !!row
-}
-
-async function saveActivity(data, owner, addressees) {
-  data = data || {};
-  data.type = data.type || 'Activity';
-  data.id = data.id || await ActivityObject.makeId(data.type)
-  data.actor = await toId(owner)
-  delete data['bto']
-  delete data['bcc']
-  return await saveObject(data.type, data, owner, addressees)
-}
-
-const appliers = {
-  "Follow": async(activity, owner, addressees) => {
-    if (!activity.object) {
-      throw new createError.BadRequest("No object followed")
-    }
-    const following = new Collection(owner.following)
-    if (await following.hasMember(activity.object)) {
-      throw new createError.BadRequest("Already following")
-    }
-    await following.prependData(activity.object)
-    if (await isUser(activity.object)) {
-      const other = new ActivityObject(activity.object)
-      const followers = new Collection(await other.prop('followers'))
-      if (await followers.hasMember(owner.id)) {
-        throw new Error("Already followed")
-      }
-      await followers.prependData(owner)
-    } else {
-      // Figure out how to follow this thing
-    }
-    return activity
-  },
-  "Create": async(activity, owner, addressees) => {
-    const object = activity.object
-    if (!object) {
-      throw new createError.BadRequest("No object followed")
-    }
-    object.attributedTo = owner.id
-    object.type = object.type || "Object"
-    if (!["name", "nameMap", "summary", "summaryMap"].some(p => p in object)) {
-      object.summaryMap = {
-        "en": `A(n) ${object.type} by ${owner.name}`
-      }
-    }
-    const saved = new ActivityObject(object)
-    await saved.save(owner.id, addressees)
-    activity.object = await saved.id()
-    return activity
-  },
-  "Update": async(activity, owner, addressees) => {
-    if (!activity.object) {
-      throw new createError.BadRequest("No object to update")
-    }
-    if (!activity?.object?.id) {
-      throw new createError.BadRequest("No id for object to update")
-    }
-    let object = new ActivityObject(activity?.object?.id)
-    const objectOwner = await object.owner()
-    if (!objectOwner || await objectOwner.id() != owner.id) {
-      throw new createError.BadRequest("You can't update an object you don't own")
-    }
-    await object.patch(activity.object)
-    activity.object = await object.json()
-    return activity
-  },
-  "Delete": async(activity, owner, addressees) => {
-    if (!activity.object) {
-      throw new createError.BadRequest("No object to delete")
-    }
-    let object = await toObject(activity.object)
-    if (!object.id) {
-      throw new createError.BadRequest("No id for object to delete")
-    }
-    const objectOwner = await getOwner(object)
-    if (!objectOwner || objectOwner.id != await toId(owner)) {
-      throw new createError.BadRequest("You can't delete an object you don't own")
-    }
-    const timestamp = new Date().toISOString();
-    activity.object = await replaceObject(object.id, {
-      id: object.id,
-      formerType: object.type,
-      type: "Tombstone",
-      published: object.published,
-      updated: timestamp,
-      deleted: timestamp,
-      summaryMap: {
-        "en": `A deleted ${object.type} by ${owner.name}`
-      }
-    })
-    return activity
-  },
-  "Add": async(activity, owner, addressees) => {
-    if (!activity.object) {
-      throw new createError.BadRequest("No object to add")
-    }
-    let object = new ActivityObject(activity.object)
-    if (!await object.id()) {
-      throw new createError.BadRequest("No id for object to add")
-    }
-    if (!activity.target) {
-      throw new createError.BadRequest("No target to add to")
-    }
-    let target = new Collection(activity.target)
-    if (!await target.id()) {
-      throw new createError.BadRequest("No id for object to add to")
-    }
-    if (!await target.isCollection()) {
-      throw new createError.BadRequest("Can't add to a non-collection")
-    }
-    const targetOwner = await target.owner()
-    if (!targetOwner || await targetOwner.id() != owner.id) {
-      throw new createError.BadRequest("You can't add to an object you don't own")
-    }
-    for (let prop of ["inbox", "outbox", "followers", "following", "liked"]) {
-      if (await target.id() == await toId(owner[prop])) {
-        throw new createError.BadRequest(`Can't add an object directly to your ${prop}`)
-      }
-    }
-    if (await target.hasMember(await object.id())) {
-      throw new createError.BadRequest("Already a member")
-    }
-    await target.prepend(object)
-    return activity
-  },
-  "Remove": async(activity, owner, addressees) => {
-    if (!activity.object) {
-      throw new createError.BadRequest("No object to remove")
-    }
-    let object = new ActivityObject(activity.object)
-    if (!await object.id()) {
-      throw new createError.BadRequest("No id for object to remove")
-    }
-    if (!activity.target) {
-      throw new createError.BadRequest("No target to remove from")
-    }
-    let target = new Collection(activity.target)
-    if (!await target.id()) {
-      throw new createError.BadRequest("No id for object to remove from")
-    }
-    if (!await target.isCollection()) {
-      throw new createError.BadRequest("Can't remove from a non-collection")
-    }
-    const targetOwner = await target.owner()
-    if (!targetOwner || await targetOwner.id() != owner.id) {
-      throw new createError.BadRequest("You can't remove from an object you don't own")
-    }
-    for (let prop of ["inbox", "outbox", "followers", "following", "liked"]) {
-      if (await target.id() == await toId(owner[prop])) {
-        throw new createError.BadRequest(`Can't remove an object directly from your ${prop}`)
-      }
-    }
-    if (!await target.hasMember(await object.id())) {
-      throw new createError.BadRequest("Not a member")
-    }
-    await target.remove(object)
-    return activity
-  }
-}
-
-async function applyActivity(activity, owner, addressees) {
-  if (activity.type in appliers) {
-    activity = await appliers[activity.type](activity, owner, addressees)
-  }
-  return activity
-}
-
-const remoteAppliers = {
-  "Follow": async(activity, remote, addressees, owner) => {
-    const object = new ActivityObject(activity.object)
-    if (await object.id() == toId(owner)) {
-      const followers = new Collection(owner.followers)
-      if (await followers.hasMember(remote)) {
-        throw new Error("Already following")
-      }
-      await followers.prependData(remote)
-    }
-  },
-  "Create": async(activity, remote, addressees, owner) => {
-    if (activity.object) {
-      await cacheRemoteObject(activity.object, remote, addressees)
-    }
-  }
-}
-
-async function applyRemoteActivity(activity, remote, owner, addressees) {
-  if (activity.type in remoteAppliers) {
-    await remoteAppliers[activity.type](activity, remote, addressees, owner)
-  }
-}
-
-async function distributeActivity(activity, owner, addressees) {
-
-  owner = await toObject(owner)
-
-  // Add it to the owner inbox!
-
-  const ownerInbox = new Collection(owner.inbox)
-  await ownerInbox.prependData(activity)
-
-  // Expand public, followers, other lists
-
-  const expanded = (await Promise.all(addressees.map(async (addressee) => {
-    if (addressee === PUBLIC) {
-      const followers = new Collection(owner.followers)
-      return await followers.members()
-    } else {
-      const obj = new ActivityObject(addressee)
-      if (await obj.isCollection()) {
-        const coll = new Collection(addressee)
-        const objOwner = await obj.owner()
-        if (coll &&
-            await objOwner.id() === owner.id) {
-            return await coll.members()
-        }
-      }
-    }
-    return addressee
-  }))).filter((v, i, a) => v && a.indexOf(v) === i && v !== owner.id).flat()
-
-  // Deliver to each of the expanded addressees
-
-  const body = JSON.stringify(activity)
-  const {privateKey} = await db.get('SELECT privateKey FROM user WHERE actorId = ?', [owner.id])
-  const keyId = await toId(owner.publicKey)
-
-  await Promise.all(expanded.map(async (addressee) => {
-    if (await isUser(addressee)) {
-      // Local delivery
-      const user = new ActivityObject(addressee)
-      const inbox = new Collection(await user.prop('inbox'))
-      await inbox.prependData(activity)
-    } else {
-      const other = await getRemoteObject(addressee);
-      const inbox = await toId(other.inbox)
-      const date = new Date().toUTCString()
-      const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date)
-      const res = await fetch(inbox, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
-          'Signature': signature.header,
-          'Date': date
-        },
-        body: body
-      })
-      const resBody = await res.text()
-    }
-  }))
 }
 
 // Server
@@ -1076,7 +1117,7 @@ app.post('/register', wrap(async(req, res) => {
   }
 }))
 
-function needsExtendedObject(activity) {
+function needsExpandedObject(activity) {
   const types = ['Create', 'Update']
   return types.includes(activity.type)
 }
@@ -1158,7 +1199,7 @@ app.get('/:type/:id',
       }
     }
   }
-  if (needsExtendedObject(data)) {
+  if (needsExpandedObject(data)) {
     data.object = await toExtendedObject(data.object.id)
   }
   if (data.type === 'Tombstone') {
@@ -1198,18 +1239,21 @@ app.post('/:type/:id',
     .flat()
     .map(toId))
     data.id = await ActivityObject.makeId(data.type || "Activity")
-    let activity = await applyActivity(data, ownerJson, addressees)
-    activity = await saveActivity(activity, ownerId, addressees)
-    await outbox.prependData(activity)
-    await distributeActivity(activity, ownerJson, addressees)
-    activity = await toExtendedObject(activity)
-    if (needsExtendedObject(activity)) {
-      activity.object = await toExtendedObject(activity.object.id)
+    data.actor = ownerId
+    let activity = new Activity(data)
+    await activity.apply(ownerJson, addressees)
+    await activity.save(ownerId, addressees)
+    await outbox.prepend(activity)
+    await activity.distribute(ownerJson, addressees)
+    const output = await activity.expanded()
+    if (await activity.needsExpandedObject()) {
+      const activityObject = new ActivityObject(await activity.prop('object'))
+      output.object = await activityObject.expanded()
     }
-    activity['@context'] = activity['@context'] || CONTEXT
+    output['@context'] = output['@context'] || CONTEXT
     res.status(200)
     res.set('Content-Type', 'application/activity+json')
-    res.json(activity)
+    res.json(output)
   } else if (full === await owner.prop('inbox')) { // remote delivery
     const sigHeader = req.headers['signature']
     if (!sigHeader) {
@@ -1220,7 +1264,7 @@ app.post('/:type/:id',
     if (!remote) {
       throw new createError.Unauthorized('Invalid HTTP signature')
     }
-    if (await isUser(remote)) {
+    if (await isUser(await remote.id())) {
       throw new createError.Forbidden('Remote delivery only')
     }
     const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
@@ -1228,10 +1272,11 @@ app.post('/:type/:id',
     .filter((a) => a)
     .flat()
     .map(toId))
-    await applyRemoteActivity(req.body, remote, addressees, await owner.json())
-    await cacheRemoteObject(req.body, remote, addressees)
+    const activity = new RemoteActivity(req.body)
+    await activity.apply(await remote.json(), addressees, await owner.json())
+    await activity.save(remote, addressees)
     const inbox = new Collection(await owner.prop('inbox'))
-    await inbox.prependData(req.body)
+    await inbox.prepend(activity)
     res.status(202)
     res.set('Content-Type', 'application/activity+json')
     res.json(req.body)

@@ -565,7 +565,8 @@ describe("Web API interface", () => {
                 },
                 body: JSON.stringify(source)
             })
-            activity = await res.json()
+            const body = await res.text()
+            activity = JSON.parse(body)
         })
         it("has a new object ID", async() => {
             assert.equal("object", typeof activity.object)
