@@ -554,24 +554,24 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest("No object to delete")
         }
-        let object = await toObject(activity.object)
-        if (!object.id) {
+        let object = new ActivityObject(activity.object)
+        if (!await object.id()) {
           throw new createError.BadRequest("No id for object to delete")
         }
-        const objectOwner = await getOwner(object)
-        if (!objectOwner || objectOwner.id != await toId(owner)) {
+        const objectOwner = await object.owner()
+        if (!objectOwner || await objectOwner.id() != await toId(owner)) {
           throw new createError.BadRequest("You can't delete an object you don't own")
         }
         const timestamp = new Date().toISOString();
-        activity.object = await replaceObject(object.id, {
-          id: object.id,
-          formerType: object.type,
+        await object.replace({
+          id: await object.id(),
+          formerType: await object.type(),
           type: "Tombstone",
-          published: object.published,
+          published: await object.prop('published'),
           updated: timestamp,
           deleted: timestamp,
           summaryMap: {
-            "en": `A deleted ${object.type} by ${owner.name}`
+            "en": `A deleted ${await object.type()} by ${owner.name}`
           }
         })
         return activity
@@ -895,12 +895,6 @@ const generateKeyPair = promisify(crypto.generateKeyPair);
 
 const isString = value => typeof value === 'string' || value instanceof String;
 
-async function getOwner(obj) {
-  const ao = new ActivityObject(obj)
-  const owner = await ao.owner()
-  return (owner) ? await owner.json() : null
-}
-
 async function toObject(value) {
   const obj = new ActivityObject(value)
   return await obj.json()
@@ -938,12 +932,6 @@ async function saveObject(type, data, owner=null, addressees=[]) {
   const ao = new ActivityObject(data)
   await ao.save(owner, addressees)
   return await ao.json()
-}
-
-async function replaceObject(id, replace) {
-  const obj = new ActivityObject(id)
-  await obj.replace(replace)
-  return await obj.json()
 }
 
 const emptyOrderedCollection = async(name, owner, addressees) => {
