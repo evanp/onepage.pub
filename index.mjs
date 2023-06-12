@@ -205,7 +205,7 @@ class ActivityObject {
   }
 
   async save(owner, addressees) {
-    const data = await compressProperties(await this.json() || {})
+    const data = await this.compressed()
     data.type = data.type ||  this.defaultType()
     data.id = data.id || await ActivityObject.makeId(data.type)
     data.updated = new Date().toISOString();
@@ -915,11 +915,6 @@ async function toId(value) {
     const obj = new ActivityObject(value)
     return await obj.id()
   }
-}
-
-async function compressProperties(object) {
-  const obj = new ActivityObject(object)
-  return await obj.compressed()
 }
 
 async function getRemoteObject(value) {
