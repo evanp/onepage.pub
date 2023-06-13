@@ -14,5 +14,8 @@
     "passport-oauth2": "^1.7.0",
     "sqlite3": "^5.1.6",
     "supertest": "^6.3.3"
+  },
+  "devDependencies": {
+    "standard": "^17.1.0"
   }
 }
