@@ -375,6 +375,7 @@ class ActivityObject {
     'attributedTo',
     'anyOf',
     'audience',
+    'blocked',
     'cc',
     'context',
     'current',
@@ -968,6 +969,9 @@ class User {
       const coll = await Collection.empty(this.actorId, [PUBLIC], { nameMap: { en: `${this.username}'s ${prop}` } })
       data[prop] = await coll.id()
     }
+    // blocked is a special case because it's private
+    const coll = await Collection.empty(this.actorId, [], { nameMap: { en: `${this.username}'s blocked list` } })
+    data.blocked = await coll.id()
     const { publicKey, privateKey } = await generateKeyPair(
       'rsa',
       {

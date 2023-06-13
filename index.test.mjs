@@ -212,6 +212,12 @@ describe('Web API interface', () => {
       assert(actorObj.liked.id.startsWith('https://localhost:3000/orderedcollection/'))
     })
 
+    it('has a blocked property', () => {
+      assert.equal('object', typeof actorObj.blocked)
+      assert.equal('string', typeof actorObj.blocked.id)
+      assert(actorObj.blocked.id.startsWith('https://localhost:3000/orderedcollection/'))
+    })
+
     it('has a public key', () => {
       assert(actorObj.publicKey)
       assert.equal('object', typeof actorObj.publicKey)
@@ -226,8 +232,12 @@ describe('Web API interface', () => {
 
   describe('Actor streams', () => {
     let actor = null
+    let token = null
+    let actor2 = null
+    let token2 = null
     before(async () => {
-      [actor] = await registerActor()
+      [actor, token] = await registerActor();
+      [actor2, token2] = await registerActor()
     })
     it('can get actor inbox', async () => {
       const res = await fetch(actor.inbox.id)
@@ -283,6 +293,37 @@ describe('Web API interface', () => {
       assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.liked.id)
+      assert.strictEqual(obj.type, 'OrderedCollection')
+      assert.strictEqual(obj.totalItems, 0)
+      assert(obj.nameMap?.en)
+      assert(obj.first)
+      assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
+    })
+
+    it('cannot get actor blocked without authentication', async () => {
+      const res = await fetch(actor.blocked.id)
+      assert.strictEqual(res.status, 401)
+    })
+
+    it('cannot get actor blocked with other user authentication', async () => {
+      const res = await fetch(actor.blocked.id, {
+        headers: {
+          Authorization: `Bearer ${token2}`
+        }
+      })
+      assert.strictEqual(res.status, 403)
+    })
+
+    it('can get actor blocked with authentication', async () => {
+      const res = await fetch(actor.blocked.id, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+      const obj = await res.json()
+      assert.strictEqual(obj.id, actor.blocked.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
