@@ -233,11 +233,10 @@ describe('Web API interface', () => {
   describe('Actor streams', () => {
     let actor = null
     let token = null
-    let actor2 = null
     let token2 = null
     before(async () => {
       [actor, token] = await registerActor();
-      [actor2, token2] = await registerActor()
+      [, token2] = await registerActor()
     })
     it('can get actor inbox', async () => {
       const res = await fetch(actor.inbox.id)
