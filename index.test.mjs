@@ -155,10 +155,19 @@ describe('Web API interface', () => {
       assert.strictEqual(actorRes.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
     })
 
-    it('has the correct @context', () => {
+    it('has the as2 @context', () => {
       assert(actorObj['@context'])
       assert.notEqual(-1, actorObj['@context'].indexOf('https://www.w3.org/ns/activitystreams'))
+      })
+
+    it('has the security @context', () => {
+      assert(actorObj['@context'])
       assert.notEqual(-1, actorObj['@context'].indexOf('https://w3id.org/security'))
+      })
+
+    it('has the blocked @context', () => {
+      assert(actorObj['@context'])
+      assert(actorObj['@context'].includes('https://purl.archive.org/purl/socialweb/blocked'))
     })
 
     it('has the correct id', () => {
