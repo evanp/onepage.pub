@@ -25,7 +25,7 @@ const CERT_DATA = fs.readFileSync(CERT)
 
 const AS_CONTEXT = 'https://www.w3.org/ns/activitystreams'
 const SEC_CONTEXT = 'https://w3id.org/security'
-const BLOCKED_CONTEXT = 'https://purl.archive.org/purl/socialweb/blocked'
+const BLOCKED_CONTEXT = 'https://purl.archive.org/socialweb/blocked'
 const CONTEXT = [AS_CONTEXT, SEC_CONTEXT, BLOCKED_CONTEXT]
 
 const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public'

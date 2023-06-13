@@ -167,7 +167,7 @@ describe('Web API interface', () => {
 
     it('has the blocked @context', () => {
       assert(actorObj['@context'])
-      assert(actorObj['@context'].includes('https://purl.archive.org/purl/socialweb/blocked'))
+      assert(actorObj['@context'].includes('https://purl.archive.org/socialweb/blocked'))
     })
 
     it('has the correct id', () => {
