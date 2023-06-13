@@ -18,8 +18,8 @@ import crypto from 'crypto'
 const DATABASE = process.env.OPP_DATABASE || ':memory:'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
 const PORT = process.env.OPP_PORT || 3000
-const KEY = process.env.OPP_KEY || 'server.key'
-const CERT = process.env.OPP_CERT || 'server.crt'
+const KEY = process.env.OPP_KEY || 'localhost.key'
+const CERT = process.env.OPP_CERT || 'localhost.crt'
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
 
