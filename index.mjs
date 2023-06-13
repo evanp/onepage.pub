@@ -544,11 +544,15 @@ class Activity extends ActivityObject {
         }
         object.attributedTo = owner.id
         object.type = object.type || 'Object'
+        const summaryEn = `A(n) ${object.type} by ${owner.name}`
         if (!['name', 'nameMap', 'summary', 'summaryMap'].some(p => p in object)) {
           object.summaryMap = {
-            en: `A(n) ${object.type} by ${owner.name}`
+            en: summaryEn
           }
         }
+        const likes = await Collection.empty(owner, addressees,
+          { summaryMap: { en: `Likes of ${summaryEn}` } })
+        object.likes = await likes.id()
         const saved = new ActivityObject(object)
         await saved.save(owner.id, addressees)
         activity.object = await saved.id()
@@ -660,6 +664,30 @@ class Activity extends ActivityObject {
           throw new createError.BadRequest('Not a member')
         }
         await target.remove(object)
+        return activity
+      },
+      Like: async () => {
+        if (!activity.object) {
+          throw new createError.BadRequest('No object to like')
+        }
+        const liked = new Collection(owner.liked)
+        const object = new ActivityObject(activity.object)
+        if (await liked.hasMember(await object.id())) {
+          throw new createError.BadRequest('Already liked!')
+        }
+        await liked.prepend(object)
+        const objectOwner = await object.owner()
+        if (User.isUser(objectOwner)) {
+          let likes = null
+          const likesProp = await object.prop('likes')
+          if (likesProp) {
+            likes = new Collection(likesProp)
+          } else {
+            likes = await Collection.empty(objectOwner, addressees)
+            await object.patch({ likes: await likes.id() })
+          }
+          likes.prependData(activity)
+        }
         return activity
       }
     }

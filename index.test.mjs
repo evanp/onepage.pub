@@ -864,4 +864,58 @@ describe('Web API interface', () => {
       assert(fetched.items.some(item => item.id === createdNote2.object.id))
     })
   })
+
+  describe('Like Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createdNote1 = null
+    let liked = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      createdNote1 = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'My dog has fleas.'
+          }
+        }
+      })
+      liked = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Like',
+        object: createdNote1.object.id
+      })
+    })
+
+    it("appears in the object's likes", async () => {
+      const note1 = await (await fetch(createdNote1.object.id)).json()
+      const likes = await (await fetch(note1.likes.id)).json()
+      const likesPage = await (await fetch(likes.first.id)).json()
+      assert(likesPage.orderedItems.some(activity => activity.id === liked.id))
+    })
+
+    it("object's likes count is 1", async () => {
+      const note1 = await (await fetch(createdNote1.object.id)).json()
+      const likes = await (await fetch(note1.likes.id)).json()
+      assert.equal(likes.totalItems, 1)
+    })
+
+    it("appears in the liking actor's liked stream", async () => {
+      const likedStream = await (await fetch(actor2.liked.id)).json()
+      const likedPage = await (await fetch(likedStream.first.id)).json()
+      assert(likedPage.orderedItems.some(obj => obj.id === createdNote1.object.id))
+    })
+
+    it("actor's liked count is 1", async () => {
+      const likedStream = await (await fetch(actor2.liked.id)).json()
+      assert.equal(likedStream.totalItems, 1)
+    })
+  })
 })
