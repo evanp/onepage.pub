@@ -114,9 +114,8 @@ describe('Web API interface', () => {
 
   describe('Webfinger', () => {
     let username = null
-    let token = null
     before(async () => {
-      [username, token] = await registerUser()
+      [username] = await registerUser()
     })
     it('can get information about a user', async () => {
       const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
@@ -136,14 +135,13 @@ describe('Web API interface', () => {
 
   describe('Actor endpoint', () => {
     let username = null
-    let token = null
     let actorId = null
     let actorRes = null
     let actorBody = null
     let actorObj = null
 
     before(async () => {
-      [username, token] = await registerUser()
+      [username] = await registerUser()
       const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
       const obj = await res.json()
       actorId = obj.links[0].href
@@ -219,9 +217,8 @@ describe('Web API interface', () => {
 
   describe('Actor streams', () => {
     let actor = null
-    let token = null
     before(async () => {
-      [actor, token] = await registerActor()
+      [actor] = await registerActor()
     })
     it('can get actor inbox', async () => {
       const res = await fetch(actor.inbox.id)
@@ -343,12 +340,11 @@ describe('Web API interface', () => {
   describe('Filter collections', () => {
     let actor1 = null
     let token1 = null
-    let actor2 = null
     let token2 = null
     let activity = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor()
+      [, token2] = await registerActor()
       const input = {
         '@context': 'https://www.w3.org/ns/activitystreams',
         type: 'IntransitiveActivity',
