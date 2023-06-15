@@ -13,7 +13,7 @@ import jwt from 'jsonwebtoken'
 import { promisify } from 'util'
 import crypto from 'crypto'
 
-// Constants
+// Configuration
 
 const DATABASE = process.env.OPP_DATABASE || ':memory:'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
@@ -22,6 +22,8 @@ const KEY = process.env.OPP_KEY || 'localhost.key'
 const CERT = process.env.OPP_CERT || 'localhost.crt'
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
+
+// Constants
 
 const AS_CONTEXT = 'https://www.w3.org/ns/activitystreams'
 const SEC_CONTEXT = 'https://w3id.org/security'
