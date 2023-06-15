@@ -295,9 +295,13 @@ class ActivityObject {
     const owner = await this.owner()
     const addressees = await this.addressees()
     const addresseeIds = await Promise.all(addressees.map((addressee) => addressee.id()))
-
+    const blockedProp = await owner.prop('blocked')
+    const blocked = (blockedProp) ? new Collection(blockedProp) : null
+    // subject cannot read if they are blocked
+    if (subject && blocked && await blocked.hasMember(subject)) {
+      return false
+    }
     // anyone can read if it's public
-
     if (addresseeIds.includes(PUBLIC)) {
       return true
     }
@@ -515,14 +519,15 @@ class Activity extends ActivityObject {
     return 'Activity'
   }
 
-  async apply (owner, addressees, ...args) {
+  async apply (actor, addressees, ...args) {
     let activity = await this.json()
+    const actorObj = new ActivityObject(actor)
     const appliers = {
       Follow: async () => {
         if (!activity.object) {
           throw new createError.BadRequest('No object followed')
         }
-        const following = new Collection(owner.following)
+        const following = new Collection(actor.following)
         if (await following.hasMember(activity.object)) {
           throw new createError.BadRequest('Already following')
         }
@@ -530,10 +535,10 @@ class Activity extends ActivityObject {
         await following.prepend(other)
         if (await User.isUser(other)) {
           const followers = new Collection(await other.prop('followers'))
-          if (await followers.hasMember(owner.id)) {
+          if (await followers.hasMember(actor.id)) {
             throw new createError.BadRequest('Already followed')
           }
-          await followers.prependData(owner)
+          await followers.prependData(actor)
         } else {
           // Figure out how to follow this thing
         }
@@ -544,19 +549,19 @@ class Activity extends ActivityObject {
         if (!object) {
           throw new createError.BadRequest('No object to create')
         }
-        object.attributedTo = owner.id
+        object.attributedTo = actor.id
         object.type = object.type || 'Object'
-        const summaryEn = `A(n) ${object.type} by ${owner.name}`
+        const summaryEn = `A(n) ${object.type} by ${actor.name}`
         if (!['name', 'nameMap', 'summary', 'summaryMap'].some(p => p in object)) {
           object.summaryMap = {
             en: summaryEn
           }
         }
-        const likes = await Collection.empty(owner, addressees,
+        const likes = await Collection.empty(actor, addressees,
           { summaryMap: { en: `Likes of ${summaryEn}` } })
         object.likes = await likes.id()
         const saved = new ActivityObject(object)
-        await saved.save(owner.id, addressees)
+        await saved.save(actor.id, addressees)
         activity.object = await saved.id()
         return activity
       },
@@ -569,7 +574,7 @@ class Activity extends ActivityObject {
         }
         const object = new ActivityObject(activity?.object?.id)
         const objectOwner = await object.owner()
-        if (!objectOwner || await objectOwner.id() !== owner.id) {
+        if (!objectOwner || await objectOwner.id() !== actor.id) {
           throw new createError.BadRequest("You can't update an object you don't own")
         }
         await object.patch(activity.object)
@@ -585,7 +590,7 @@ class Activity extends ActivityObject {
           throw new createError.BadRequest('No id for object to delete')
         }
         const objectOwner = await object.owner()
-        if (!objectOwner || await objectOwner.id() !== await toId(owner)) {
+        if (!objectOwner || await objectOwner.id() !== await toId(actor)) {
           throw new createError.BadRequest("You can't delete an object you don't own")
         }
         const timestamp = new Date().toISOString()
@@ -597,7 +602,7 @@ class Activity extends ActivityObject {
           updated: timestamp,
           deleted: timestamp,
           summaryMap: {
-            en: `A deleted ${await object.type()} by ${owner.name}`
+            en: `A deleted ${await object.type()} by ${actor.name}`
           }
         })
         return activity
@@ -621,11 +626,11 @@ class Activity extends ActivityObject {
           throw new createError.BadRequest("Can't add to a non-collection")
         }
         const targetOwner = await target.owner()
-        if (!targetOwner || await targetOwner.id() !== owner.id) {
+        if (!targetOwner || await targetOwner.id() !== actor.id) {
           throw new createError.BadRequest("You can't add to an object you don't own")
         }
         for (const prop of ['inbox', 'outbox', 'followers', 'following', 'liked']) {
-          if (await target.id() === await toId(owner[prop])) {
+          if (await target.id() === await toId(actor[prop])) {
             throw new createError.BadRequest(`Can't add an object directly to your ${prop}`)
           }
         }
@@ -654,11 +659,11 @@ class Activity extends ActivityObject {
           throw new createError.BadRequest("Can't remove from a non-collection")
         }
         const targetOwner = await target.owner()
-        if (!targetOwner || await targetOwner.id() !== owner.id) {
+        if (!targetOwner || await targetOwner.id() !== actor.id) {
           throw new createError.BadRequest("You can't remove from an object you don't own")
         }
         for (const prop of ['inbox', 'outbox', 'followers', 'following', 'liked']) {
-          if (await target.id() === await toId(owner[prop])) {
+          if (await target.id() === await toId(actor[prop])) {
             throw new createError.BadRequest(`Can't remove an object directly from your ${prop}`)
           }
         }
@@ -672,8 +677,11 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest('No object to like')
         }
-        const liked = new Collection(owner.liked)
         const object = new ActivityObject(activity.object)
+        if (!await object.canRead(actor.id)) {
+          throw new createError.BadRequest("Can't like an object you can't read")
+        }
+        const liked = new Collection(actor.liked)
         if (await liked.hasMember(await object.id())) {
           throw new createError.BadRequest('Already liked!')
         }
@@ -689,6 +697,28 @@ class Activity extends ActivityObject {
             await object.patch({ likes: await likes.id() })
           }
           likes.prependData(activity)
+        }
+        return activity
+      },
+      Block: async () => {
+        if (!await this.prop('object')) {
+          throw new createError.BadRequest('No object to block')
+        }
+        const blocked = new Collection(await actorObj.prop('blocked'))
+        const other = new ActivityObject(await this.prop('object'))
+        if (await blocked.hasMember(await other.id())) {
+          throw new createError.BadRequest('Already blocked!')
+        }
+        await blocked.prepend(other)
+        const followers = new Collection(await actorObj.prop('followers'))
+        await followers.remove(other)
+        const following = new Collection(await actorObj.prop('following'))
+        await following.remove(other)
+        if (await User.isUser(other)) {
+          const otherFollowers = new Collection(await other.prop('followers'))
+          await otherFollowers.remove(actorObj)
+          const otherFollowing = new Collection(await other.prop('following'))
+          await otherFollowing.remove(actorObj)
         }
         return activity
       }
@@ -1161,7 +1191,7 @@ app.get('/:type/:id',
       if (req.auth?.subject) {
         throw new createError.Forbidden('Not authorized to read this object')
       } else {
-        throw new createError.Unauthorized('You must provide credentials to read this object')
+        throw new createError.Unauthorized(`You must provide credentials to read ${full}`)
       }
     }
     const objType = await obj.type()
@@ -1270,8 +1300,10 @@ app.post('/:type/:id',
   }))
 
 app.use((err, req, res, next) => {
-  console.error(err)
   if (createError.isHttpError(err)) {
+    if (err.statusCode > 500) {
+      console.error(err)
+    }
     res.status(err.statusCode)
     if (res.expose) {
       res.json({ message: err.message })
@@ -1279,6 +1311,7 @@ app.use((err, req, res, next) => {
       res.json({ message: err.message })
     }
   } else {
+    console.error(err)
     res.status(500)
     res.json({ message: err.message })
   }

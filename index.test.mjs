@@ -967,4 +967,115 @@ describe('Web API interface', () => {
       assert.equal(likedStream.totalItems, 1)
     })
   })
+
+  describe('Block Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Follow',
+        object: actor1.id
+      })
+      await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.id],
+        type: 'Block',
+        object: actor2.id
+      })
+    })
+
+    it("other appears in the actor's blocked", async () => {
+      const blockedStream = await (await fetch(actor1.blocked.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      const blockedPage = await (await fetch(blockedStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      assert(blockedPage.orderedItems.some(actor => actor.id === actor2.id))
+    })
+
+    it("other does not appear in the actor's followers", async () => {
+      const followersStream = await (await fetch(actor1.followers.id)).json()
+      const followersPage = await (await fetch(followersStream.first.id)).json()
+      assert(followersPage.orderedItems.every(actor => actor.id !== actor2.id))
+    })
+
+    it("actor does not appear in the other's following", async () => {
+      const followingStream = await (await fetch(actor2.following.id)).json()
+      const followingPage = await (await fetch(followingStream.first.id)).json()
+      assert(followingPage.orderedItems.every(actor => actor.id !== actor1.id))
+    })
+
+    it("other can't send to actor", async () => {
+      const created = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor1.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello there.'
+          }
+        }
+      })
+      const inboxStream = await (await fetch(actor1.inbox.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      const inboxPage = await (await fetch(inboxStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      assert(inboxPage.orderedItems.every(obj => obj.id !== created.object.id))
+    })
+
+    it("other can't like actor note", async () => {
+      const created1 = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: 'https://www.w3.org/ns/activitystreams#Public',
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Here are my thoughts.'
+          }
+        }
+      })
+      const res = await fetch(actor2.outbox.id, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token2}`,
+          'Content-Type': 'application/activity+json'
+        },
+        body: JSON.stringify({
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          to: 'https://www.w3.org/ns/activitystreams#Public',
+          type: 'Like',
+          object: created1.object.id
+        })
+      })
+      assert.strictEqual(res.status, 400)
+    })
+
+    it("other can't read actor profile", async () => {
+      const res = await fetch(actor1.id, { headers: { Authorization: `Bearer ${token2}` } })
+      assert.strictEqual(res.status, 403)
+    })
+
+    it("other can't read actor outbox", async () => {
+      const res = await fetch(actor1.outbox.id, { headers: { Authorization: `Bearer ${token2}` } })
+      assert.strictEqual(res.status, 403)
+    })
+
+    it("other can't read actor note", async () => {
+      const created = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: 'https://www.w3.org/ns/activitystreams#Public',
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello there.'
+          }
+        }
+      })
+      const res = await fetch(created.object.id, { headers: { Authorization: `Bearer ${token2}` } })
+      assert.strictEqual(res.status, 403)
+    })
+  })
 })
