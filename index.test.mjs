@@ -5,6 +5,8 @@ import querystring from 'node:querystring'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
+const delay = t => new Promise(resolve => setTimeout(resolve, t))
+
 const startServer = (port = 3000) => {
   return new Promise((resolve, reject) => {
     const server = exec(`OPP_PORT=${port} node index.mjs`)
@@ -471,6 +473,7 @@ describe('Web API interface', () => {
       })
       const body = await res.text()
       const obj = JSON.parse(body)
+      await delay(1000)
       const inbox = await (await fetch(actor2.inbox.id, { headers: { Authorization: `Bearer ${token2}` } })).json()
       const inboxPage = await (await fetch(inbox.first.id, { headers: { Authorization: `Bearer ${token2}` } })).json()
       assert(inboxPage.orderedItems.some(act => act.id === obj.id))
@@ -492,6 +495,8 @@ describe('Web API interface', () => {
       })
       const body = await res.text()
       const obj = JSON.parse(body)
+      // Wait for delivery!
+      await delay(1000)
       const inbox = await (await fetch(actor1.inbox.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
       const inboxPage = await (await fetch(inbox.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
       assert(inboxPage.orderedItems.some(act => act.id === obj.id))

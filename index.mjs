@@ -12,6 +12,7 @@ import { expressjwt } from 'express-jwt'
 import jwt from 'jsonwebtoken'
 import { promisify } from 'util'
 import crypto from 'crypto'
+import winston from 'winston'
 
 // Configuration
 
@@ -20,6 +21,7 @@ const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
 const PORT = process.env.OPP_PORT || 3000
 const KEY = process.env.OPP_KEY || 'localhost.key'
 const CERT = process.env.OPP_CERT || 'localhost.crt'
+const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
 
@@ -131,6 +133,34 @@ class HTTPSignature {
     } else {
       return null
     }
+  }
+}
+
+// This delightfully simple queue class is
+// from https://dev.to/doctolib/using-promises-as-a-queue-co5
+
+class PromiseQueue {
+  last = Promise.resolve(true)
+  count = 0
+
+  add (operation, title = null) {
+    const id = this.count++
+    return new Promise((resolve, reject) => {
+      logger.debug(`Queuing operation ${id}`)
+      this.last = this.last
+        .then(() => {
+          logger.debug(`Starting operation ${id} ${title || ''}`)
+          return operation
+        })
+        .then((...args) => {
+          logger.debug(`Finished operation ${id} ${title || ''}`)
+          resolve(...args)
+        })
+        .catch((err) => {
+          logger.debug(`Failed operation ${id} ${title || ''}`)
+          reject(err)
+        })
+    })
   }
 }
 
@@ -495,9 +525,16 @@ class ActivityObject {
     const obj = await ao.json()
     if (!obj) {
       const id = await ao.id()
-      const res = await fetch(id, {
-        headers: { Accept: 'application/activity+json, application/ld+json, application/json' }
-      })
+      let res = null
+      logger.debug(`Fetching ${id} in pid ${process.pid}`)
+      try {
+        res = await fetch(id, {
+          headers: { Accept: 'application/activity+json, application/ld+json, application/json' }
+        })
+      } catch (err) {
+        console.error(err)
+        throw err
+      }
       if (res.status !== 200) {
         throw new Error(`Error fetching ${id}: ${res.status}`)
       } else {
@@ -736,11 +773,6 @@ class Activity extends ActivityObject {
     const activity = await this.json()
     const owner = await this.owner()
 
-    // Add it to the owner inbox!
-
-    const ownerInbox = new Collection(await owner.prop('inbox'))
-    await ownerInbox.prependData(activity)
-
     // Expand public, followers, other lists
 
     const expanded = (await Promise.all(addressees.map(async (addressee) => {
@@ -767,13 +799,14 @@ class Activity extends ActivityObject {
     const { privateKey } = await db.get('SELECT privateKey FROM user WHERE actorId = ?', [await owner.id()])
     const keyId = await toId(await owner.prop('publicKey'))
 
-    await Promise.all(expanded.map(async (addressee) => {
+    const sendTo = async (addressee) => {
       let other = new ActivityObject(addressee)
       if (await User.isUser(other)) {
         // Local delivery
         const inbox = new Collection(await other.prop('inbox'))
         await inbox.prependData(activity)
       } else {
+        logger.debug('Remote delivery to ', addressee)
         other = await ActivityObject.fromRemote(addressee)
         const inbox = await toId(await other.prop('inbox'))
         const date = new Date().toUTCString()
@@ -789,7 +822,11 @@ class Activity extends ActivityObject {
         })
         await res.text()
       }
-    }))
+    }
+
+    for (const addressee of expanded) {
+      pq.add(sendTo(addressee))
+    }
   }
 }
 
@@ -1052,11 +1089,35 @@ async function toId (value) {
 
 // Server
 
-// Initialize Express
-const app = express()
+const logger = winston.createLogger({
+  level: LOG_LEVEL,
+  format: winston.format.printf((info) => {
+    return `${(new Date()).toISOString()} ${info.level}: ${info.message}`
+  }),
+  transports: [
+    new winston.transports.Console()
+  ]
+})
 
 // Initialize SQLite
 const db = new Database(DATABASE)
+
+// Initialize PromiseQueue
+
+const pq = new PromiseQueue()
+pq.add(async () => {})
+
+// Initialize Express
+const app = express()
+
+app.use((req, res, next) => {
+  const oldEnd = res.end
+  res.end = function (...args) {
+    logger.info(`${res.statusCode} ${req.method} ${req.url}`)
+    oldEnd.apply(this, args)
+  }
+  next()
+})
 
 app.use(passport.initialize()) // Initialize Passport
 app.use(express.json({ type: ['application/json', 'application/activity+json'] })) // for parsing application/json
@@ -1260,7 +1321,9 @@ app.post('/:type/:id',
       await activity.apply(ownerJson, addressees)
       await activity.save(ownerId, addressees)
       await outbox.prepend(activity)
-      await activity.distribute(addressees)
+      const inbox = new Collection(await owner.prop('inbox'))
+      await inbox.prepend(activity)
+      pq.add(activity.distribute(addressees))
       const output = await activity.expanded()
       if (await activity.needsExpandedObject()) {
         const activityObject = new ActivityObject(await activity.prop('object'))
@@ -1317,6 +1380,20 @@ app.use((err, req, res, next) => {
     res.status(500)
     res.json({ message: err.message })
   }
+})
+
+process.on('unhandledRejection', (err) => {
+  console.log('Unhandled rejection')
+  console.error(err)
+})
+
+process.on('uncaughtException', (err) => {
+  console.log('Uncaught exception')
+  console.error(err)
+})
+
+process.on('exit', (code) => {
+  console.log(`About to exit with code: ${code}`)
 })
 
 // Start server with SSL
