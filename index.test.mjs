@@ -1102,7 +1102,7 @@ describe('Web API interface', () => {
         object: {
           type: 'Note',
           contentMap: {
-            en: 'Hello there!'
+            en: 'Hello world!'
           }
         }
       })
@@ -1124,6 +1124,43 @@ describe('Web API interface', () => {
       const repliesStream = await (await fetch(createNote.object.replies.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
       const repliesPage = await (await fetch(repliesStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
       assert(repliesPage.orderedItems.some(reply => reply.id === createReply.object.id))
+    })
+  })
+
+  describe('Announce activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createNote = null
+    let announce = null
+
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      createNote = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello world!'
+          }
+        }
+      })
+      announce = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Announce',
+        object: createNote.object.id
+      })
+    })
+
+    it("Announce appears in original's shares", async () => {
+      const sharesStream = await (await fetch(createNote.object.shares.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      const sharesPage = await (await fetch(sharesStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      assert(sharesPage.orderedItems.some(share => share.id === announce.id))
     })
   })
 })

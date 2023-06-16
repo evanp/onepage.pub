@@ -602,13 +602,16 @@ class Activity extends ActivityObject {
         const replies = await Collection.empty(actor, addressees,
           { summaryMap: { en: `Replies to ${summaryEn}` } })
         object.replies = await replies.id()
+        const shares = await Collection.empty(actor, addressees,
+          { summaryMap: { en: `Shares of ${summaryEn}` } })
+        object.shares = await shares.id()
         const saved = new ActivityObject(object)
         await saved.save(actor.id, addressees)
         activity.object = await saved.id()
         if (object.inReplyTo) {
           const parent = new ActivityObject(object.inReplyTo)
           const parentOwner = await parent.owner()
-          if (User.isUser(parentOwner)) {
+          if (await User.isUser(parentOwner)) {
             const replies = new Collection(await parent.prop('replies'))
             await replies.prepend(saved)
           }
@@ -737,7 +740,7 @@ class Activity extends ActivityObject {
         }
         await liked.prepend(object)
         const objectOwner = await object.owner()
-        if (User.isUser(objectOwner)) {
+        if (await User.isUser(objectOwner)) {
           let likes = null
           const likesProp = await object.prop('likes')
           if (likesProp) {
@@ -769,6 +772,21 @@ class Activity extends ActivityObject {
           await otherFollowers.remove(actorObj)
           const otherFollowing = new Collection(await other.prop('following'))
           await otherFollowing.remove(actorObj)
+        }
+        return activity
+      },
+      Announce: async () => {
+        logger.debug('Announce')
+        if (!await this.prop('object')) {
+          throw new createError.BadRequest('Nothing to announce')
+        }
+        const object = new ActivityObject(await this.prop('object'))
+        logger.debug(`Announce object: ${await object.id()}`)
+        const owner = await object.owner()
+        if (await User.isUser(owner)) {
+          logger.debug('Announce object is local')
+          const shares = new Collection(await object.prop('shares'))
+          await shares.prepend(this)
         }
         return activity
       }
