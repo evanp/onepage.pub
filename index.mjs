@@ -599,9 +599,20 @@ class Activity extends ActivityObject {
         const likes = await Collection.empty(actor, addressees,
           { summaryMap: { en: `Likes of ${summaryEn}` } })
         object.likes = await likes.id()
+        const replies = await Collection.empty(actor, addressees,
+          { summaryMap: { en: `Replies to ${summaryEn}` } })
+        object.replies = await replies.id()
         const saved = new ActivityObject(object)
         await saved.save(actor.id, addressees)
         activity.object = await saved.id()
+        if (object.inReplyTo) {
+          const parent = new ActivityObject(object.inReplyTo)
+          const parentOwner = await parent.owner()
+          if (User.isUser(parentOwner)) {
+            const replies = new Collection(await parent.prop('replies'))
+            await replies.prepend(saved)
+          }
+        }
         return activity
       },
       Update: async () => {

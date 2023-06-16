@@ -1083,4 +1083,47 @@ describe('Web API interface', () => {
       assert.strictEqual(res.status, 403)
     })
   })
+
+  describe('replies collection', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createNote = null
+    let createReply = null
+
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      createNote = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello there!'
+          }
+        }
+      })
+      createReply = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          inReplyTo: createNote.object.id,
+          type: 'Note',
+          contentMap: {
+            en: 'Hello back!'
+          }
+        }
+      })
+    })
+
+    it("reply appears in original's replies", async () => {
+      const repliesStream = await (await fetch(createNote.object.replies.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      const repliesPage = await (await fetch(repliesStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      assert(repliesPage.orderedItems.some(reply => reply.id === createReply.object.id))
+    })
+  })
 })
