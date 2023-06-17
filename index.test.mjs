@@ -1163,4 +1163,52 @@ describe('Web API interface', () => {
       assert(sharesPage.orderedItems.some(share => share.id === announce.id))
     })
   })
+
+  describe('Undo Like activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createNote = null
+    let like = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      createNote = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello world!'
+          }
+        }
+      })
+      like = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Like',
+        object: createNote.object.id
+      })
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Undo',
+        object: like.id
+      })
+    })
+
+    it("object is not in actor's liked", async () => {
+      const likedStream = await (await fetch(actor2.liked.id, { headers: { Authorization: `Bearer ${token2}` } })).json()
+      const likedPage = await (await fetch(likedStream.first.id, { headers: { Authorization: `Bearer ${token2}` } })).json()
+      assert(likedPage.orderedItems.every(obj => obj.id !== createNote.object.id))
+    })
+
+    it("like activity is not in object's likes", async () => {
+      const likesStream = await (await fetch(createNote.object.likes.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      const likesPage = await (await fetch(likesStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
+      assert(likesPage.orderedItems.every(act => act.id !== like.id))
+    })
+  })
 })

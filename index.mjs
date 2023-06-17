@@ -789,6 +789,33 @@ class Activity extends ActivityObject {
           await shares.prepend(this)
         }
         return activity
+      },
+      Undo: async () => {
+        if (!await this.prop('object')) {
+          throw new createError.BadRequest('Nothing to undo')
+        }
+        const object = new ActivityObject(await this.prop('object'))
+        const owner = await object.owner()
+        if (await owner.id() !== await actorObj.id()) {
+          throw new createError.BadRequest('Cannot undo an object you do not own')
+        }
+        switch (await object.type()) {
+          case 'Like': {
+            if (!await object.prop('object')) {
+              throw new createError.BadRequest('Nothing liked')
+            }
+            const likedObject = new ActivityObject(await object.prop('object'))
+            const liked = new Collection(await actorObj.prop('liked'))
+            await liked.remove(likedObject)
+            const likedObjectOwner = await likedObject.owner()
+            if (await User.isUser(likedObjectOwner)) {
+              const likes = new Collection(await likedObject.prop('likes'))
+              await likes.remove(object)
+            }
+            break
+          }
+        }
+        return activity
       }
     }
 
