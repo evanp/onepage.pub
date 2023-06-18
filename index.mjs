@@ -814,6 +814,15 @@ class Activity extends ActivityObject {
             }
             break
           }
+          case 'Block': {
+            if (!await object.prop('object')) {
+              throw new createError.BadRequest('Nothing liked')
+            }
+            const blockedObject = new ActivityObject(await object.prop('object'))
+            const blocked = new Collection(await actorObj.prop('blocked'))
+            await blocked.remove(blockedObject)
+            break
+          }
         }
         return activity
       }

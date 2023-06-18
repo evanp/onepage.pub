@@ -64,6 +64,32 @@ const doActivity = async (actor, token, activity) => {
   return await res.json()
 }
 
+const isInStream = async (collection, object, token = null) => {
+  const res = await fetch(collection.id, {
+    headers: {
+      'Content-Type': 'application/activity+json',
+      Authorization: token ? `Bearer ${token}` : null
+    }
+  })
+  const coll = await res.json()
+  for (let page = coll.first; page; page = page.next) {
+    const pageRes = await fetch(page.id, {
+      headers: {
+        'Content-Type': 'application/activity+json',
+        Authorization: token ? `Bearer ${token}` : null
+      }
+    })
+    const pageObj = await pageRes.json()
+    for (const prop of ['orderedItems', 'items']) {
+      if (pageObj[prop] &&
+        pageObj[prop].some(item => item.id === object.id)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 describe('Web API interface', () => {
   let child = null
 
@@ -1209,6 +1235,81 @@ describe('Web API interface', () => {
       const likesStream = await (await fetch(createNote.object.likes.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
       const likesPage = await (await fetch(likesStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
       assert(likesPage.orderedItems.every(act => act.id !== like.id))
+    })
+  })
+
+  describe('Undo Block activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let block = null
+    let createNote = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      block = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Block',
+        object: actor2.id
+      })
+      createNote = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello world!'
+          }
+        }
+      })
+      await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Undo',
+        object: block.id
+      })
+    })
+
+    it("other is not in actor's blocked", async () => {
+      const actorInBlocked = await isInStream(actor1.blocked, actor2, token1)
+      assert(!actorInBlocked)
+    })
+
+    it('other can fetch actor content', async () => {
+      const note = await fetch(createNote.object.id, { headers: { Authorization: `Bearer ${token2}` } })
+      assert(note.ok)
+    })
+
+    it('other can fetch actor profile', async () => {
+      const profile = await fetch(actor1.id, { headers: { Authorization: `Bearer ${token2}` } })
+      assert(profile.ok)
+    })
+
+    it('other can follow actor', async () => {
+      const follow = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Follow',
+        object: actor1.id
+      })
+      assert(follow.id)
+    })
+
+    it('other can reply to actor', async () => {
+      const reply = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        object: {
+          inReplyTo: createNote.object.id,
+          type: 'Note',
+          contentMap: {
+            en: 'Hello back!'
+          }
+        }
+      })
+      assert(reply.id)
     })
   })
 })
