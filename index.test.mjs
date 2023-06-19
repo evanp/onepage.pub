@@ -92,13 +92,16 @@ const isInStream = async (collection, object, token = null) => {
 
 describe('Web API interface', () => {
   let child = null
+  let remote = null
 
   before(async () => {
     child = await startServer(3000)
+    remote = await startServer(3001)
   })
 
   after(() => {
     child.kill()
+    remote.kill()
   })
 
   describe('Root object', () => {
@@ -469,18 +472,14 @@ describe('Web API interface', () => {
   })
 
   describe('Remote delivery', () => {
-    let remote = null
     let actor1 = null
     let token1 = null
     let actor2 = null
     let token2 = null
+
     before(async () => {
-      remote = await startServer(3001);
       [actor1, token1] = await registerActor(3000);
       [actor2, token2] = await registerActor(3001)
-    })
-    after(async () => {
-      remote.kill()
     })
 
     it('sends to remote addressees', async () => {
