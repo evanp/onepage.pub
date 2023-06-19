@@ -65,19 +65,19 @@ const doActivity = async (actor, token, activity) => {
 }
 
 const isInStream = async (collection, object, token = null) => {
+  const headers = {
+    'Content-Type': 'application/activity+json'
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
   const res = await fetch(collection.id, {
-    headers: {
-      'Content-Type': 'application/activity+json',
-      Authorization: token ? `Bearer ${token}` : null
-    }
+    headers
   })
   const coll = await res.json()
   for (let page = coll.first; page; page = page.next) {
     const pageRes = await fetch(page.id, {
-      headers: {
-        'Content-Type': 'application/activity+json',
-        Authorization: token ? `Bearer ${token}` : null
-      }
+      headers
     })
     const pageObj = await pageRes.json()
     for (const prop of ['orderedItems', 'items']) {
@@ -1310,6 +1310,71 @@ describe('Web API interface', () => {
         }
       })
       assert(reply.id)
+    })
+  })
+
+  describe('Undo Follow activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Follow',
+        object: actor2.id
+      })
+      await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Undo',
+        object: follow.id
+      })
+    })
+
+    it("other is not in actor's following", async () => {
+      assert(!await isInStream(actor1.following, actor2))
+    })
+
+    it("actor is not in other's followers", async () => {
+      assert(!await isInStream(actor2.followers, actor1))
+    })
+
+    it('actor does not receive public posts', async () => {
+      const createPublic = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello world!'
+          }
+        }
+      })
+      await delay(1000)
+      assert(!await isInStream(actor1.inbox, createPublic, token1))
+    })
+
+    it('actor does not receive followers-only posts', async () => {
+      const createFollowersOnly = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.followers.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello world!'
+          }
+        }
+      })
+      await delay(1000)
+      assert(!await isInStream(actor1.inbox, createFollowersOnly, token1))
     })
   })
 })

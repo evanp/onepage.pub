@@ -823,6 +823,20 @@ class Activity extends ActivityObject {
             await blocked.remove(blockedObject)
             break
           }
+          case 'Follow': {
+            if (!await object.prop('object')) {
+              throw new createError.BadRequest('Nothing liked')
+            }
+            const followedObject = new ActivityObject(await object.prop('object'))
+            const following = new Collection(await actorObj.prop('following'))
+            await following.remove(followedObject)
+            const followedObjectOwner = await followedObject.owner()
+            if (await User.isUser(followedObjectOwner)) {
+              const followers = new Collection(await followedObject.prop('followers'))
+              await followers.remove(actorObj)
+            }
+            break
+          }
         }
         return activity
       }
