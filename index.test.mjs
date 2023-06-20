@@ -201,6 +201,11 @@ describe('Web API interface', () => {
       assert(actorObj['@context'].includes('https://purl.archive.org/socialweb/blocked'))
     })
 
+    it('has the pending @context', () => {
+      assert(actorObj['@context'])
+      assert(actorObj['@context'].includes('https://purl.archive.org/socialweb/pending'))
+    })
+
     it('has the correct id', () => {
       assert.strictEqual(actorObj.id, actorId)
     })
