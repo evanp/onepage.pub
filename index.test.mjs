@@ -1743,4 +1743,37 @@ describe('onepage.pub', () => {
       assert(!(await isInStream(actor1.inbox, createFollowersOnly, token1)))
     })
   })
+
+  describe('Undo pending Follow activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Undo',
+        object: follow.id
+      })
+    })
+
+    it("other is not in actor's pendingFollowing", async () => {
+      assert(!(await isInStream(actor1.pendingFollowing, follow, token1)))
+    })
+
+    it("actor is not in other's pendingFollowers", async () => {
+      assert(!(await isInStream(actor2.pendingFollowers, follow, token2)))
+    })
+  })
 })

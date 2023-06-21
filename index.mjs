@@ -917,12 +917,22 @@ class Activity extends ActivityObject {
               throw new createError.BadRequest('Nothing liked')
             }
             const followedObject = new ActivityObject(await object.prop('object'))
-            const following = new Collection(await actorObj.prop('following'))
-            await following.remove(followedObject)
+            const pendingFollowing = new Collection(await actorObj.prop('pendingFollowing'))
+            if (await pendingFollowing.hasMember(await object.id())) {
+              await pendingFollowing.remove(object)
+            } else {
+              const following = new Collection(await actorObj.prop('following'))
+              await following.remove(followedObject)
+            }
             const followedObjectOwner = await followedObject.owner()
             if (await User.isUser(followedObjectOwner)) {
-              const followers = new Collection(await followedObject.prop('followers'))
-              await followers.remove(actorObj)
+              const pendingFollowers = new Collection(await followedObjectOwner.prop('pendingFollowers'))
+              if (await pendingFollowers.hasMember(await object.id())) {
+                await pendingFollowers.remove(object)
+              } else {
+                const followers = new Collection(await followedObject.prop('followers'))
+                await followers.remove(actorObj)
+              }
             }
             break
           }
