@@ -30,7 +30,8 @@ const CERT_DATA = fs.readFileSync(CERT)
 const AS_CONTEXT = 'https://www.w3.org/ns/activitystreams'
 const SEC_CONTEXT = 'https://w3id.org/security'
 const BLOCKED_CONTEXT = 'https://purl.archive.org/socialweb/blocked'
-const CONTEXT = [AS_CONTEXT, SEC_CONTEXT, BLOCKED_CONTEXT]
+const PENDING_CONTEXT = 'https://purl.archive.org/socialweb/pending'
+const CONTEXT = [AS_CONTEXT, SEC_CONTEXT, BLOCKED_CONTEXT, PENDING_CONTEXT]
 
 const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public'
 const PUBLIC_OBJ = { id: PUBLIC, nameMap: { en: 'Public' }, type: 'Collection' }
@@ -53,9 +54,18 @@ class Database {
     db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)')
     db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
 
-    this.run = promisify((...params) => { db.run(...params) })
-    this.get = promisify((...params) => { db.get(...params) })
-    this.all = promisify((...params) => { db.all(...params) })
+    this.run = promisify((...params) => {
+      logger.silly('run() SQL: ' + params[0], params.slice(1))
+      db.run(...params)
+    })
+    this.get = promisify((...params) => {
+      logger.silly('get() SQL: ' + params[0], params.slice(1))
+      db.get(...params)
+    })
+    this.all = promisify((...params) => {
+      logger.silly('all() SQL: ' + params[0], params.slice(1))
+      db.all(...params)
+    })
   }
 }
 
@@ -436,6 +446,8 @@ class ActivityObject {
     'origin',
     'outbox',
     'partOf',
+    'pendingFollowers',
+    'pendingFollowing',
     'prev',
     'preview',
     'publicKey',
@@ -563,23 +575,100 @@ class Activity extends ActivityObject {
     const actorObj = new ActivityObject(actor)
     const appliers = {
       Follow: async () => {
-        if (!activity.object) {
+        const objectProp = await this.prop('object')
+        if (!objectProp) {
           throw new createError.BadRequest('No object followed')
         }
-        const following = new Collection(actor.following)
-        if (await following.hasMember(activity.object)) {
+        const other = new ActivityObject(objectProp)
+        const otherId = await other.id()
+        const following = new Collection(await actorObj.prop('following'))
+        if (await following.hasMember(otherId)) {
           throw new createError.BadRequest('Already following')
         }
-        const other = new ActivityObject(activity.object)
-        await following.prepend(other)
-        if (await User.isUser(other)) {
+        const pendingFollowing = new Collection(await actorObj.prop('pendingFollowing'))
+        if (await pendingFollowing.find(async (act) =>
+          await (new ActivityObject(await act.prop('object'))).id() === otherId)) {
+          throw new createError.BadRequest('Already pending following')
+        }
+        let pendingFollowers = null
+        const isUser = await User.isUser(other)
+        if (isUser) {
+          const actorId = await actorObj.id()
           const followers = new Collection(await other.prop('followers'))
-          if (await followers.hasMember(actor.id)) {
+          if (await followers.hasMember(actorId)) {
             throw new createError.BadRequest('Already followed')
           }
-          await followers.prependData(actor)
-        } else {
-          // Figure out how to follow this thing
+          pendingFollowers = new Collection(await other.prop('pendingFollowers'))
+          if (await pendingFollowers.find(async (act) =>
+            await (new ActivityObject(await act.prop('object'))).id() === actorId)) {
+            throw new createError.BadRequest('Already pending follower')
+          }
+        }
+        await pendingFollowing.prepend(this)
+        if (isUser) {
+          await pendingFollowers.prepend(this)
+        }
+        return activity
+      },
+      Accept: async () => {
+        const objectProp = await this.prop('object')
+        if (!objectProp) {
+          throw new createError.BadRequest('No object followed')
+        }
+        const accepted = new ActivityObject(objectProp)
+        switch (await accepted.type()) {
+          case 'Follow': {
+            const pendingFollowers = new Collection(await actorObj.prop('pendingFollowers'))
+            if (!await pendingFollowers.hasMember(await accepted.id())) {
+              throw new createError.BadRequest('Not awaiting acceptance for follow')
+            }
+            const other = new ActivityObject(await accepted.prop('actor'))
+            const isUser = await User.isUser(other)
+            let pendingFollowing = null
+            if (isUser) {
+              pendingFollowing = new Collection(await other.prop('pendingFollowing'))
+              if (!await pendingFollowing.hasMember(await accepted.id())) {
+                throw new createError.BadRequest('Not awaiting acceptance for follow')
+              }
+            }
+            await pendingFollowers.remove(accepted)
+            const followers = new Collection(await actorObj.prop('followers'))
+            await followers.prepend(other)
+            if (isUser) {
+              await pendingFollowing.remove(accepted)
+              const following = new Collection(await other.prop('following'))
+              await following.prepend(actorObj)
+            }
+          }
+        }
+        return activity
+      },
+      Reject: async () => {
+        const objectProp = await this.prop('object')
+        if (!objectProp) {
+          throw new createError.BadRequest('No object followed')
+        }
+        const rejected = new ActivityObject(objectProp)
+        switch (await rejected.type()) {
+          case 'Follow': {
+            const pendingFollowers = new Collection(await actorObj.prop('pendingFollowers'))
+            if (!await pendingFollowers.hasMember(await rejected.id())) {
+              throw new createError.BadRequest('Not awaiting acceptance for follow')
+            }
+            const other = new ActivityObject(await rejected.prop('actor'))
+            const isUser = await User.isUser(other)
+            let pendingFollowing = null
+            if (isUser) {
+              pendingFollowing = new Collection(await other.prop('pendingFollowing'))
+              if (!await pendingFollowing.hasMember(await rejected.id())) {
+                throw new createError.BadRequest('Not awaiting acceptance for follow')
+              }
+            }
+            await pendingFollowers.remove(rejected)
+            if (isUser) {
+              await pendingFollowing.remove(rejected)
+            }
+          }
         }
         return activity
       },
@@ -1055,6 +1144,26 @@ class Collection extends ActivityObject {
     return coll
   }
 
+  async find (test) {
+    let ref = this.prop('first')
+    while (ref) {
+      const page = new ActivityObject(ref)
+      if (!await page.isCollectionPage()) {
+        break
+      }
+      const items = (await page.prop('items') || await page.prop('orderedItems') || [])
+      for (const item of items) {
+        const itemObj = new ActivityObject(item)
+        const result = await test(itemObj)
+        if (result) {
+          return result
+        }
+      }
+      ref = await page.prop('next')
+    }
+    return false
+  }
+
   defaultType () {
     return 'OrderedCollection'
   }
@@ -1117,9 +1226,11 @@ class User {
       const coll = await Collection.empty(this.actorId, [PUBLIC], { nameMap: { en: `${this.username}'s ${prop}` } })
       data[prop] = await coll.id()
     }
-    // blocked is a special case because it's private
-    const coll = await Collection.empty(this.actorId, [], { nameMap: { en: `${this.username}'s blocked list` } })
-    data.blocked = await coll.id()
+    const privProps = ['blocked', 'pendingFollowers', 'pendingFollowing']
+    for (const prop of privProps) {
+      const coll = await Collection.empty(this.actorId, [], { nameMap: { en: `${this.username}'s ${prop}` } })
+      data[prop] = await coll.id()
+    }
     const { publicKey, privateKey } = await generateKeyPair(
       'rsa',
       {

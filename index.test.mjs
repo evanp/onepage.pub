@@ -5,7 +5,7 @@ import querystring from 'node:querystring'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
-const delay = t => new Promise(resolve => setTimeout(resolve, t))
+const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
 const startServer = (port = 3000) => {
   return new Promise((resolve, reject) => {
@@ -17,7 +17,9 @@ const startServer = (port = 3000) => {
       }
       console.log(`SERVER ${port}: ${data.toString()}`)
     })
-    server.stderr.on('data', (data) => { console.log(`SERVER ${port} ERROR: ${data.toString()}`) })
+    server.stderr.on('data', (data) => {
+      console.log(`SERVER ${port} ERROR: ${data.toString()}`)
+    })
   })
 }
 
@@ -30,7 +32,11 @@ const registerUser = (() => {
     const reg = await fetch(`https://localhost:${port}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: querystring.stringify({ username, password, confirmation: password })
+      body: querystring.stringify({
+        username,
+        password,
+        confirmation: password
+      })
     })
     const text = await reg.text()
     const token = text.match(/<span class="token">(.*?)<\/span>/)[1]
@@ -40,7 +46,9 @@ const registerUser = (() => {
 
 const registerActor = async (port = 3000) => {
   const [username, token] = await registerUser(port)
-  const res = await fetch(`https://localhost:${port}/.well-known/webfinger?resource=acct:${username}@localhost:${port}`)
+  const res = await fetch(
+    `https://localhost:${port}/.well-known/webfinger?resource=acct:${username}@localhost:${port}`
+  )
   const obj = await res.json()
   const actorId = obj.links[0].href
   const actorRes = await fetch(actorId)
@@ -81,8 +89,10 @@ const isInStream = async (collection, object, token = null) => {
     })
     const pageObj = await pageRes.json()
     for (const prop of ['orderedItems', 'items']) {
-      if (pageObj[prop] &&
-        pageObj[prop].some(item => item.id === object.id)) {
+      if (
+        pageObj[prop] &&
+        pageObj[prop].some((item) => item.id === object.id)
+      ) {
         return true
       }
     }
@@ -90,7 +100,7 @@ const isInStream = async (collection, object, token = null) => {
   return false
 }
 
-describe('Web API interface', () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
 
@@ -119,7 +129,10 @@ describe('Web API interface', () => {
       const res = await fetch('https://localhost:3000/register')
       const body = await res.text()
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers.get('Content-Type'), 'text/html; charset=utf-8')
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'text/html; charset=utf-8'
+      )
       assert(body.includes('<form'))
       assert(body.includes('name="username"'))
       assert(body.includes('name="password"'))
@@ -132,11 +145,22 @@ describe('Web API interface', () => {
       const res = await fetch('https://localhost:3000/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: querystring.stringify({ username, password, confirmation: password })
+        body: querystring.stringify({
+          username,
+          password,
+          confirmation: password
+        })
       })
       const body = await res.text()
-      assert.strictEqual(res.status, 200, `Bad status code ${res.status}: ${body}`)
-      assert.strictEqual(res.headers.get('Content-Type'), 'text/html; charset=utf-8')
+      assert.strictEqual(
+        res.status,
+        200,
+        `Bad status code ${res.status}: ${body}`
+      )
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'text/html; charset=utf-8'
+      )
       assert(body.includes('Registered'))
       assert(body.includes(username))
       assert(body.match('<span class="token">.+?</span>'))
@@ -149,13 +173,18 @@ describe('Web API interface', () => {
       [username] = await registerUser()
     })
     it('can get information about a user', async () => {
-      const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
+      const res = await fetch(
+        `https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`
+      )
       if (res.status !== 200) {
         const body = await res.text()
         console.log(body)
       }
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers.get('Content-Type'), 'application/jrd+json; charset=utf-8')
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/jrd+json; charset=utf-8'
+      )
       const obj = await res.json()
       assert.strictEqual(obj.subject, `acct:${username}@localhost:3000`)
       assert.strictEqual(obj.links[0].rel, 'self')
@@ -173,37 +202,60 @@ describe('Web API interface', () => {
 
     before(async () => {
       [username] = await registerUser()
-      const res = await fetch(`https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`)
+      const res = await fetch(
+        `https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`
+      )
       const obj = await res.json()
       actorId = obj.links[0].href
       actorRes = await fetch(actorId)
       actorBody = await actorRes.text()
-      actorObj = (actorRes.status === 200) ? JSON.parse(actorBody) : null
+      actorObj = actorRes.status === 200 ? JSON.parse(actorBody) : null
     })
 
     it('can fetch the actor endpoint', async () => {
-      assert.strictEqual(actorRes.status, 200, `Bad status code ${actorRes.status}: ${actorBody}`)
-      assert.strictEqual(actorRes.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+      assert.strictEqual(
+        actorRes.status,
+        200,
+        `Bad status code ${actorRes.status}: ${actorBody}`
+      )
+      assert.strictEqual(
+        actorRes.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
     })
 
     it('has the as2 @context', () => {
       assert(actorObj['@context'])
-      assert.notEqual(-1, actorObj['@context'].indexOf('https://www.w3.org/ns/activitystreams'))
+      assert.notEqual(
+        -1,
+        actorObj['@context'].indexOf('https://www.w3.org/ns/activitystreams')
+      )
     })
 
     it('has the security @context', () => {
       assert(actorObj['@context'])
-      assert.notEqual(-1, actorObj['@context'].indexOf('https://w3id.org/security'))
+      assert.notEqual(
+        -1,
+        actorObj['@context'].indexOf('https://w3id.org/security')
+      )
     })
 
     it('has the blocked @context', () => {
       assert(actorObj['@context'])
-      assert(actorObj['@context'].includes('https://purl.archive.org/socialweb/blocked'))
+      assert(
+        actorObj['@context'].includes(
+          'https://purl.archive.org/socialweb/blocked'
+        )
+      )
     })
 
     it('has the pending @context', () => {
       assert(actorObj['@context'])
-      assert(actorObj['@context'].includes('https://purl.archive.org/socialweb/pending'))
+      assert(
+        actorObj['@context'].includes(
+          'https://purl.archive.org/socialweb/pending'
+        )
+      )
     })
 
     it('has the correct id', () => {
@@ -221,37 +273,81 @@ describe('Web API interface', () => {
     it('has a valid inbox', () => {
       assert.equal('object', typeof actorObj.inbox)
       assert.equal('string', typeof actorObj.inbox.id)
-      assert(actorObj.inbox.id.startsWith('https://localhost:3000/orderedcollection/'))
+      assert(
+        actorObj.inbox.id.startsWith(
+          'https://localhost:3000/orderedcollection/'
+        )
+      )
     })
 
     it('has a valid outbox', () => {
       assert.equal('object', typeof actorObj.outbox)
       assert.equal('string', typeof actorObj.outbox.id)
-      assert(actorObj.outbox.id.startsWith('https://localhost:3000/orderedcollection/'))
+      assert(
+        actorObj.outbox.id.startsWith(
+          'https://localhost:3000/orderedcollection/'
+        )
+      )
     })
 
     it('has a valid followers', () => {
       assert.equal('object', typeof actorObj.followers)
       assert.equal('string', typeof actorObj.followers.id)
-      assert(actorObj.followers.id.startsWith('https://localhost:3000/orderedcollection/'))
+      assert(
+        actorObj.followers.id.startsWith(
+          'https://localhost:3000/orderedcollection/'
+        )
+      )
     })
 
     it('has a valid following', () => {
       assert.equal('object', typeof actorObj.following)
       assert.equal('string', typeof actorObj.following.id)
-      assert(actorObj.following.id.startsWith('https://localhost:3000/orderedcollection/'))
+      assert(
+        actorObj.following.id.startsWith(
+          'https://localhost:3000/orderedcollection/'
+        )
+      )
     })
 
     it('has a valid liked', () => {
       assert.equal('object', typeof actorObj.liked)
       assert.equal('string', typeof actorObj.liked.id)
-      assert(actorObj.liked.id.startsWith('https://localhost:3000/orderedcollection/'))
+      assert(
+        actorObj.liked.id.startsWith(
+          'https://localhost:3000/orderedcollection/'
+        )
+      )
     })
 
     it('has a blocked property', () => {
       assert.equal('object', typeof actorObj.blocked)
       assert.equal('string', typeof actorObj.blocked.id)
-      assert(actorObj.blocked.id.startsWith('https://localhost:3000/orderedcollection/'))
+      assert(
+        actorObj.blocked.id.startsWith(
+          'https://localhost:3000/orderedcollection/'
+        )
+      )
+    })
+
+    it('has a pendingFollowers property', () => {
+      assert.equal('object', typeof actorObj.pendingFollowers)
+      assert.equal('string', typeof actorObj.pendingFollowers.id)
+      assert(
+        actorObj.blocked.id.startsWith(
+          'https://localhost:3000/orderedcollection/'
+        )
+      )
+    })
+
+    it('has a pendingFollowing property', () => {
+      assert.equal('object', typeof actorObj.pendingFollowing)
+      assert.equal('string', typeof actorObj.pendingFollowing.id)
+      assert(
+        actorObj.blocked.id.startsWith(
+          'https://localhost:3000/orderedcollection/'
+        )
+      )
     })
 
     it('has a public key', () => {
@@ -277,62 +373,87 @@ describe('Web API interface', () => {
     it('can get actor inbox', async () => {
       const res = await fetch(actor.inbox.id)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.inbox.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
       assert(obj.first)
-      assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
+      assert(
+        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+      )
     })
     it('can get actor outbox', async () => {
       const res = await fetch(actor.outbox.id)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.outbox.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
       assert(obj.first)
-      assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
+      assert(
+        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+      )
     })
     it('can get actor followers', async () => {
       const res = await fetch(actor.followers.id)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.followers.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
       assert(obj.first)
-      assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
+      assert(
+        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+      )
     })
     it('can get actor following', async () => {
       const res = await fetch(actor.following.id)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.following.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
       assert(obj.first)
-      assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
+      assert(
+        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+      )
     })
     it('can get actor liked', async () => {
       const res = await fetch(actor.liked.id)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.liked.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
       assert(obj.first)
-      assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
+      assert(
+        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+      )
     })
 
     it('cannot get actor blocked without authentication', async () => {
@@ -356,16 +477,94 @@ describe('Web API interface', () => {
         }
       })
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.blocked.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
       assert(obj.first)
-      assert(obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/'))
+      assert(
+        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+      )
+    })
+
+    it('cannot get actor pendingFollowers without authentication', async () => {
+      const res = await fetch(actor.pendingFollowers.id)
+      assert.strictEqual(res.status, 401)
+    })
+
+    it('cannot get actor pendingFollowers with other user authentication', async () => {
+      const res = await fetch(actor.pendingFollowers.id, {
+        headers: {
+          Authorization: `Bearer ${token2}`
+        }
+      })
+      assert.strictEqual(res.status, 403)
+    })
+
+    it('can get actor pendingFollowers', async () => {
+      const res = await fetch(actor.pendingFollowers.id, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
+      const obj = await res.json()
+      assert.strictEqual(obj.id, actor.pendingFollowers.id)
+      assert.strictEqual(obj.type, 'OrderedCollection')
+      assert.strictEqual(obj.totalItems, 0)
+      assert(obj.nameMap?.en)
+      assert(obj.first)
+      assert(
+        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+      )
+    })
+
+    it('cannot get actor pendingFollowing without authentication', async () => {
+      const res = await fetch(actor.pendingFollowing.id)
+      assert.strictEqual(res.status, 401)
+    })
+
+    it('cannot get actor pendingFollowing with other user authentication', async () => {
+      const res = await fetch(actor.pendingFollowing.id, {
+        headers: {
+          Authorization: `Bearer ${token2}`
+        }
+      })
+      assert.strictEqual(res.status, 403)
+    })
+
+    it('can get actor pendingFollowing', async () => {
+      const res = await fetch(actor.pendingFollowing.id, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
+      const obj = await res.json()
+      assert.strictEqual(obj.id, actor.pendingFollowing.id)
+      assert.strictEqual(obj.type, 'OrderedCollection')
+      assert.strictEqual(obj.totalItems, 0)
+      assert(obj.nameMap?.en)
+      assert(obj.first)
+      assert(
+        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+      )
     })
   })
+
   describe('Post to outbox', () => {
     let actor = null
     let token = null
@@ -393,8 +592,15 @@ describe('Web API interface', () => {
       obj = JSON.parse(body)
     })
     it('has the correct HTTP response', async () => {
-      assert.strictEqual(res.status, 200, `Bad status code ${res.status}: ${body}`)
-      assert.strictEqual(res.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
+      assert.strictEqual(
+        res.status,
+        200,
+        `Bad status code ${res.status}: ${body}`
+      )
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
     })
 
     it('has an object id', async () => {
@@ -412,13 +618,13 @@ describe('Web API interface', () => {
     it("appears in the actor's inbox", async () => {
       const inbox = await (await fetch(actor.inbox.id)).json()
       const inboxPage = await (await fetch(inbox.first.id)).json()
-      assert(inboxPage.orderedItems.some(act => act.id === obj.id))
+      assert(inboxPage.orderedItems.some((act) => act.id === obj.id))
     })
 
     it("appears in the actor's outbox", async () => {
       const outbox = await (await fetch(actor.outbox.id)).json()
       const outboxPage = await (await fetch(outbox.first.id)).json()
-      assert(outboxPage.orderedItems.some(act => act.id === obj.id))
+      assert(outboxPage.orderedItems.some((act) => act.id === obj.id))
     })
   })
 
@@ -448,31 +654,39 @@ describe('Web API interface', () => {
     })
 
     it('author can see own private activity', async () => {
-      const outbox = await (await fetch(actor1.outbox.id, {
-        headers: {
-          Authorization: `Bearer ${token1}`
-        }
-      })).json()
-      const outboxPage = await (await fetch(outbox.first.id, {
-        headers: {
-          Authorization: `Bearer ${token1}`
-        }
-      })).json()
-      assert(outboxPage.orderedItems.some(val => val.id === activity.id))
+      const outbox = await (
+        await fetch(actor1.outbox.id, {
+          headers: {
+            Authorization: `Bearer ${token1}`
+          }
+        })
+      ).json()
+      const outboxPage = await (
+        await fetch(outbox.first.id, {
+          headers: {
+            Authorization: `Bearer ${token1}`
+          }
+        })
+      ).json()
+      assert(outboxPage.orderedItems.some((val) => val.id === activity.id))
     })
 
     it('others cannot see a private activity', async () => {
-      const outbox = await (await fetch(actor1.outbox.id, {
-        headers: {
-          Authorization: `Bearer ${token2}`
-        }
-      })).json()
-      const outboxPage = await (await fetch(outbox.first.id, {
-        headers: {
-          Authorization: `Bearer ${token2}`
-        }
-      })).json()
-      assert(outboxPage.orderedItems.every(val => val.id !== activity.id))
+      const outbox = await (
+        await fetch(actor1.outbox.id, {
+          headers: {
+            Authorization: `Bearer ${token2}`
+          }
+        })
+      ).json()
+      const outboxPage = await (
+        await fetch(outbox.first.id, {
+          headers: {
+            Authorization: `Bearer ${token2}`
+          }
+        })
+      ).json()
+      assert(outboxPage.orderedItems.every((val) => val.id !== activity.id))
     })
   })
 
@@ -504,9 +718,17 @@ describe('Web API interface', () => {
       const body = await res.text()
       const obj = JSON.parse(body)
       await delay(1000)
-      const inbox = await (await fetch(actor2.inbox.id, { headers: { Authorization: `Bearer ${token2}` } })).json()
-      const inboxPage = await (await fetch(inbox.first.id, { headers: { Authorization: `Bearer ${token2}` } })).json()
-      assert(inboxPage.orderedItems.some(act => act.id === obj.id))
+      const inbox = await (
+        await fetch(actor2.inbox.id, {
+          headers: { Authorization: `Bearer ${token2}` }
+        })
+      ).json()
+      const inboxPage = await (
+        await fetch(inbox.first.id, {
+          headers: { Authorization: `Bearer ${token2}` }
+        })
+      ).json()
+      assert(inboxPage.orderedItems.some((act) => act.id === obj.id))
     })
 
     it('receives from remote senders', async () => {
@@ -527,9 +749,17 @@ describe('Web API interface', () => {
       const obj = JSON.parse(body)
       // Wait for delivery!
       await delay(1000)
-      const inbox = await (await fetch(actor1.inbox.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      const inboxPage = await (await fetch(inbox.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      assert(inboxPage.orderedItems.some(act => act.id === obj.id))
+      const inbox = await (
+        await fetch(actor1.inbox.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      const inboxPage = await (
+        await fetch(inbox.first.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      assert(inboxPage.orderedItems.some((act) => act.id === obj.id))
     })
   })
 
@@ -538,103 +768,151 @@ describe('Web API interface', () => {
     let token1 = null
     let actor2 = null
     let token2 = null
-    let activity = null
-    let obj = null
+    let follow = null
     before(async () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
-      activity = {
+      follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
         type: 'Follow',
-        object: actor2.id,
-        to: ['https://www.w3.org/ns/activitystreams#Public', actor2.id]
-      }
-      const res = await fetch(actor1.outbox.id, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
-          Authorization: `Bearer ${token1}`
-        },
-        body: JSON.stringify(activity)
+        object: actor2.id
       })
-      const body = await res.text()
-      obj = JSON.parse(body)
     })
 
-    it("appears in the actor's inbox", async () => {
-      const inbox1 = await (await fetch(actor1.inbox.id)).json()
-      const inboxPage1 = await (await fetch(inbox1.first.id)).json()
-      assert(inboxPage1.orderedItems.some(act => act.id === obj.id))
+    it("appears in the actor's pending following", async () => {
+      assert(await isInStream(actor1.pendingFollowing, follow, token1))
     })
 
-    it("appears in the actor's outbox", async () => {
-      const outbox1 = await (await fetch(actor1.outbox.id)).json()
-      const outboxPage1 = await (await fetch(outbox1.first.id)).json()
-      assert(outboxPage1.orderedItems.some(act => act.id === obj.id))
+    it("appears in the other's pending followers", async () => {
+      assert(await isInStream(actor2.pendingFollowers, follow, token2))
     })
 
-    it("appears in the other's inbox", async () => {
-      const inbox2 = await (await fetch(actor2.inbox.id)).json()
-      const inboxPage2 = await (await fetch(inbox2.first.id)).json()
-      assert(inboxPage2.orderedItems.some(act => act.id === obj.id))
+    it("does not put the actor in the other's followers", async () => {
+      assert(!(await isInStream(actor2.followers, actor1, token2)))
+    })
+
+    it("does not put the other in the actor's following", async () => {
+      assert(!(await isInStream(actor1.following, actor2, token1)))
+    })
+  })
+
+  describe('Accept Follow Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Accept',
+        object: follow.id
+      })
     })
 
     it("puts the actor in the other's followers", async () => {
-      const followers2 = await (await fetch(actor2.followers.id)).json()
-      const followersPage2 = await (await fetch(followers2.first.id)).json()
-      assert(followersPage2.orderedItems.some(val => val.id === actor1.id))
+      assert(await isInStream(actor2.followers, actor1, token2))
     })
 
     it("puts the other in the actor's following", async () => {
-      const following1 = await (await fetch(actor1.following.id)).json()
-      const followingPage1 = await (await fetch(following1.first.id)).json()
-      assert(followingPage1.orderedItems.some(val => val.id === actor2.id))
+      assert(await isInStream(actor1.following, actor2, token1))
     })
 
     it('distributes to the actor when the other posts to followers', async () => {
-      const activity2 = {
+      const createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        type: 'IntransitiveActivity',
-        to: actor2.followers
-      }
-      const res2 = await fetch(actor2.outbox.id, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
-          Authorization: `Bearer ${token2}`
-        },
-        body: JSON.stringify(activity2)
+        to: actor2.followers.id,
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, world!'
+        }
       })
-      const body2 = await res2.text()
-      assert.strictEqual(res2.status, 200, `Bad status code ${res2.status}: ${body2}`)
-      assert.strictEqual(res2.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
-      const obj2 = JSON.parse(body2)
-      const inbox1 = await (await fetch(actor1.inbox.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      const inboxPage1 = await (await fetch(inbox1.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      assert(inboxPage1.orderedItems.some(val => val.id === obj2.id))
+      assert(await isInStream(actor1.inbox, createNote, token1))
     })
 
     it('distributes to the actor when the other posts to public', async () => {
-      const activity2 = {
+      const createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        type: 'IntransitiveActivity',
-        to: 'https://www.w3.org/ns/activitystreams#Public'
-      }
-      const res2 = await fetch(actor2.outbox.id, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
-          Authorization: `Bearer ${token2}`
-        },
-        body: JSON.stringify(activity2)
+        to: 'https://www.w3.org/ns/activitystreams#Public',
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, world!'
+        }
       })
-      const body2 = await res2.text()
-      assert.strictEqual(res2.status, 200, `Bad status code ${res2.status}: ${body2}`)
-      assert.strictEqual(res2.headers.get('Content-Type'), 'application/activity+json; charset=utf-8')
-      const obj2 = JSON.parse(body2)
-      const inbox1 = await (await fetch(actor1.inbox.id)).json()
-      const inboxPage1 = await (await fetch(inbox1.first.id)).json()
-      assert(inboxPage1.orderedItems.some(val => val.id === obj2.id))
+      assert(await isInStream(actor1.inbox, createNote, token1))
+    })
+  })
+
+  describe('Reject Follow Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Reject',
+        object: follow.id
+      })
+    })
+
+    it("does not appear in the actor's pending following", async () => {
+      assert(!await isInStream(actor1.pendingFollowing, follow, token1))
+    })
+
+    it("does not appear in the other's pending followers", async () => {
+      assert(!await isInStream(actor2.pendingFollowers, follow, token2))
+    })
+
+    it("does not put the actor in the other's followers", async () => {
+      assert(!(await isInStream(actor2.followers, actor1, token2)))
+    })
+
+    it("does not put the other in the actor's following", async () => {
+      assert(!(await isInStream(actor1.following, actor2, token1)))
+    })
+
+    it('does not distribute to the actor when the other posts to followers', async () => {
+      const createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.followers.id,
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, world!'
+        }
+      })
+      assert(!(await isInStream(actor1.inbox, createNote, token1)))
+    })
+
+    it('does not distribute to the actor when the other posts to public', async () => {
+      const createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: 'https://www.w3.org/ns/activitystreams#Public',
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, world!'
+        }
+      })
+      assert(!(await isInStream(actor1.inbox, createNote, token1)))
     })
   })
 
@@ -871,7 +1149,7 @@ describe('Web API interface', () => {
         headers: { Authorization: `Bearer ${token1}` }
       })
       const fetched = await res.json()
-      assert(fetched.items.some(item => item.id === createdNote.object.id))
+      assert(fetched.items.some((item) => item.id === createdNote.object.id))
     })
   })
 
@@ -938,14 +1216,14 @@ describe('Web API interface', () => {
         headers: { Authorization: `Bearer ${token1}` }
       })
       const fetched = await res.json()
-      assert(fetched.items.every(item => item.id !== createdNote1.object.id))
+      assert(fetched.items.every((item) => item.id !== createdNote1.object.id))
     })
     it('leaves other objects in the collection', async () => {
       const res = await fetch(createdCollection.object.id, {
         headers: { Authorization: `Bearer ${token1}` }
       })
       const fetched = await res.json()
-      assert(fetched.items.some(item => item.id === createdNote2.object.id))
+      assert(fetched.items.some((item) => item.id === createdNote2.object.id))
     })
   })
 
@@ -982,7 +1260,9 @@ describe('Web API interface', () => {
       const note1 = await (await fetch(createdNote1.object.id)).json()
       const likes = await (await fetch(note1.likes.id)).json()
       const likesPage = await (await fetch(likes.first.id)).json()
-      assert(likesPage.orderedItems.some(activity => activity.id === liked.id))
+      assert(
+        likesPage.orderedItems.some((activity) => activity.id === liked.id)
+      )
     })
 
     it("object's likes count is 1", async () => {
@@ -994,7 +1274,9 @@ describe('Web API interface', () => {
     it("appears in the liking actor's liked stream", async () => {
       const likedStream = await (await fetch(actor2.liked.id)).json()
       const likedPage = await (await fetch(likedStream.first.id)).json()
-      assert(likedPage.orderedItems.some(obj => obj.id === createdNote1.object.id))
+      assert(
+        likedPage.orderedItems.some((obj) => obj.id === createdNote1.object.id)
+      )
     })
 
     it("actor's liked count is 1", async () => {
@@ -1025,21 +1307,37 @@ describe('Web API interface', () => {
     })
 
     it("other appears in the actor's blocked", async () => {
-      const blockedStream = await (await fetch(actor1.blocked.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      const blockedPage = await (await fetch(blockedStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      assert(blockedPage.orderedItems.some(actor => actor.id === actor2.id))
+      const blockedStream = await (
+        await fetch(actor1.blocked.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      const blockedPage = await (
+        await fetch(blockedStream.first.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      assert(blockedPage.orderedItems.some((actor) => actor.id === actor2.id))
     })
 
     it("other does not appear in the actor's followers", async () => {
       const followersStream = await (await fetch(actor1.followers.id)).json()
-      const followersPage = await (await fetch(followersStream.first.id)).json()
-      assert(followersPage.orderedItems.every(actor => actor.id !== actor2.id))
+      const followersPage = await (
+        await fetch(followersStream.first.id)
+      ).json()
+      assert(
+        followersPage.orderedItems.every((actor) => actor.id !== actor2.id)
+      )
     })
 
     it("actor does not appear in the other's following", async () => {
       const followingStream = await (await fetch(actor2.following.id)).json()
-      const followingPage = await (await fetch(followingStream.first.id)).json()
-      assert(followingPage.orderedItems.every(actor => actor.id !== actor1.id))
+      const followingPage = await (
+        await fetch(followingStream.first.id)
+      ).json()
+      assert(
+        followingPage.orderedItems.every((actor) => actor.id !== actor1.id)
+      )
     })
 
     it("other can't send to actor", async () => {
@@ -1054,9 +1352,19 @@ describe('Web API interface', () => {
           }
         }
       })
-      const inboxStream = await (await fetch(actor1.inbox.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      const inboxPage = await (await fetch(inboxStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      assert(inboxPage.orderedItems.every(obj => obj.id !== created.object.id))
+      const inboxStream = await (
+        await fetch(actor1.inbox.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      const inboxPage = await (
+        await fetch(inboxStream.first.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      assert(
+        inboxPage.orderedItems.every((obj) => obj.id !== created.object.id)
+      )
     })
 
     it("other can't like actor note", async () => {
@@ -1088,12 +1396,16 @@ describe('Web API interface', () => {
     })
 
     it("other can't read actor profile", async () => {
-      const res = await fetch(actor1.id, { headers: { Authorization: `Bearer ${token2}` } })
+      const res = await fetch(actor1.id, {
+        headers: { Authorization: `Bearer ${token2}` }
+      })
       assert.strictEqual(res.status, 403)
     })
 
     it("other can't read actor outbox", async () => {
-      const res = await fetch(actor1.outbox.id, { headers: { Authorization: `Bearer ${token2}` } })
+      const res = await fetch(actor1.outbox.id, {
+        headers: { Authorization: `Bearer ${token2}` }
+      })
       assert.strictEqual(res.status, 403)
     })
 
@@ -1109,7 +1421,9 @@ describe('Web API interface', () => {
           }
         }
       })
-      const res = await fetch(created.object.id, { headers: { Authorization: `Bearer ${token2}` } })
+      const res = await fetch(created.object.id, {
+        headers: { Authorization: `Bearer ${token2}` }
+      })
       assert.strictEqual(res.status, 403)
     })
   })
@@ -1151,9 +1465,21 @@ describe('Web API interface', () => {
     })
 
     it("reply appears in original's replies", async () => {
-      const repliesStream = await (await fetch(createNote.object.replies.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      const repliesPage = await (await fetch(repliesStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      assert(repliesPage.orderedItems.some(reply => reply.id === createReply.object.id))
+      const repliesStream = await (
+        await fetch(createNote.object.replies.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      const repliesPage = await (
+        await fetch(repliesStream.first.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      assert(
+        repliesPage.orderedItems.some(
+          (reply) => reply.id === createReply.object.id
+        )
+      )
     })
   })
 
@@ -1188,9 +1514,17 @@ describe('Web API interface', () => {
     })
 
     it("Announce appears in original's shares", async () => {
-      const sharesStream = await (await fetch(createNote.object.shares.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      const sharesPage = await (await fetch(sharesStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      assert(sharesPage.orderedItems.some(share => share.id === announce.id))
+      const sharesStream = await (
+        await fetch(createNote.object.shares.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      const sharesPage = await (
+        await fetch(sharesStream.first.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      assert(sharesPage.orderedItems.some((share) => share.id === announce.id))
     })
   })
 
@@ -1230,15 +1564,33 @@ describe('Web API interface', () => {
     })
 
     it("object is not in actor's liked", async () => {
-      const likedStream = await (await fetch(actor2.liked.id, { headers: { Authorization: `Bearer ${token2}` } })).json()
-      const likedPage = await (await fetch(likedStream.first.id, { headers: { Authorization: `Bearer ${token2}` } })).json()
-      assert(likedPage.orderedItems.every(obj => obj.id !== createNote.object.id))
+      const likedStream = await (
+        await fetch(actor2.liked.id, {
+          headers: { Authorization: `Bearer ${token2}` }
+        })
+      ).json()
+      const likedPage = await (
+        await fetch(likedStream.first.id, {
+          headers: { Authorization: `Bearer ${token2}` }
+        })
+      ).json()
+      assert(
+        likedPage.orderedItems.every((obj) => obj.id !== createNote.object.id)
+      )
     })
 
     it("like activity is not in object's likes", async () => {
-      const likesStream = await (await fetch(createNote.object.likes.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      const likesPage = await (await fetch(likesStream.first.id, { headers: { Authorization: `Bearer ${token1}` } })).json()
-      assert(likesPage.orderedItems.every(act => act.id !== like.id))
+      const likesStream = await (
+        await fetch(createNote.object.likes.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      const likesPage = await (
+        await fetch(likesStream.first.id, {
+          headers: { Authorization: `Bearer ${token1}` }
+        })
+      ).json()
+      assert(likesPage.orderedItems.every((act) => act.id !== like.id))
     })
   })
 
@@ -1283,12 +1635,16 @@ describe('Web API interface', () => {
     })
 
     it('other can fetch actor content', async () => {
-      const note = await fetch(createNote.object.id, { headers: { Authorization: `Bearer ${token2}` } })
+      const note = await fetch(createNote.object.id, {
+        headers: { Authorization: `Bearer ${token2}` }
+      })
       assert(note.ok)
     })
 
     it('other can fetch actor profile', async () => {
-      const profile = await fetch(actor1.id, { headers: { Authorization: `Bearer ${token2}` } })
+      const profile = await fetch(actor1.id, {
+        headers: { Authorization: `Bearer ${token2}` }
+      })
       assert(profile.ok)
     })
 
@@ -1329,9 +1685,15 @@ describe('Web API interface', () => {
       [actor2, token2] = await registerActor()
       follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        to: actor2.id,
         type: 'Follow',
         object: actor2.id
+      })
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Accept',
+        object: follow.id
       })
       await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
@@ -1342,11 +1704,11 @@ describe('Web API interface', () => {
     })
 
     it("other is not in actor's following", async () => {
-      assert(!await isInStream(actor1.following, actor2))
+      assert(!(await isInStream(actor1.following, actor2)))
     })
 
     it("actor is not in other's followers", async () => {
-      assert(!await isInStream(actor2.followers, actor1))
+      assert(!(await isInStream(actor2.followers, actor1)))
     })
 
     it('actor does not receive public posts', async () => {
@@ -1362,7 +1724,7 @@ describe('Web API interface', () => {
         }
       })
       await delay(1000)
-      assert(!await isInStream(actor1.inbox, createPublic, token1))
+      assert(!(await isInStream(actor1.inbox, createPublic, token1)))
     })
 
     it('actor does not receive followers-only posts', async () => {
@@ -1378,7 +1740,7 @@ describe('Web API interface', () => {
         }
       })
       await delay(1000)
-      assert(!await isInStream(actor1.inbox, createFollowersOnly, token1))
+      assert(!(await isInStream(actor1.inbox, createFollowersOnly, token1)))
     })
   })
 })
