@@ -139,7 +139,11 @@ class HTTPSignature {
     verifier.end()
 
     if (verifier.verify(await publicKey.prop('publicKeyPem'), Buffer.from(this.signature, 'base64'))) {
-      return ActivityObject.fromRemote(publicKey.prop('owner'))
+      const ownerId = await publicKey.prop('owner')
+      const owner = await ActivityObject.fromRemote(ownerId)
+      await owner.cache(ownerId, [PUBLIC])
+      await publicKey.cache(ownerId, [PUBLIC])
+      return owner
     } else {
       return null
     }
@@ -281,10 +285,11 @@ class ActivityObject {
     const dataId = await this.id()
     const data = await this.json()
     const ownerId = owner || data.id
-    await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [dataId, ownerId, JSON.stringify(data)])
+    const qry = 'INSERT OR REPLACE INTO object (id, owner, data) VALUES (?, ?, ?)'
+    await db.run(qry, [dataId, ownerId, JSON.stringify(data)])
     await Promise.all(addressees.map((addressee) =>
       db.run(
-        'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
+        'INSERT OR IGNORE INTO addressee (objectId, addresseeId) VALUES (?, ?)',
         [dataId, addressee]
       )))
   }
@@ -337,11 +342,12 @@ class ActivityObject {
     const owner = await this.owner()
     const addressees = await this.addressees()
     const addresseeIds = await Promise.all(addressees.map((addressee) => addressee.id()))
-    const blockedProp = await owner.prop('blocked')
-    const blocked = (blockedProp) ? new Collection(blockedProp) : null
-    // subject cannot read if they are blocked
-    if (subject && blocked && await blocked.hasMember(subject)) {
-      return false
+    if (subject && await User.isUser(owner)) {
+      const blockedProp = await owner.prop('blocked')
+      const blocked = new Collection(blockedProp)
+      if (await blocked.hasMember(subject)) {
+        return false
+      }
     }
     // anyone can read if it's public
     if (addresseeIds.includes(PUBLIC)) {
@@ -951,6 +957,7 @@ class Activity extends ActivityObject {
     const activity = await this.json()
     const owner = await this.owner()
 
+    logger.debug(`Distributing ${await this.id()} to ${addressees ? addressees.join(',') : 'none'}`)
     // Expand public, followers, other lists
 
     const expanded = (await Promise.all(addressees.map(async (addressee) => {
@@ -971,6 +978,8 @@ class Activity extends ActivityObject {
       return addressee
     }))).filter((v, i, a) => v && a.indexOf(v) === i && v !== owner.id).flat()
 
+    logger.debug(`Expanded list for ${await this.id()} is ${expanded ? expanded.join(',') : 'none'}`)
+
     // Deliver to each of the expanded addressees
 
     const body = JSON.stringify(activity)
@@ -984,7 +993,7 @@ class Activity extends ActivityObject {
         const inbox = new Collection(await other.prop('inbox'))
         await inbox.prependData(activity)
       } else {
-        logger.debug('Remote delivery to ', addressee)
+        logger.debug(`Remote delivery to ${addressee}`)
         other = await ActivityObject.fromRemote(addressee)
         const inbox = await toId(await other.prop('inbox'))
         const date = new Date().toUTCString()
@@ -1196,22 +1205,98 @@ class RemoteActivity extends Activity {
 
   async apply (remote, addressees, ...args) {
     const owner = args[0]
+    const ownerObj = new ActivityObject(owner)
+    const remoteObj = new ActivityObject(remote)
     const activity = await this.json()
     const remoteAppliers = {
       Follow: async () => {
-        const object = new ActivityObject(activity.object)
-        if (await object.id() === toId(owner)) {
-          const followers = new Collection(owner.followers)
+        const object = new ActivityObject(await this.prop('object'))
+        if (await object.id() === await ownerObj.id()) {
+          const followers = new Collection(await ownerObj.prop('followers'))
           if (await followers.hasMember(remote)) {
-            throw new Error('Already following')
+            throw new Error('Already a follower')
           }
-          await followers.prependData(remote)
+          const pendingFollowers = new Collection(await ownerObj.prop('pendingFollowers'))
+          if (await pendingFollowers.hasMember(await this.id())) {
+            throw new Error('Already pending')
+          }
+          await pendingFollowers.prepend(this)
         }
       },
       Create: async () => {
         if (activity.object) {
           const ao = new ActivityObject(activity.object)
           await ao.cache(remote, addressees)
+        }
+      },
+      Accept: async () => {
+        const objectProp = await this.prop('object')
+        if (!objectProp) {
+          throw new Error('Nothing accepted!')
+        }
+        const accepted = new ActivityObject(await this.prop('object'))
+        switch (await accepted.type()) {
+          case 'Follow': {
+            const actorProp = await accepted.prop('actor')
+            if (!actorProp) {
+              throw new Error('No actor!')
+            }
+            const actor = new ActivityObject(actorProp)
+            const objectProp = await accepted.prop('object')
+            if (!objectProp) {
+              throw new Error('No object!')
+            }
+            const object = new ActivityObject(objectProp)
+            if (await actor.id() === await ownerObj.id() &&
+              await object.id() === await remoteObj.id()) {
+              const pendingFollowing = new Collection(await ownerObj.prop('pendingFollowing'))
+              if (!await pendingFollowing.hasMember(await accepted.id())) {
+                throw new Error('Not pending!')
+              }
+              const following = new Collection(await ownerObj.prop('following'))
+              if (await following.hasMember(await object.id())) {
+                throw new Error('Already following!')
+              }
+              logger.debug('Accepting follow')
+              await pendingFollowing.remove(accepted)
+              await following.prepend(object)
+            }
+            break
+          }
+        }
+      },
+      Reject: async () => {
+        const objectProp = await this.prop('object')
+        if (!objectProp) {
+          throw new Error('Nothing rejected!')
+        }
+        const rejected = new ActivityObject(await this.prop('object'))
+        switch (await rejected.type()) {
+          case 'Follow': {
+            const actorProp = await rejected.prop('actor')
+            if (!actorProp) {
+              throw new Error('No actor!')
+            }
+            const actor = new ActivityObject(actorProp)
+            const objectProp = await rejected.prop('object')
+            if (!objectProp) {
+              throw new Error('No object!')
+            }
+            const object = new ActivityObject(objectProp)
+            if (await actor.id() === await ownerObj.id() &&
+              await object.id() === await remoteObj.id()) {
+              const pendingFollowing = new Collection(await ownerObj.prop('pendingFollowing'))
+              if (!await pendingFollowing.hasMember(await rejected.id())) {
+                throw new Error('Not pending!')
+              }
+              const following = new Collection(await ownerObj.prop('following'))
+              if (await following.hasMember(await object.id())) {
+                throw new Error('Already following!')
+              }
+              await pendingFollowing.remove(rejected)
+            }
+            break
+          }
         }
       }
     }
@@ -1298,6 +1383,10 @@ const logger = winston.createLogger({
     new winston.transports.Console()
   ]
 })
+
+// verbose output
+
+sqlite3.verbose()
 
 // Initialize SQLite
 const db = new Database(DATABASE)
@@ -1551,6 +1640,8 @@ app.post('/:type/:id',
         .filter((a) => a)
         .flat()
         .map(toId))
+      // always include the recipient
+      addressees.push(await owner.id())
       const activity = new RemoteActivity(req.body)
       await activity.apply(await remote.json(), addressees, await owner.json())
       await activity.save(remote, addressees)

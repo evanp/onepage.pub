@@ -717,7 +717,7 @@ describe('onepage.pub', () => {
       })
       const body = await res.text()
       const obj = JSON.parse(body)
-      await delay(1000)
+      await delay(100)
       const inbox = await (
         await fetch(actor2.inbox.id, {
           headers: { Authorization: `Bearer ${token2}` }
@@ -748,7 +748,7 @@ describe('onepage.pub', () => {
       const body = await res.text()
       const obj = JSON.parse(body)
       // Wait for delivery!
-      await delay(1000)
+      await delay(100)
       const inbox = await (
         await fetch(actor1.inbox.id, {
           headers: { Authorization: `Bearer ${token1}` }
@@ -1723,7 +1723,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(1000)
+      await delay(100)
       assert(!(await isInStream(actor1.inbox, createPublic, token1)))
     })
 
@@ -1739,7 +1739,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(1000)
+      await delay(100)
       assert(!(await isInStream(actor1.inbox, createFollowersOnly, token1)))
     })
   })
@@ -1774,6 +1774,177 @@ describe('onepage.pub', () => {
 
     it("actor is not in other's pendingFollowers", async () => {
       assert(!(await isInStream(actor2.pendingFollowers, follow, token2)))
+    })
+  })
+
+  describe('Remote Follow Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await delay(100)
+    })
+
+    it("appears in the actor's pending following", async () => {
+      assert(await isInStream(actor1.pendingFollowing, follow, token1))
+    })
+
+    it("appears in the other's pending followers", async () => {
+      assert(await isInStream(actor2.pendingFollowers, follow, token2))
+    })
+
+    it("does not put the actor in the other's followers", async () => {
+      assert(!(await isInStream(actor2.followers, actor1, token2)))
+    })
+
+    it("does not put the other in the actor's following", async () => {
+      assert(!(await isInStream(actor1.following, actor2, token1)))
+    })
+  })
+
+  describe('Remote Accept Follow Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+    })
+
+    it("removes the follow from the actor's pending following", async () => {
+      assert(!await isInStream(actor1.pendingFollowing, follow, token1))
+    })
+
+    it("removes the follow from the other's pending followers", async () => {
+      assert(!await isInStream(actor2.pendingFollowers, follow, token2))
+    })
+
+    it("puts the actor in the other's followers", async () => {
+      assert(await isInStream(actor2.followers, actor1, token2))
+    })
+
+    it("puts the other in the actor's following", async () => {
+      assert(await isInStream(actor1.following, actor2, token1))
+    })
+
+    it('distributes to the actor when the other posts to followers', async () => {
+      const createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.followers.id,
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, world!'
+        }
+      })
+      await delay(100)
+      assert(await isInStream(actor1.inbox, createNote, token1))
+    })
+
+    it('distributes to the actor when the other posts to public', async () => {
+      const createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: 'https://www.w3.org/ns/activitystreams#Public',
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, world!'
+        }
+      })
+      await delay(100)
+      assert(await isInStream(actor1.inbox, createNote, token1))
+    })
+  })
+
+  describe('Remote Reject Follow Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Reject',
+        object: follow.id
+      })
+      await delay(100)
+    })
+
+    it("does not appear in the actor's pending following", async () => {
+      assert(!await isInStream(actor1.pendingFollowing, follow, token1))
+    })
+
+    it("does not appear in the other's pending followers", async () => {
+      assert(!await isInStream(actor2.pendingFollowers, follow, token2))
+    })
+
+    it("does not put the actor in the other's followers", async () => {
+      assert(!(await isInStream(actor2.followers, actor1, token2)))
+    })
+
+    it("does not put the other in the actor's following", async () => {
+      assert(!(await isInStream(actor1.following, actor2, token1)))
+    })
+
+    it('does not distribute to the actor when the other posts to followers', async () => {
+      const createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.followers.id,
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, world!'
+        }
+      })
+      await delay(100)
+      assert(!(await isInStream(actor1.inbox, createNote, token1)))
+    })
+
+    it('does not distribute to the actor when the other posts to public', async () => {
+      const createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: 'https://www.w3.org/ns/activitystreams#Public',
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, world!'
+        }
+      })
+      await delay(100)
+      assert(!(await isInStream(actor1.inbox, createNote, token1)))
     })
   })
 })
