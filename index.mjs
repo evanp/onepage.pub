@@ -44,6 +44,31 @@ const generateKeyPair = promisify(crypto.generateKeyPair)
 
 const isString = value => typeof value === 'string' || value instanceof String
 
+async function toId (value) {
+  if (typeof value === 'undefined') {
+    return null
+  } else if (value == null) {
+    return null
+  } else {
+    const obj = new ActivityObject(value)
+    return await obj.id()
+  }
+}
+
+function makeUrl (relative) {
+  if (PORT === 443) {
+    return `https://${HOSTNAME}/${relative}`
+  } else {
+    return `https://${HOSTNAME}:${PORT}/${relative}`
+  }
+}
+
+function standardEndpoints () {
+  return {
+    proxyUrl: makeUrl('endpoint/proxyUrl')
+  }
+}
+
 // Classes
 
 class Database {
@@ -195,11 +220,7 @@ class ActivityObject {
   }
 
   static async makeId (type) {
-    if (PORT === 443) {
-      return `https://${HOSTNAME}/${type.toLowerCase()}/${await nanoid()}`
-    } else {
-      return `https://${HOSTNAME}:${PORT}/${type.toLowerCase()}/${await nanoid()}`
-    }
+    return makeUrl(`${type.toLowerCase()}/${await nanoid()}`)
   }
 
   static async getJSON (id) {
@@ -1361,17 +1382,6 @@ class User {
   }
 }
 
-async function toId (value) {
-  if (typeof value === 'undefined') {
-    return null
-  } else if (value == null) {
-    return null
-  } else {
-    const obj = new ActivityObject(value)
-    return await obj.id()
-  }
-}
-
 // Server
 
 const logger = winston.createLogger({
@@ -1567,6 +1577,9 @@ app.get('/:type/:id',
     if (await obj.needsExpandedObject()) {
       const activityObject = new ActivityObject(await obj.prop('object'))
       output.object = await activityObject.expanded()
+    }
+    if (await User.isUser(obj)) {
+      output.endpoints = standardEndpoints()
     }
     if (output.type === 'Tombstone') {
       res.status(410)

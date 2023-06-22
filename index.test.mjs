@@ -360,6 +360,17 @@ describe('onepage.pub', () => {
       assert.equal('string', typeof actorObj.publicKey.owner)
       assert.equal(actorObj.publicKey.owner, actorId)
     })
+
+    it('has an endpoints property', () => {
+      assert(actorObj.endpoints)
+      assert.equal('object', typeof actorObj.endpoints)
+    })
+
+    it('has an proxyUrl endpoint', () => {
+      assert(actorObj.endpoints)
+      assert.equal('object', typeof actorObj.endpoints)
+      assert.equal('string', typeof actorObj.endpoints.proxyUrl)
+    })
   })
 
   describe('Actor streams', () => {
