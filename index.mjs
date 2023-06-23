@@ -10,7 +10,7 @@ import { nanoid } from 'nanoid/async'
 import bcrypt from 'bcrypt'
 import { expressjwt } from 'express-jwt'
 import jwt from 'jsonwebtoken'
-import { promisify } from 'util'
+import { promisify, inspect } from 'util'
 import crypto from 'crypto'
 import winston from 'winston'
 
@@ -96,6 +96,7 @@ class Database {
 
 class HTTPSignature {
   constructor (keyId, privateKey = null, method = null, url = null, date = null) {
+    logger.debug(inspect({ keyId, privateKey, method, url, date }))
     if (!privateKey) {
       const sigHeader = keyId
       const parts = Object.fromEntries(sigHeader.split(',').map((clause) => {
@@ -152,7 +153,7 @@ class HTTPSignature {
       }
     }
     const data = lines.join('\n')
-
+    logger.debug(inspect({ data }))
     const publicKey = await ActivityObject.fromRemote(this.keyId)
 
     if (!await publicKey.json() || !await publicKey.prop('owner') || !await publicKey.prop('publicKeyPem')) {
@@ -172,6 +173,20 @@ class HTTPSignature {
     } else {
       return null
     }
+  }
+
+  static async authenticate (req, res, next) {
+    const sigHeader = req.headers.signature
+    if (sigHeader) {
+      logger.debug(`Signature header: ${sigHeader}`)
+      const signature = new HTTPSignature(sigHeader)
+      const remote = await signature.validate(req)
+      if (remote) {
+        logger.debug(`Got remote ${await remote.id()}}`)
+        req.auth = { subject: await remote.id() }
+      }
+    }
+    next()
   }
 }
 
@@ -1380,6 +1395,23 @@ class User {
     const row = await db.get('SELECT username FROM user WHERE username = ?', [username])
     return !!row
   }
+
+  static async fromActorId (actorId) {
+    const row = await db.get('SELECT * FROM user WHERE actorId = ?', [actorId])
+    if (!row) {
+      return null
+    } else {
+      const user = new User(row.username)
+      user.actorId = row.actorId
+      user.privateKey = row.privateKey
+      return user
+    }
+  }
+
+  async getActor (username) {
+    const actor = new ActivityObject(this.actorId)
+    return actor
+  }
 }
 
 // Server
@@ -1540,8 +1572,43 @@ app.get('/.well-known/webfinger', wrap(async (req, res) => {
   })
 }))
 
+app.post('/endpoint/proxyUrl',
+  expressjwt({ secret: KEY_DATA, credentialsRequired: true, algorithms: ['RS256'] }),
+  wrap(async (req, res) => {
+    const id = req.body.id
+    if (!id) {
+      throw new createError.BadRequest('Missing id')
+    }
+    const user = await User.fromActorId(req.auth?.subject)
+    if (!user) {
+      throw new createError.InternalServerError('Invalid user')
+    }
+    const actor = await user.getActor()
+    const publicKey = new ActivityObject(await actor.prop('publicKey'))
+    const date = new Date().toUTCString()
+    const signature = new HTTPSignature(await publicKey.id(), user.privateKey, 'GET', id, date)
+    const fetchRes = await fetch(id, {
+      headers: {
+        Accept: 'application/activity+json;q=1,application/ld+json;q=0.5,application/json;q=0.1',
+        Signature: signature.header,
+        Date: date
+      }
+    })
+    if (!fetchRes.ok) {
+      logger.debug(id)
+      logger.debug(fetchRes.status)
+      logger.debug(await fetchRes.text())
+      throw new createError.InternalServerError('Error fetching object')
+    }
+    const fetchJson = await fetchRes.json()
+    res.status(200)
+    res.set('Content-Type', 'application/activity+json')
+    res.json(fetchJson)
+  }))
+
 app.get('/:type/:id',
   expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),
+  HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const full = req.protocol + '://' + req.get('host') + req.originalUrl
     const type = req.params.type
@@ -1591,6 +1658,7 @@ app.get('/:type/:id',
 
 app.post('/:type/:id',
   expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),
+  HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const full = req.protocol + '://' + req.get('host') + req.originalUrl
     const obj = new ActivityObject(full)
@@ -1636,15 +1704,10 @@ app.post('/:type/:id',
       res.set('Content-Type', 'application/activity+json')
       res.json(output)
     } else if (full === await owner.prop('inbox')) { // remote delivery
-      const sigHeader = req.headers.signature
-      if (!sigHeader) {
-        throw new createError.Unauthorized('HTTP signature required')
-      }
-      const header = new HTTPSignature(sigHeader)
-      const remote = await header.validate(req)
-      if (!remote) {
+      if (!req.auth?.subject) {
         throw new createError.Unauthorized('Invalid HTTP signature')
       }
+      const remote = new ActivityObject(req.auth.subject)
       if (await User.isUser(remote)) {
         throw new createError.Forbidden('Remote delivery only')
       }

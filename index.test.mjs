@@ -100,6 +100,24 @@ const isInStream = async (collection, object, token = null) => {
   return false
 }
 
+const canGetProxy = async (id, actor, token) => {
+  const res = await fetch(actor.endpoints.proxyUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Bearer ${token}`
+    },
+    body: querystring.stringify({ id })
+  })
+  if (res.status !== 200) {
+    return false
+  } else {
+    const body = await res.text()
+    const json = JSON.parse(body)
+    return json.id === id
+  }
+}
+
 describe('onepage.pub', () => {
   let child = null
   let remote = null
@@ -1956,6 +1974,116 @@ describe('onepage.pub', () => {
       })
       await delay(100)
       assert(!(await isInStream(actor1.inbox, createNote, token1)))
+    })
+  })
+
+  describe('Proxy URL', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let actor3 = null
+    let token3 = null
+    let follow = null
+    let pub = null
+    let priv = null
+    let followers = null
+    let self = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001);
+      [actor3, token3] = await registerActor()
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+      pub = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      priv = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor1.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: `Hello, ${actor1.name}!`
+          }
+        }
+      })
+      followers = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.followers.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, followers!'
+          }
+        }
+      })
+      self = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, self!'
+          }
+        }
+      })
+      await delay(100)
+    })
+
+    it('follower can get public note through proxy', async () => {
+      assert(await canGetProxy(pub.object.id, actor1, token1))
+    })
+
+    it('follower can get private note through proxy', async () => {
+      assert(await canGetProxy(priv.object.id, actor1, token1))
+    })
+
+    it('follower can get followers-only note through proxy', async () => {
+      assert(await canGetProxy(followers.object.id, actor1, token1))
+    })
+
+    it('follower cannot get self-only note through proxy', async () => {
+      assert(!await canGetProxy(self.object.id, actor1, token1))
+    })
+
+    it('random can get public note through proxy', async () => {
+      assert(await canGetProxy(pub.object.id, actor3, token3))
+    })
+
+    it('random cannot get private note through proxy', async () => {
+      assert(!await canGetProxy(priv.object.id, actor3, token3))
+    })
+
+    it('random cannot get followers-only note through proxy', async () => {
+      assert(!await canGetProxy(followers.object.id, actor3, token3))
+    })
+
+    it('random cannot get self-only note through proxy', async () => {
+      assert(!await canGetProxy(self.object.id, actor3, token3))
     })
   })
 })
