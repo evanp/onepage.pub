@@ -526,6 +526,12 @@ class ActivityObject {
         }
       }
     }
+
+    if (await this.needsExpandedObject()) {
+      const activityObject = new ActivityObject(await this.prop('object'))
+      object.object = await activityObject.expanded()
+    }
+
     return object
   }
 
@@ -981,10 +987,6 @@ class Activity extends ActivityObject {
   async distribute (addressees) {
     const owner = await this.owner()
     const activity = await this.expanded()
-    if (await this.needsExpandedObject()) {
-      const activityObject = new ActivityObject(await this.prop('object'))
-      activity.object = await activityObject.expanded()
-    }
 
     // Expand public, followers, other lists
 
@@ -1255,6 +1257,35 @@ class RemoteActivity extends Activity {
       Create: async () => {
         if (await this.prop('object')) {
           const ao = new ActivityObject(await this.prop('object'))
+          const owner = await ao.owner()
+          if (owner && await owner.id() !== await remoteObj.id()) {
+            throw new Error('Cannot create something you do not own!')
+          }
+          await ao.cache(await remoteObj.id(), addressees)
+          if (await ao.prop('inReplyTo')) {
+            const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
+            await inReplyTo.expand()
+            const inReplyToOwner = await inReplyTo.owner()
+            if (inReplyToOwner && await inReplyToOwner.id() === await ownerObj.id()) {
+              if (!await inReplyTo.canRead(remote)) {
+                throw new Error('Cannot reply to something you cannot read!')
+              }
+              const replies = new Collection(await inReplyTo.prop('replies'))
+              if (!await replies.hasMember(ao)) {
+                await replies.prepend(ao)
+              }
+            }
+          }
+        }
+      },
+      Update: async () => {
+        if (await this.prop('object')) {
+          const ao = new ActivityObject(await this.prop('object'))
+          const aoOwner = await ao.owner()
+          if (aoOwner && await aoOwner.id() !== await remoteObj.id()) {
+            logger.debug(`aoOwner: ${await aoOwner.id()}, remoteObj: ${await remoteObj.id()}`)
+            throw new Error('Cannot update something you do not own!')
+          }
           await ao.cache(remote, addressees)
           if (await ao.prop('inReplyTo')) {
             const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
@@ -1265,7 +1296,9 @@ class RemoteActivity extends Activity {
                 throw new Error('Cannot reply to something you cannot read!')
               }
               const replies = new Collection(await inReplyTo.prop('replies'))
-              await replies.prepend(ao)
+              if (!await replies.hasMember(ao)) {
+                await replies.prepend(ao)
+              }
             }
           }
         }
@@ -1642,10 +1675,6 @@ app.get('/:type/:id',
         }
       }
     }
-    if (await obj.needsExpandedObject()) {
-      const activityObject = new ActivityObject(await obj.prop('object'))
-      output.object = await activityObject.expanded()
-    }
     if (await User.isUser(obj)) {
       output.endpoints = standardEndpoints()
     }
@@ -1696,10 +1725,6 @@ app.post('/:type/:id',
       await inbox.prepend(activity)
       pq.add(activity.distribute(addressees))
       const output = await activity.expanded()
-      if (await activity.needsExpandedObject()) {
-        const activityObject = new ActivityObject(await activity.prop('object'))
-        output.object = await activityObject.expanded()
-      }
       output['@context'] = output['@context'] || CONTEXT
       res.status(200)
       res.set('Content-Type', 'application/activity+json')

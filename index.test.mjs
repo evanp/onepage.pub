@@ -73,7 +73,7 @@ const doActivity = async (actor, token, activity) => {
   return await res.json()
 }
 
-const isInStream = async (collection, object, token = null) => {
+const getMembers = async (collection, object, token = null) => {
   if (!collection || !collection.id) {
     throw new Error(`Invalid collection: ${inspect(collection)}`)
   }
@@ -89,24 +89,27 @@ const isInStream = async (collection, object, token = null) => {
     throw new Error(`Bad status code ${res.status}`)
   }
   const coll = await res.json()
+  let members = []
   for (let page = coll.first; page; page = page.next) {
     const pageRes = await fetch(page.id, {
       headers
     })
     const pageObj = await pageRes.json()
     for (const prop of ['orderedItems', 'items']) {
-      if (
-        pageObj[prop] &&
-        pageObj[prop].some((item) => item.id === object.id)
-      ) {
-        return true
+      if (pageObj[prop]) {
+        members = members.concat(pageObj[prop])
       }
     }
   }
-  return false
+  return members
 }
 
-const canGetProxy = async (id, actor, token) => {
+const isInStream = async (collection, object, token = null) => {
+  const members = await getMembers(collection, object, token)
+  return members.some((item) => item.id === object.id)
+}
+
+const getProxy = async (id, actor, token) => {
   const res = await fetch(actor.endpoints.proxyUrl, {
     method: 'POST',
     headers: {
@@ -118,10 +121,13 @@ const canGetProxy = async (id, actor, token) => {
   if (res.status !== 200) {
     return false
   } else {
-    const body = await res.text()
-    const json = JSON.parse(body)
-    return json.id === id
+    return await res.json()
   }
+}
+
+const canGetProxy = async (id, actor, token) => {
+  const result = await getProxy(id, actor, token)
+  return !!result
 }
 
 describe('onepage.pub', () => {
@@ -2155,6 +2161,75 @@ describe('onepage.pub', () => {
 
     it("reply appears in original note's replies", async () => {
       assert(await isInStream(createNote.object.replies, createReply.object, token2))
+    })
+  })
+
+  describe('Remote Update Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+    let createNote = null
+    let updateNote = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+      createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      await delay(100)
+      updateNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Update',
+        object: {
+          id: createNote.object.id,
+          contentMap: {
+            en: 'Hello, world! (updated)'
+          }
+        }
+      })
+      await delay(100)
+    })
+
+    it('correct value in proxy', async () => {
+      const note = await getProxy(createNote.object.id, actor1, token1)
+      assert.equal(note.contentMap.en, 'Hello, world! (updated)')
+    })
+
+    it('correct value for update in inbox', async () => {
+      const activities = await getMembers(actor1.inbox, token1)
+      const update = activities.find(a => a.id === updateNote.id)
+      assert.strictEqual(update.object?.contentMap?.en, 'Hello, world! (updated)')
+    })
+
+    it('correct value for create in inbox', async () => {
+      const activities = await getMembers(actor1.inbox, token1)
+      const create = activities.find(a => a.id === createNote.id)
+      assert.strictEqual(create.object?.contentMap?.en, 'Hello, world! (updated)')
     })
   })
 })
