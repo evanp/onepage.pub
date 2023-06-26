@@ -2,6 +2,7 @@ import { describe, before, after, it } from 'node:test'
 import { exec } from 'node:child_process'
 import assert from 'node:assert'
 import querystring from 'node:querystring'
+import { inspect } from 'node:util'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
@@ -73,15 +74,20 @@ const doActivity = async (actor, token, activity) => {
 }
 
 const isInStream = async (collection, object, token = null) => {
-  const headers = {
-    'Content-Type': 'application/activity+json'
+  if (!collection || !collection.id) {
+    throw new Error(`Invalid collection: ${inspect(collection)}`)
   }
+  const headers = {}
   if (token) {
     headers.Authorization = `Bearer ${token}`
   }
   const res = await fetch(collection.id, {
+    method: 'GET',
     headers
   })
+  if (res.status !== 200) {
+    throw new Error(`Bad status code ${res.status}`)
+  }
   const coll = await res.json()
   for (let page = coll.first; page; page = page.next) {
     const pageRes = await fetch(page.id, {
@@ -2084,6 +2090,71 @@ describe('onepage.pub', () => {
 
     it('random cannot get self-only note through proxy', async () => {
       assert(!await canGetProxy(self.object.id, actor3, token3))
+    })
+  })
+
+  describe('Remote Create Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+    let createNote = null
+    let createReply = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+      createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.followers.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      await delay(100)
+      createReply = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.id, actor2.followers.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, back!'
+          },
+          inReplyTo: createNote.object.id
+        }
+      })
+      await delay(100)
+    })
+
+    it("note appears in the actor's inbox", async () => {
+      assert(await isInStream(actor1.inbox, createNote, token1))
+    })
+
+    it("reply appears in other's inbox", async () => {
+      assert(await isInStream(actor2.inbox, createReply, token2))
+    })
+
+    it("reply appears in original note's replies", async () => {
+      assert(await isInStream(createNote.object.replies, createReply.object, token2))
     })
   })
 })

@@ -10,7 +10,7 @@ import { nanoid } from 'nanoid/async'
 import bcrypt from 'bcrypt'
 import { expressjwt } from 'express-jwt'
 import jwt from 'jsonwebtoken'
-import { promisify, inspect } from 'util'
+import { promisify } from 'util'
 import crypto from 'crypto'
 import winston from 'winston'
 
@@ -96,7 +96,6 @@ class Database {
 
 class HTTPSignature {
   constructor (keyId, privateKey = null, method = null, url = null, date = null) {
-    logger.debug(inspect({ keyId, privateKey, method, url, date }))
     if (!privateKey) {
       const sigHeader = keyId
       const parts = Object.fromEntries(sigHeader.split(',').map((clause) => {
@@ -153,7 +152,6 @@ class HTTPSignature {
       }
     }
     const data = lines.join('\n')
-    logger.debug(inspect({ data }))
     const publicKey = await ActivityObject.fromRemote(this.keyId)
 
     if (!await publicKey.json() || !await publicKey.prop('owner') || !await publicKey.prop('publicKeyPem')) {
@@ -178,11 +176,9 @@ class HTTPSignature {
   static async authenticate (req, res, next) {
     const sigHeader = req.headers.signature
     if (sigHeader) {
-      logger.debug(`Signature header: ${sigHeader}`)
       const signature = new HTTPSignature(sigHeader)
       const remote = await signature.validate(req)
       if (remote) {
-        logger.debug(`Got remote ${await remote.id()}}`)
         req.auth = { subject: await remote.id() }
       }
     }
@@ -198,20 +194,15 @@ class PromiseQueue {
   count = 0
 
   add (operation, title = null) {
-    const id = this.count++
     return new Promise((resolve, reject) => {
-      logger.debug(`Queuing operation ${id}`)
       this.last = this.last
         .then(() => {
-          logger.debug(`Starting operation ${id} ${title || ''}`)
           return operation
         })
         .then((...args) => {
-          logger.debug(`Finished operation ${id} ${title || ''}`)
           resolve(...args)
         })
         .catch((err) => {
-          logger.debug(`Failed operation ${id} ${title || ''}`)
           reject(err)
         })
     })
@@ -289,6 +280,11 @@ class ActivityObject {
     } else {
       return null
     }
+  }
+
+  async expand () {
+    const json = await this.expanded()
+    this.#json = json
   }
 
   async isCollection () {
@@ -580,7 +576,6 @@ class ActivityObject {
     if (!obj) {
       const id = await ao.id()
       let res = null
-      logger.debug(`Fetching ${id} in pid ${process.pid}`)
       try {
         res = await fetch(id, {
           headers: { Accept: 'application/activity+json, application/ld+json, application/json' }
@@ -599,7 +594,7 @@ class ActivityObject {
   }
 
   async needsExpandedObject () {
-    return ['Create', 'Update'].includes(await this.type())
+    return ['Create', 'Update', 'Accept', 'Reject', 'Announce'].includes(await this.type())
   }
 }
 
@@ -727,22 +722,19 @@ class Activity extends ActivityObject {
             en: summaryEn
           }
         }
-        const likes = await Collection.empty(actor, addressees,
-          { summaryMap: { en: `Likes of ${summaryEn}` } })
-        object.likes = await likes.id()
-        const replies = await Collection.empty(actor, addressees,
-          { summaryMap: { en: `Replies to ${summaryEn}` } })
-        object.replies = await replies.id()
-        const shares = await Collection.empty(actor, addressees,
-          { summaryMap: { en: `Shares of ${summaryEn}` } })
-        object.shares = await shares.id()
+        for (const prop of ['likes', 'replies', 'shares']) {
+          const value = await Collection.empty(await actorObj.id(), addressees,
+            { summaryMap: { en: `${prop} of ${summaryEn}` } })
+          object[prop] = await value.id()
+        }
         const saved = new ActivityObject(object)
         await saved.save(actor.id, addressees)
         activity.object = await saved.id()
-        if (object.inReplyTo) {
-          const parent = new ActivityObject(object.inReplyTo)
+        if (await saved.prop('inReplyTo')) {
+          const inReplyToProp = await saved.prop('inReplyTo')
+          const parent = new ActivityObject(inReplyToProp)
           const parentOwner = await parent.owner()
-          if (await User.isUser(parentOwner)) {
+          if (parentOwner && await User.isUser(parentOwner)) {
             const replies = new Collection(await parent.prop('replies'))
             await replies.prepend(saved)
           }
@@ -907,15 +899,12 @@ class Activity extends ActivityObject {
         return activity
       },
       Announce: async () => {
-        logger.debug('Announce')
         if (!await this.prop('object')) {
           throw new createError.BadRequest('Nothing to announce')
         }
         const object = new ActivityObject(await this.prop('object'))
-        logger.debug(`Announce object: ${await object.id()}`)
         const owner = await object.owner()
         if (await User.isUser(owner)) {
-          logger.debug('Announce object is local')
           const shares = new Collection(await object.prop('shares'))
           await shares.prepend(this)
         }
@@ -990,10 +979,13 @@ class Activity extends ActivityObject {
   }
 
   async distribute (addressees) {
-    const activity = await this.json()
     const owner = await this.owner()
+    const activity = await this.expanded()
+    if (await this.needsExpandedObject()) {
+      const activityObject = new ActivityObject(await this.prop('object'))
+      activity.object = await activityObject.expanded()
+    }
 
-    logger.debug(`Distributing ${await this.id()} to ${addressees ? addressees.join(',') : 'none'}`)
     // Expand public, followers, other lists
 
     const expanded = (await Promise.all(addressees.map(async (addressee) => {
@@ -1014,8 +1006,6 @@ class Activity extends ActivityObject {
       return addressee
     }))).filter((v, i, a) => v && a.indexOf(v) === i && v !== owner.id).flat()
 
-    logger.debug(`Expanded list for ${await this.id()} is ${expanded ? expanded.join(',') : 'none'}`)
-
     // Deliver to each of the expanded addressees
 
     const body = JSON.stringify(activity)
@@ -1029,9 +1019,12 @@ class Activity extends ActivityObject {
         const inbox = new Collection(await other.prop('inbox'))
         await inbox.prependData(activity)
       } else {
-        logger.debug(`Remote delivery to ${addressee}`)
         other = await ActivityObject.fromRemote(addressee)
-        const inbox = await toId(await other.prop('inbox'))
+        const inboxProp = await other.prop('inbox')
+        if (!inboxProp) {
+          return
+        }
+        const inbox = await toId(inboxProp)
         const date = new Date().toUTCString()
         const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date)
         const res = await fetch(inbox, {
@@ -1260,9 +1253,21 @@ class RemoteActivity extends Activity {
         }
       },
       Create: async () => {
-        if (activity.object) {
-          const ao = new ActivityObject(activity.object)
+        if (await this.prop('object')) {
+          const ao = new ActivityObject(await this.prop('object'))
           await ao.cache(remote, addressees)
+          if (await ao.prop('inReplyTo')) {
+            const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
+            await inReplyTo.expand()
+            const inReplyToOwner = await inReplyTo.owner()
+            if (inReplyToOwner && await inReplyToOwner.id() === await ownerObj.id()) {
+              if (!await inReplyTo.canRead(remote)) {
+                throw new Error('Cannot reply to something you cannot read!')
+              }
+              const replies = new Collection(await inReplyTo.prop('replies'))
+              await replies.prepend(ao)
+            }
+          }
         }
       },
       Accept: async () => {
@@ -1293,7 +1298,6 @@ class RemoteActivity extends Activity {
               if (await following.hasMember(await object.id())) {
                 throw new Error('Already following!')
               }
-              logger.debug('Accepting follow')
               await pendingFollowing.remove(accepted)
               await following.prepend(object)
             }
@@ -1595,9 +1599,6 @@ app.post('/endpoint/proxyUrl',
       }
     })
     if (!fetchRes.ok) {
-      logger.debug(id)
-      logger.debug(fetchRes.status)
-      logger.debug(await fetchRes.text())
       throw new createError.InternalServerError('Error fetching object')
     }
     const fetchJson = await fetchRes.json()
