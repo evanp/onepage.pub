@@ -1303,6 +1303,17 @@ class RemoteActivity extends Activity {
           }
         }
       },
+      Delete: async () => {
+        if (await this.prop('object')) {
+          const ao = new ActivityObject(await this.prop('object'))
+          const aoOwner = await ao.owner()
+          if (aoOwner && await aoOwner.id() !== await remoteObj.id()) {
+            logger.debug(`aoOwner: ${await aoOwner.id()}, remoteObj: ${await remoteObj.id()}`)
+            throw new Error('Cannot delete something you do not own!')
+          }
+          await ao.cache(remote, addressees)
+        }
+      },
       Accept: async () => {
         const objectProp = await this.prop('object')
         if (!objectProp) {
@@ -1631,11 +1642,14 @@ app.post('/endpoint/proxyUrl',
         Date: date
       }
     })
-    if (!fetchRes.ok) {
+    if (![200, 410].includes(fetchRes.status)) {
       throw new createError.InternalServerError('Error fetching object')
     }
     const fetchJson = await fetchRes.json()
-    res.status(200)
+    if (fetchRes.status === 410 && fetchJson.type !== 'Tombstone') {
+      throw new createError.InternalServerError('Error fetching object')
+    }
+    res.status(fetchRes.status)
     res.set('Content-Type', 'application/activity+json')
     res.json(fetchJson)
   }))

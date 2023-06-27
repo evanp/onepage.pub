@@ -2232,4 +2232,69 @@ describe('onepage.pub', () => {
       assert.strictEqual(create.object?.contentMap?.en, 'Hello, world! (updated)')
     })
   })
+
+  describe('Remote Delete Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createNote = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      const follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+      createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Delete',
+        object: createNote.object.id
+      })
+      await delay(100)
+    })
+
+    it('correct value in proxy', async () => {
+      const res = await fetch(actor1.endpoints.proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Bearer ${token1}`
+        },
+        body: querystring.stringify({ id: createNote.object.id })
+      })
+      assert.strictEqual(res.status, 410)
+      const ts = await res.json()
+      assert.strictEqual(ts.type, 'Tombstone')
+    })
+
+    it('correct value for create in inbox', async () => {
+      const activities = await getMembers(actor1.inbox, token1)
+      const create = activities.find(a => a.id === createNote.id)
+      assert.strictEqual(create.object?.type, 'Tombstone')
+    })
+  })
 })
