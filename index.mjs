@@ -1330,6 +1330,22 @@ class RemoteActivity extends Activity {
           }
         }
       },
+      Announce: async () => {
+        if (await this.prop('object')) {
+          const ao = new ActivityObject(await this.prop('object'))
+          const aoOwner = await ao.owner()
+          if (await User.isUser(aoOwner)) {
+            if (!await ao.canRead(await remoteObj.id())) {
+              throw new Error('Cannot share something you cannot read!')
+            }
+            await ao.expand()
+            const shares = new Collection(await ao.prop('shares'))
+            if (!await shares.hasMember(this)) {
+              await shares.prepend(this)
+            }
+          }
+        }
+      },
       Accept: async () => {
         const objectProp = await this.prop('object')
         if (!objectProp) {
