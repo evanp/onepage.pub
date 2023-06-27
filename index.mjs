@@ -411,6 +411,17 @@ class ActivityObject {
     return false
   }
 
+  async canWrite (subject) {
+    const owner = await this.owner()
+    // owner can always write
+    if (subject === await owner.id()) {
+      return true
+    }
+    // TODO: if we add a way to grant write access
+    // to non-owner, add the check here!
+    return false
+  }
+
   async brief () {
     const object = await this.json()
     if (!object) {
@@ -1342,6 +1353,27 @@ class RemoteActivity extends Activity {
             const shares = new Collection(await ao.prop('shares'))
             if (!await shares.hasMember(this)) {
               await shares.prepend(this)
+            }
+          }
+        }
+      },
+      Add: async () => {
+        if (await this.prop('object')) {
+          const ao = new ActivityObject(await this.prop('object'))
+          const aoOwner = await ao.owner()
+          if (await User.isUser(aoOwner)) {
+            if (!await ao.canRead(await remoteObj.id())) {
+              throw new Error('Cannot add something you cannot read!')
+            }
+          }
+          const target = new ActivityObject(await this.prop('target'))
+          const targetOwner = await target.owner()
+          if (await User.isUser(targetOwner)) {
+            if (!await target.canRead(await remoteObj.id())) {
+              throw new Error('Cannot add to something you cannot read!')
+            }
+            if (!await target.canWrite(await remoteObj.id())) {
+              throw new Error('Cannot add to something you do not own!')
             }
           }
         }
