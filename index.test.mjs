@@ -73,7 +73,7 @@ const doActivity = async (actor, token, activity) => {
   return await res.json()
 }
 
-const getMembers = async (collection, object, token = null) => {
+const getMembers = async (collection, token = null) => {
   if (!collection || !collection.id) {
     throw new Error(`Invalid collection: ${inspect(collection)}`)
   }
@@ -105,7 +105,7 @@ const getMembers = async (collection, object, token = null) => {
 }
 
 const isInStream = async (collection, object, token = null) => {
-  const members = await getMembers(collection, object, token)
+  const members = await getMembers(collection, token)
   return members.some((item) => item.id === object.id)
 }
 
@@ -2295,6 +2295,56 @@ describe('onepage.pub', () => {
       const activities = await getMembers(actor1.inbox, token1)
       const create = activities.find(a => a.id === createNote.id)
       assert.strictEqual(create.object?.type, 'Tombstone')
+    })
+  })
+
+  describe('Remote Like Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createNote = null
+    let like = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      const follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+      createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      await delay(100)
+      like = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Like',
+        object: createNote.object.id
+      })
+      await delay(100)
+    })
+
+    it('like is in the likes collection', async () => {
+      assert(await isInStream(createNote.object.likes, like, token2))
     })
   })
 })
