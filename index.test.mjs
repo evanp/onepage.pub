@@ -2463,4 +2463,78 @@ describe('onepage.pub', () => {
       assert.equal(album.totalItems, 1)
     })
   })
+
+  describe('Remote Remove Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createNote = null
+    let createAlbum = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      const follow = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor2.id,
+        type: 'Follow',
+        object: actor2.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: actor1.id,
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+      createAlbum = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Collection',
+          nameMap: {
+            en: 'Greatest greetings'
+          },
+          totalItems: 0,
+          items: []
+        }
+      })
+      await delay(100)
+      createNote = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Add',
+        object: createNote.object.id,
+        target: createAlbum.object.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Remove',
+        object: createNote.object.id,
+        target: createAlbum.object.id
+      })
+      await delay(100)
+    })
+
+    it('correct count in proxy', async () => {
+      const album = await getProxy(createAlbum.object.id, actor1, token1)
+      assert.equal(album.totalItems, 0)
+    })
+  })
 })

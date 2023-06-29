@@ -1366,14 +1366,40 @@ class RemoteActivity extends Activity {
               throw new Error('Cannot add something you cannot read!')
             }
           }
-          const target = new ActivityObject(await this.prop('target'))
-          const targetOwner = await target.owner()
-          if (await User.isUser(targetOwner)) {
-            if (!await target.canRead(await remoteObj.id())) {
-              throw new Error('Cannot add to something you cannot read!')
+          if (await this.prop('target')) {
+            const target = new ActivityObject(await this.prop('target'))
+            const targetOwner = await target.owner()
+            if (await User.isUser(targetOwner)) {
+              if (!await target.canRead(await remoteObj.id())) {
+                throw new Error('Cannot add to something you cannot read!')
+              }
+              if (!await target.canWrite(await remoteObj.id())) {
+                throw new Error('Cannot add to something you do not own!')
+              }
             }
-            if (!await target.canWrite(await remoteObj.id())) {
-              throw new Error('Cannot add to something you do not own!')
+          }
+        }
+      },
+      Remove: async () => {
+        if (await this.prop('object')) {
+          const ao = new ActivityObject(await this.prop('object'))
+          const aoOwner = await ao.owner()
+          if (await User.isUser(aoOwner)) {
+            if (!await ao.canRead(await remoteObj.id())) {
+              throw new Error('Cannot add something you cannot read!')
+            }
+          }
+          const targetProp = await this.prop('target') || await this.prop('origin')
+          if (targetProp) {
+            const target = new ActivityObject(targetProp)
+            const targetOwner = await target.owner()
+            if (await User.isUser(targetOwner)) {
+              if (!await target.canRead(await remoteObj.id())) {
+                throw new Error('Cannot remove from you cannot read!')
+              }
+              if (!await target.canWrite(await remoteObj.id())) {
+                throw new Error('Cannot remove from something you do not own!')
+              }
             }
           }
         }
