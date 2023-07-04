@@ -962,7 +962,7 @@ class Activity extends ActivityObject {
           }
           case 'Follow': {
             if (!await object.prop('object')) {
-              throw new createError.BadRequest('Nothing liked')
+              throw new createError.BadRequest('Nothing followed')
             }
             const followedObject = new ActivityObject(await object.prop('object'))
             const pendingFollowing = new Collection(await actorObj.prop('pendingFollowing'))
@@ -981,6 +981,19 @@ class Activity extends ActivityObject {
                 const followers = new Collection(await followedObject.prop('followers'))
                 await followers.remove(actorObj)
               }
+            }
+            break
+          }
+          case 'Announce': {
+            if (!await object.prop('object')) {
+              throw new createError.BadRequest('Nothing announced')
+            }
+            const sharedObject = new ActivityObject(await object.prop('object'))
+            const sharedObjectOwner = await sharedObject.owner()
+            if (await User.isUser(sharedObjectOwner)) {
+              await sharedObject.expand()
+              const shares = new Collection(await sharedObject.prop('shares'))
+              await shares.remove(object)
             }
             break
           }
@@ -1127,7 +1140,7 @@ class Collection extends ActivityObject {
   }
 
   async remove (object) {
-    const collection = await this.json()
+    const collection = await this.expanded()
     const objectId = await object.id()
     if (Array.isArray(collection.orderedItems)) {
       const i = collection.orderedItems.indexOf(objectId)
@@ -1148,7 +1161,7 @@ class Collection extends ActivityObject {
       let ref = collection.first
       while (ref) {
         const page = new ActivityObject(ref)
-        const json = await page.json()
+        const json = await page.expanded()
         for (const prop of ['items', 'orderedItems']) {
           if (json[prop]) {
             const i = json[prop].indexOf(objectId)

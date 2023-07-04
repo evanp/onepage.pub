@@ -73,28 +73,24 @@ const doActivity = async (actor, token, activity) => {
   return await res.json()
 }
 
-const getMembers = async (collection, token = null) => {
-  if (!collection || !collection.id) {
-    throw new Error(`Invalid collection: ${inspect(collection)}`)
-  }
-  const headers = {}
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
-  const res = await fetch(collection.id, {
-    method: 'GET',
-    headers
+const getObject = async (id, token = null) => {
+  const res = await fetch(id, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
   })
   if (res.status !== 200) {
     throw new Error(`Bad status code ${res.status}`)
   }
-  const coll = await res.json()
+  return await res.json()
+}
+
+const getMembers = async (collection, token = null) => {
+  if (!collection || !collection.id) {
+    throw new Error(`Invalid collection: ${inspect(collection)}`)
+  }
+  const coll = await getObject(collection.id, token)
   let members = []
   for (let page = coll.first; page; page = page.next) {
-    const pageRes = await fetch(page.id, {
-      headers
-    })
-    const pageObj = await pageRes.json()
+    const pageObj = await getObject(page.id, token)
     for (const prop of ['orderedItems', 'items']) {
       if (pageObj[prop]) {
         members = members.concat(pageObj[prop])
@@ -2535,6 +2531,51 @@ describe('onepage.pub', () => {
     it('correct count in proxy', async () => {
       const album = await getProxy(createAlbum.object.id, actor1, token1)
       assert.equal(album.totalItems, 0)
+    })
+  })
+
+  describe('Undo Announce Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createNote = null
+    let announce = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      createNote = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      announce = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Announce',
+        object: createNote.object.id
+      })
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Undo',
+        object: announce.id
+      })
+    })
+
+    it('correct count of shares', async () => {
+      const shares = await getObject(createNote.object.shares.id, token1)
+      assert.equal(shares.totalItems, 0)
+    })
+
+    it('announce not in shares', async () => {
+      assert(!await isInStream(createNote.object.shares, announce, token1))
     })
   })
 })
