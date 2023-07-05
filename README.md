@@ -95,7 +95,7 @@ https://github.com/users/evanp/projects/4/views/1
 
 ## Contributing
 
-PRs accepted. Please use [convetional commits](https://www.conventionalcommits.org/en/v1.0.0/) for your commit messages.
+PRs accepted. Please use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for your commit messages.
 
 Small note: If editing the README, please conform to the [standard-readme](https://github.com/RichardLitt/standard-readme) specification.
 
