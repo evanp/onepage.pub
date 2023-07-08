@@ -991,7 +991,7 @@ class Activity extends ActivityObject {
               await following.remove(followedObject)
             }
             const followedObjectOwner = await followedObject.owner()
-            if (await User.isUser(followedObjectOwner)) {
+            if (followedObjectOwner && await User.isUser(followedObjectOwner)) {
               const pendingFollowers = new Collection(await followedObjectOwner.prop('pendingFollowers'))
               if (await pendingFollowers.hasMember(await object.id())) {
                 await pendingFollowers.remove(object)
@@ -1544,6 +1544,22 @@ class RemoteActivity extends Activity {
               await object.expand()
               const shares = new Collection(await object.prop('shares'))
               await shares.remove(undone)
+            }
+            break
+          }
+          case 'Follow': {
+            const objectProp = await undone.prop('object')
+            const object = new ActivityObject(objectProp)
+            if (!await object.canRead(await remoteObj.id())) {
+              throw new Error('Cannot unshare something you cannot read!')
+            }
+            const objectOwner = await object.owner()
+            if (await User.isUser(objectOwner)) {
+              await object.expand()
+              const followers = new Collection(await object.prop('followers'))
+              await followers.remove(undoneActor)
+              const pendingFollowers = new Collection(await object.prop('pendingFollowers'))
+              await pendingFollowers.remove(undone)
             }
           }
         }

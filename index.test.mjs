@@ -2707,4 +2707,95 @@ describe('onepage.pub', () => {
       assert.strictEqual(shares.totalItems, 0)
     })
   })
+
+  describe('Remote Undo Follow Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      follow = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor1.id],
+        type: 'Follow',
+        object: actor1.id
+      })
+      await delay(100)
+      await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.id],
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
+        type: 'Undo',
+        object: follow.id
+      })
+      await delay(100)
+    })
+
+    it('actor is no longer in followers', async () => {
+      assert(!await isInStream(actor1.followers, actor2, token1))
+    })
+
+    it('other is no longer in following', async () => {
+      assert(!await isInStream(actor2.following, actor1, token2))
+    })
+
+    it('actor is not in pending followers', async () => {
+      assert(!await isInStream(actor1.pendingFollowers, follow, token1))
+    })
+
+    it('other is not in pending following', async () => {
+      assert(!await isInStream(actor2.pendingFollowing, follow, token2))
+    })
+  })
+
+  describe('Remote Undo Pending Follow Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let follow = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      follow = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor1.id],
+        type: 'Follow',
+        object: actor1.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor1.id],
+        type: 'Undo',
+        object: follow.id
+      })
+      await delay(100)
+    })
+
+    it('actor is not in followers', async () => {
+      assert(!await isInStream(actor1.followers, actor2, token1))
+    })
+
+    it('other is not in following', async () => {
+      assert(!await isInStream(actor2.following, actor1, token2))
+    })
+
+    it('actor is no longer in pending followers', async () => {
+      assert(!await isInStream(actor1.pendingFollowers, follow, token1))
+    })
+
+    it('other is no longer in pending following', async () => {
+      assert(!await isInStream(actor2.pendingFollowing, follow, token2))
+    })
+  })
 })
