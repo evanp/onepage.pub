@@ -273,6 +273,24 @@ class ActivityObject {
     return this.prop('type')
   }
 
+  async name (lang = null) {
+    const [name, nameMap, summary, summaryMap] = await Promise.all([
+      this.prop('name'),
+      this.prop('nameMap'),
+      this.prop('summary'),
+      this.prop('summaryMap')
+    ])
+    if (nameMap && lang in nameMap) {
+      return nameMap[lang]
+    } else if (name) {
+      return name
+    } else if (summaryMap && lang in summaryMap) {
+      return summaryMap[lang]
+    } else if (summary) {
+      return summary
+    }
+  }
+
   async prop (name) {
     const json = await this.json()
     if (json) {
@@ -1112,7 +1130,7 @@ class Collection extends ActivityObject {
   }
 
   async prepend (object) {
-    const collection = await this.json()
+    const collection = await this.expanded()
     const objectId = await object.id()
     if (collection.orderedItems) {
       await this.patch({ totalItems: collection.totalItems + 1, orderedItems: [objectId, ...collection.orderedItems] })
@@ -1120,7 +1138,7 @@ class Collection extends ActivityObject {
       await this.patch({ totalItems: collection.totalItems + 1, items: [objectId, ...collection.items] })
     } else if (collection.first) {
       const first = await new ActivityObject(collection.first)
-      const firstJson = await first.json()
+      const firstJson = await first.expanded()
       if (firstJson.orderedItems.length < MAX_PAGE_SIZE) {
         await first.patch({ orderedItems: [objectId, ...firstJson.orderedItems] })
         await this.patch({ totalItems: collection.totalItems + 1 })
@@ -1307,7 +1325,6 @@ class RemoteActivity extends Activity {
           const ao = new ActivityObject(await this.prop('object'))
           const aoOwner = await ao.owner()
           if (aoOwner && await aoOwner.id() !== await remoteObj.id()) {
-            logger.debug(`aoOwner: ${await aoOwner.id()}, remoteObj: ${await remoteObj.id()}`)
             throw new Error('Cannot update something you do not own!')
           }
           await ao.cache(remote, addressees)
@@ -1332,7 +1349,6 @@ class RemoteActivity extends Activity {
           const ao = new ActivityObject(await this.prop('object'))
           const aoOwner = await ao.owner()
           if (aoOwner && await aoOwner.id() !== await remoteObj.id()) {
-            logger.debug(`aoOwner: ${await aoOwner.id()}, remoteObj: ${await remoteObj.id()}`)
             throw new Error('Cannot delete something you do not own!')
           }
           await ao.cache(remote, addressees)
@@ -1483,6 +1499,38 @@ class RemoteActivity extends Activity {
               await pendingFollowing.remove(rejected)
             }
             break
+          }
+        }
+      },
+      Undo: async () => {
+        const objectProp = await this.prop('object')
+        if (!objectProp) {
+          throw new Error('Nothing undone!')
+        }
+        const undone = new ActivityObject(await this.prop('object'))
+        await undone.expand()
+        switch (await undone.type()) {
+          case 'Like': {
+            // Make sure it's expanded
+            const actorProp = await undone.prop('actor')
+            if (!actorProp) {
+              throw new Error('No actor!')
+            }
+            const likeActor = new ActivityObject(actorProp)
+            if (await remoteObj.id() !== await likeActor.id()) {
+              throw new Error('Not your like!')
+            }
+            const objectProp = await undone.prop('object')
+            const object = new ActivityObject(objectProp)
+            if (!await object.canRead(await remoteObj.id())) {
+              throw new Error('Cannot unlike something you cannot read!')
+            }
+            const objectOwner = await object.owner()
+            if (await User.isUser(objectOwner)) {
+              await object.expand()
+              const likes = new Collection(await object.prop('likes'))
+              await likes.remove(undone)
+            }
           }
         }
       }

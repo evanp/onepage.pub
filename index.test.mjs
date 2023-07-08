@@ -2342,6 +2342,11 @@ describe('onepage.pub', () => {
     it('like is in the likes collection', async () => {
       assert(await isInStream(createNote.object.likes, like, token2))
     })
+
+    it('likes total count is correct', async () => {
+      const likes = await getObject(createNote.object.likes.id, token2)
+      assert.strictEqual(likes.totalItems, 1)
+    })
   })
 
   describe('Remote Announce Activity', () => {
@@ -2576,6 +2581,68 @@ describe('onepage.pub', () => {
 
     it('announce not in shares', async () => {
       assert(!await isInStream(createNote.object.shares, announce, token1))
+    })
+  })
+
+  describe('Remote Undo Like Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createNote = null
+    let like = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      const follow = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor1.id],
+        type: 'Follow',
+        object: actor1.id
+      })
+      await delay(100)
+      await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.id],
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+      createNote = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      await delay(100)
+      like = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
+        type: 'Like',
+        object: createNote.object.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
+        type: 'Undo',
+        object: like.id
+      })
+      await delay(100)
+    })
+
+    it('activity is not in object likes stream', async () => {
+      assert(!await isInStream(createNote.object.likes, like, token1))
+    })
+
+    it('object likes count is correct', async () => {
+      const likes = await getObject(createNote.object.likes.id, token1)
+      assert.strictEqual(likes.totalItems, 0)
     })
   })
 })
