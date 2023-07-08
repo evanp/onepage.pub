@@ -2645,4 +2645,66 @@ describe('onepage.pub', () => {
       assert.strictEqual(likes.totalItems, 0)
     })
   })
+
+  describe('Remote Undo Announce Activity', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let createNote = null
+    let share = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(3001)
+      const follow = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor1.id],
+        type: 'Follow',
+        object: actor1.id
+      })
+      await delay(100)
+      await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor2.id],
+        type: 'Accept',
+        object: follow.id
+      })
+      await delay(100)
+      createNote = await doActivity(actor1, token1, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      await delay(100)
+      share = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
+        type: 'Announce',
+        object: createNote.object.id
+      })
+      await delay(100)
+      await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
+        type: 'Undo',
+        object: share.id
+      })
+      await delay(100)
+    })
+
+    it('activity is not in object shares stream', async () => {
+      assert(!await isInStream(createNote.object.shares, share, token1))
+    })
+
+    it('object shares count is correct', async () => {
+      const shares = await getObject(createNote.object.shares.id, token1)
+      assert.strictEqual(shares.totalItems, 0)
+    })
+  })
 })

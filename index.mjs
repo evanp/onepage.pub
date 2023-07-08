@@ -556,7 +556,7 @@ class ActivityObject {
       }
     }
 
-    if (await this.needsExpandedObject()) {
+    if (await this.needsExpandedObject() && await this.prop('object')) {
       const activityObject = new ActivityObject(await this.prop('object'))
       object.object = await activityObject.expanded()
     }
@@ -1507,19 +1507,19 @@ class RemoteActivity extends Activity {
         if (!objectProp) {
           throw new Error('Nothing undone!')
         }
-        const undone = new ActivityObject(await this.prop('object'))
+        const undone = new ActivityObject(objectProp)
+        // Make sure it's expanded
         await undone.expand()
+        const actorProp = await undone.prop('actor')
+        if (!actorProp) {
+          throw new Error('No actor!')
+        }
+        const undoneActor = new ActivityObject(actorProp)
+        if (await remoteObj.id() !== await undoneActor.id()) {
+          throw new Error('Not your activity to undo!')
+        }
         switch (await undone.type()) {
           case 'Like': {
-            // Make sure it's expanded
-            const actorProp = await undone.prop('actor')
-            if (!actorProp) {
-              throw new Error('No actor!')
-            }
-            const likeActor = new ActivityObject(actorProp)
-            if (await remoteObj.id() !== await likeActor.id()) {
-              throw new Error('Not your like!')
-            }
             const objectProp = await undone.prop('object')
             const object = new ActivityObject(objectProp)
             if (!await object.canRead(await remoteObj.id())) {
@@ -1530,6 +1530,20 @@ class RemoteActivity extends Activity {
               await object.expand()
               const likes = new Collection(await object.prop('likes'))
               await likes.remove(undone)
+            }
+            break
+          }
+          case 'Announce': {
+            const objectProp = await undone.prop('object')
+            const object = new ActivityObject(objectProp)
+            if (!await object.canRead(await remoteObj.id())) {
+              throw new Error('Cannot unshare something you cannot read!')
+            }
+            const objectOwner = await object.owner()
+            if (await User.isUser(objectOwner)) {
+              await object.expand()
+              const shares = new Collection(await object.prop('shares'))
+              await shares.remove(undone)
             }
           }
         }
