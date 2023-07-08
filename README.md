@@ -32,6 +32,9 @@ For now, you have to clone it to a directory.
 
 ```
 git clone git@github.com:evanp/onepage.pub.git
+
+cd onepage.pub
+npm install
 ```
 
 ## Usage
