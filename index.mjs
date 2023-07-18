@@ -788,6 +788,14 @@ class Activity extends ActivityObject {
         if (!objectOwner || await objectOwner.id() !== actor.id) {
           throw new createError.BadRequest("You can't update an object you don't own")
         }
+        // prevent updating certain properties directly
+        if (await User.isUser(object)) {
+          for (const prop of ['inbox', 'outbox', 'followers', 'following', 'pendingFollowers', 'pendingFollowing', 'liked', 'blocked']) {
+            if (prop in activity.object && await toId(activity.object[prop]) !== await toId(await object.prop(prop))) {
+              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            }
+          }
+        }
         await object.patch(activity.object)
         activity.object = await object.json()
         return activity

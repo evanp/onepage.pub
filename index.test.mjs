@@ -73,6 +73,22 @@ const doActivity = async (actor, token, activity) => {
   return await res.json()
 }
 
+const failActivity = async (actor, token, activity) => {
+  const res = await fetch(actor.outbox.id, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/activity+json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(activity)
+  })
+  const body = await res.text()
+  if (res.status >= 200 && res.status <= 299) {
+    throw new Error(`Good status code ${res.status} for activity that should fail: ${body}`)
+  }
+  return res.status
+}
+
 const getObject = async (id, token = null) => {
   const res = await fetch(id, {
     headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -2796,6 +2812,154 @@ describe('onepage.pub', () => {
 
     it('other is no longer in pending following', async () => {
       assert(!await isInStream(actor2.pendingFollowing, follow, token2))
+    })
+  })
+
+  describe('Update profile', () => {
+    let actor1 = null
+    let token1 = null
+    let fetched = null
+    before(async () => {
+      [actor1, token1] = await registerActor()
+      await doActivity(actor1, token1, {
+        type: 'Update',
+        object: {
+          id: actor1.id,
+          name: 'Ephemeral Test Actor',
+          summaryMap: {
+            en: 'Hello, I am a test actor!'
+          }
+        }
+      })
+      fetched = await getObject(actor1.id, token1)
+    })
+
+    it('actor has new name', async () => {
+      assert.strictEqual(fetched.name, 'Ephemeral Test Actor')
+    })
+
+    it('actor has new summary', async () => {
+      assert.strictEqual(fetched.summaryMap?.en, 'Hello, I am a test actor!')
+    })
+  })
+
+  describe('Update profile with invalid data', () => {
+    let actor1 = null
+    let token1 = null
+    const invalidUpdate = (prop) => {
+      return {
+        type: 'Update',
+        object: {
+          id: actor1.id,
+          [prop]: 'INVALID'
+        }
+      }
+    }
+    before(async () => {
+      [actor1, token1] = await registerActor()
+    })
+
+    it('fails on setting inbox', async () => {
+      const status = await failActivity(actor1, token1, invalidUpdate('inbox'))
+      assert(status >= 400 && status <= 499)
+    })
+
+    it('fails on setting followers', async () => {
+      const status = await failActivity(actor1, token1, invalidUpdate('followers'))
+      assert(status >= 400 && status <= 499)
+    })
+
+    it('fails on setting following', async () => {
+      const status = await failActivity(actor1, token1, invalidUpdate('following'))
+      assert(status >= 400 && status <= 499)
+    })
+
+    it('fails on setting liked', async () => {
+      const status = await failActivity(actor1, token1, invalidUpdate('liked'))
+      assert(status >= 400 && status <= 499)
+    })
+
+    it('fails on setting blocked', async () => {
+      const status = await failActivity(actor1, token1, invalidUpdate('blocked'))
+      assert(status >= 400 && status <= 499)
+    })
+
+    it('fails on setting pendingFollowers', async () => {
+      const status = await failActivity(actor1, token1, invalidUpdate('pendingFollowers'))
+      assert(status >= 400 && status <= 499)
+    })
+
+    it('fails on setting pendingFollowing', async () => {
+      const status = await failActivity(actor1, token1, invalidUpdate('pendingFollowing'))
+      assert(status >= 400 && status <= 499)
+    })
+
+    it('fails on setting outbox', async () => {
+      const status = await failActivity(actor1, token1, invalidUpdate('outbox'))
+      assert(status >= 400 && status <= 499)
+    })
+  })
+
+  describe('Update profile with same data', () => {
+    let actor1 = null
+    let token1 = null
+    const duplicateUpdate = (prop) => {
+      return {
+        type: 'Update',
+        object: {
+          id: actor1.id,
+          [prop]: actor1[prop]
+        }
+      }
+    }
+    before(async () => {
+      [actor1, token1] = await registerActor()
+    })
+
+    it('succeeds on setting duplicate inbox', async () => {
+      let update = null
+      try {
+        update = await doActivity(actor1, token1, duplicateUpdate('inbox'))
+      } catch (e) {
+        console.log(e)
+        assert(false)
+      }
+      assert.strictEqual(update.object?.inbox?.id, actor1.inbox?.id)
+    })
+
+    it('succeeds on setting duplicate followers', async () => {
+      const update = await doActivity(actor1, token1, duplicateUpdate('followers'))
+      assert.strictEqual(update.object?.followers?.id, actor1.followers?.id)
+    })
+
+    it('succeeds on setting duplicate following', async () => {
+      const update = await doActivity(actor1, token1, duplicateUpdate('following'))
+      assert.strictEqual(update.object?.following?.id, actor1.following?.id)
+    })
+
+    it('succeeds on setting duplicate liked', async () => {
+      const update = await doActivity(actor1, token1, duplicateUpdate('liked'))
+      assert.strictEqual(update.object?.liked?.id, actor1.liked?.id)
+    })
+
+    it('succeeds on setting duplicate blocked', async () => {
+      const update = await doActivity(actor1, token1, duplicateUpdate('blocked'))
+      assert.strictEqual(update.object?.blocked?.id, actor1.blocked?.id)
+    })
+
+    it('succeeds on setting duplicate pendingFollowers', async () => {
+      const update = await doActivity(actor1, token1, duplicateUpdate('pendingFollowers'))
+      assert.strictEqual(update.object?.pendingFollowers?.id, actor1.pendingFollowers?.id)
+    })
+
+    it('succeeds on setting duplicate pendingFollowing', async () => {
+      const update = await doActivity(actor1, token1, duplicateUpdate('pendingFollowing'))
+      assert.strictEqual(update.object?.pendingFollowing?.id, actor1.pendingFollowing?.id)
+    })
+
+    it('succeeds on setting duplicate outbox', async () => {
+      const update = await doActivity(actor1, token1, duplicateUpdate('outbox'))
+      assert.strictEqual(update.object?.outbox?.id, actor1.outbox?.id)
     })
   })
 })
