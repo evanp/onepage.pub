@@ -19,5 +19,8 @@
   "devDependencies": {
     "standard": "^17.1.0"
   },
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "engine": {
+    "node": ">=20.0.0"
+  }
 }
