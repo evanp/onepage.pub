@@ -1,0 +1,19 @@
+version: '3'
+services:
+  web:
+    build: .
+    image: ghcr.io/evanp/onepage.pub
+    ports:
+      - "3000:3000"
+    volumes:
+      - data-volume:/data/
+    environment:
+      - OPP_DATABASE=/data/onepage.db
+      - OPP_HOSTNAME=localhost
+      - OPP_PORT=3000
+      - OPP_KEY=localhost.key
+      - OPP_CERT=localhost.crt
+      - OPP_LOG_LEVEL=info
+
+volumes:
+  data-volume:
