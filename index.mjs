@@ -1722,6 +1722,7 @@ app.get('/register', wrap(async (req, res) => {
     <label for="username">Username</label> <input type="text" name="username" placeholder="Username" />
     <label for="password">Password</label> <input type="password" name="password" placeholder="Password" />
     <label for="confirmation">Confirm</label> <input type="password" name="confirmation" placeholder="Confirm Password" />
+    <input type="submit" value="Register" />
     </form>
     </body>
     </html>`)
