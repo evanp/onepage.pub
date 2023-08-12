@@ -1929,8 +1929,9 @@ app.post('/:type/:id',
       pq.add(activity.distribute(addressees))
       const output = await activity.expanded()
       output['@context'] = output['@context'] || CONTEXT
-      res.status(200)
+      res.status(201)
       res.set('Content-Type', 'application/activity+json')
+      res.set('Location', await activity.id())
       res.json(output)
     } else if (full === await owner.prop('inbox')) { // remote delivery
       if (!req.auth?.subject) {
