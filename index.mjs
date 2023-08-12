@@ -13,6 +13,7 @@ import jwt from 'jsonwebtoken'
 import { promisify } from 'util'
 import crypto from 'crypto'
 import winston from 'winston'
+import fetch from "node-fetch"
 
 // Configuration
 

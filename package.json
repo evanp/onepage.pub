@@ -9,6 +9,7 @@
     "https": "^1.0.0",
     "jsonwebtoken": "^9.0.1",
     "nanoid": "^4.0.2",
+    "node-fetch": "^3.3.1",
     "passport": "^0.6.0",
     "passport-local": "^1.0.0",
     "passport-oauth2": "^1.7.0",
