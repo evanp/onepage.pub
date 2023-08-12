@@ -34,6 +34,7 @@ const PENDING_CONTEXT = 'https://purl.archive.org/socialweb/pending'
 const CONTEXT = [AS_CONTEXT, SEC_CONTEXT, BLOCKED_CONTEXT, PENDING_CONTEXT]
 
 const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public'
+const PUBLICS = [PUBLIC, "as:Public", "Public"]
 const PUBLIC_OBJ = { id: PUBLIC, nameMap: { en: 'Public' }, type: 'Collection' }
 const MAX_PAGE_SIZE = 20
 
@@ -399,10 +400,14 @@ class ActivityObject {
         return false
       }
     }
+
     // anyone can read if it's public
-    if (addresseeIds.includes(PUBLIC)) {
-      return true
+    for (const addresseeId of addresseeIds) {
+      if (PUBLICS.includes(addresseeId)) {
+        return true
+      }
     }
+
     // otherwise, unauthenticated can't read
     if (!subject) {
       return false
@@ -1093,7 +1098,9 @@ class Activity extends ActivityObject {
     }
 
     for (const addressee of expanded) {
-      pq.add(sendTo(addressee))
+      if (!PUBLICS.includes(addressee)) {
+        pq.add(sendTo(addressee))
+      }
     }
   }
 }
