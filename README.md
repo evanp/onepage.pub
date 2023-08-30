@@ -100,6 +100,8 @@ https://github.com/users/evanp/projects/4/views/1
 
 PRs accepted. Please use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for your commit messages.
 
+Please add a unit test for your change to prevent regressions.
+
 Small note: If editing the README, please conform to the [standard-readme](https://github.com/RichardLitt/standard-readme) specification.
 
 ## License
