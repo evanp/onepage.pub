@@ -67,7 +67,7 @@ const doActivity = async (actor, token, activity) => {
     },
     body: JSON.stringify(activity)
   })
-  if (res.status !== 200) {
+  if (res.status !== 201) {
     const body = await res.text()
     throw new Error(`Bad status code ${res.status}: ${body}`)
   }
@@ -648,7 +648,7 @@ describe('onepage.pub', { only: true }, () => {
     it('has the correct HTTP response', async () => {
       assert.strictEqual(
         res.status,
-        200,
+        201,
         `Bad status code ${res.status}: ${body}`
       )
       assert.strictEqual(
@@ -3039,6 +3039,22 @@ describe('onepage.pub', { only: true }, () => {
       const cookie = reg.headers.get('Set-Cookie')
       assert.ok(cookie)
       assert(cookie.match('sid'))
+    })
+  })
+
+  describe('OAuth discovery by actor', () => {
+    let actor = null
+
+    before(async () => {
+      [actor] = await registerActor()
+    })
+
+    it('has an OAuth authorization endpoint', async () => {
+      assert.ok(actor.endpoints.oauthAuthorizationEndpoint)
+    })
+
+    it('has an OAuth token endpoint', async () => {
+      assert.ok(actor.endpoints.oauthTokenEndpoint)
     })
   })
 })

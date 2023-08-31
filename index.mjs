@@ -69,7 +69,9 @@ function makeUrl (relative) {
 
 function standardEndpoints () {
   return {
-    proxyUrl: makeUrl('endpoint/proxyUrl')
+    proxyUrl: makeUrl('endpoint/proxyUrl'),
+    oauthAuthorizationEndpoint: makeUrl('endpoint/oauth/authorize'),
+    oauthTokenEndpoint: makeUrl('endpoint/oauth/token')
   }
 }
 
@@ -1817,18 +1819,24 @@ app.post('/register', wrap(async (req, res) => {
     KEY_DATA,
     { algorithm: 'RS256' }
   )
-  res.type('html')
-  res.status(200)
-  res.end(`
-    <html>
-    <head>
-    <title>Registered</title>
-    </head>
-    <body>
-    <p>Registered <a class="actor" href="${user.actorId}">${username}</a></p>
-    <p>Personal access token is <span class="token">${token}</span>
-    </body>
-    </html>`)
+
+  req.login(user, (err) => {
+    if (err) {
+      throw new createError.InternalServerError('Failed to login')
+    }
+    res.type('html')
+    res.status(200)
+    res.end(`
+      <html>
+      <head>
+      <title>Registered</title>
+      </head>
+      <body>
+      <p>Registered <a class="actor" href="${user.actorId}">${username}</a></p>
+      <p>Personal access token is <span class="token">${token}</span>
+      </body>
+      </html>`)
+  })
 }))
 
 app.get('/login', wrap(async (req, res) => {
