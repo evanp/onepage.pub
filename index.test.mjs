@@ -41,7 +41,8 @@ const registerUser = (() => {
     })
     const text = await reg.text()
     const token = text.match(/<span class="token">(.*?)<\/span>/)[1]
-    return [username, token, password]
+    const cookie = reg.headers.get('Set-Cookie')
+    return [username, token, password, cookie]
   }
 })()
 
@@ -3017,6 +3018,27 @@ describe('onepage.pub', { only: true }, () => {
       assert(body2.includes('Logged in'))
       assert(body2.includes(username))
       assert(body2.match('<span class="token">.+?</span>'))
+    })
+  })
+
+  describe('Registration sets cookie', { only: true }, () => {
+    it('can get cookie from registration', async () => {
+      const username = 'testregcookie'
+      const password = 'testregcookiepass'
+      const reg = await fetch('https://localhost:3000/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: querystring.stringify({
+          username,
+          password,
+          confirmation: password
+        })
+      })
+      const text = await reg.text()
+      assert.strictEqual(reg.status, 200, `Bad status code ${reg.status}: ${text}`)
+      const cookie = reg.headers.get('Set-Cookie')
+      assert.ok(cookie)
+      assert(cookie.match('sid'))
     })
   })
 })
