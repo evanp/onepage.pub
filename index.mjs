@@ -13,6 +13,8 @@ import jwt from 'jsonwebtoken'
 import { promisify } from 'util'
 import crypto from 'crypto'
 import winston from 'winston'
+import session from 'express-session'
+import cookieParser from 'cookie-parser'
 
 // Configuration
 
@@ -22,6 +24,8 @@ const PORT = process.env.OPP_PORT || 3000
 const KEY = process.env.OPP_KEY || 'localhost.key'
 const CERT = process.env.OPP_CERT || 'localhost.crt'
 const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
+const SESSION_SECRET = process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
+
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
 
@@ -1638,16 +1642,40 @@ class User {
     if (!row) {
       return null
     } else {
-      const user = new User(row.username)
-      user.actorId = row.actorId
-      user.privateKey = row.privateKey
-      return user
+      return User.fromRow(row)
     }
+  }
+
+  static async fromUsername (username) {
+    const row = await db.get('SELECT * FROM user WHERE username = ?', [username])
+    if (!row) {
+      return null
+    } else {
+      return User.fromRow(row)
+    }
+  }
+
+  static async fromRow (row) {
+    const user = new User(row.username)
+    user.actorId = row.actorId
+    user.privateKey = row.privateKey
+    return user
   }
 
   async getActor (username) {
     const actor = new ActivityObject(this.actorId)
     return actor
+  }
+
+  static async authenticate (username, password) {
+    const row = await db.get('SELECT * FROM user WHERE username = ?', [username])
+    if (!row) {
+      return null
+    }
+    if (!await bcrypt.compare(password, row.passwordHash)) {
+      return null
+    }
+    return User.fromRow(row)
   }
 }
 
@@ -1687,16 +1715,47 @@ app.use((req, res, next) => {
   next()
 })
 
-app.use(passport.initialize()) // Initialize Passport
 app.use(express.json({ type: ['application/json', 'application/activity+json'] })) // for parsing application/json
 app.use(express.urlencoded({ extended: true })) // for HTML forms
 
-// Local Strategy for login/logout
+// Enable session management
+app.use(cookieParser())
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false
+}))
+app.use(passport.initialize()) // Initialize Passport
+app.use(passport.session())
+
 passport.use(new LocalStrategy(
   function (username, password, done) {
-
+    (async () => {
+      const user = await User.authenticate(username, password)
+      if (!user) {
+        return done(null, false, { message: 'Incorrect username or password.' })
+      } else {
+        return done(null, user)
+      }
+    })()
   }
 ))
+
+passport.serializeUser(function (user, done) {
+  const results = user.username
+  done(null, results)
+})
+
+passport.deserializeUser(function (username, done) {
+  (async () => {
+    try {
+      const user = await User.fromUsername(username)
+      done(null, user)
+    } catch (err) {
+      done(err)
+    }
+  })()
+})
 
 app.get('/', wrap(async (req, res) => {
   const url = req.protocol + '://' + req.get('host') + req.originalUrl
@@ -1767,6 +1826,60 @@ app.post('/register', wrap(async (req, res) => {
     </head>
     <body>
     <p>Registered <a class="actor" href="${user.actorId}">${username}</a></p>
+    <p>Personal access token is <span class="token">${token}</span>
+    </body>
+    </html>`)
+}))
+
+app.get('/login', wrap(async (req, res) => {
+  res.type('html')
+  res.status(200)
+  res.end(`
+    <html>
+    <head>
+    <title>Register</title>
+    </head>
+    <body>
+    <form method="POST" action="/login">
+    <label for="username">Username</label> <input type="text" name="username" placeholder="Username" />
+    <label for="password">Password</label> <input type="password" name="password" placeholder="Password" />
+    <input type="submit" value="Login" />
+    </form>
+    </body>
+    </html>`)
+}))
+
+app.post('/login', passport.authenticate('local', {
+  successRedirect: '/login/success',
+  failureRedirect: '/login?error=1'
+}))
+
+app.get('/login/success', passport.authenticate('session'), wrap(async (req, res) => {
+  if (!req.isAuthenticated()) {
+    throw new createError.InternalServerError('Not authenticated')
+  }
+  const user = req.user
+  if (!user) {
+    throw new createError.InternalServerError('Invalid user even though isAuthenticated() is true')
+  }
+  const token = await sign(
+    {
+      subject: user.actorId,
+      issuer: req.protocol + '://' + req.get('host') + '/'
+    },
+    KEY_DATA,
+    { algorithm: 'RS256' }
+  )
+
+  res.type('html')
+  res.status(200)
+  res.end(`
+    <html>
+    <head>
+    <title>Logged in</title>
+    </head>
+    <body>
+    <p>Logged in <a class="actor" href="${user.actorId}">${user.username}</a></p>
     <p>Personal access token is <span class="token">${token}</span>
     </body>
     </html>`)

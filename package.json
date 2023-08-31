@@ -2,9 +2,11 @@
   "dependencies": {
     "bcrypt": "^5.1.0",
     "config": "^3.3.9",
+    "cookie-parser": "^1.4.6",
     "express": "^4.18.2",
     "express-async-handler": "^1.2.0",
     "express-jwt": "^8.4.1",
+    "express-session": "^1.17.3",
     "http-errors": "^2.0.0",
     "https": "^1.0.0",
     "jsonwebtoken": "^9.0.1",

@@ -41,7 +41,7 @@ const registerUser = (() => {
     })
     const text = await reg.text()
     const token = text.match(/<span class="token">(.*?)<\/span>/)[1]
-    return [username, token]
+    return [username, token, password]
   }
 })()
 
@@ -142,7 +142,7 @@ const canGetProxy = async (id, actor, token) => {
   return !!result
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
 
@@ -2960,6 +2960,63 @@ describe('onepage.pub', () => {
     it('succeeds on setting duplicate outbox', async () => {
       const update = await doActivity(actor1, token1, duplicateUpdate('outbox'))
       assert.strictEqual(update.object?.outbox?.id, actor1.outbox?.id)
+    })
+  })
+
+  describe('Login', () => {
+    let username = null
+    let password = null
+
+    before(async () => {
+      [username, , password] = await registerUser()
+    })
+
+    it('can get Login page', async () => {
+      const res = await fetch('https://localhost:3000/login')
+      const body = await res.text()
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'text/html; charset=utf-8'
+      )
+      assert(body.includes('<form'))
+      assert(body.includes('name="username"'))
+      assert(body.includes('name="password"'))
+      assert(body.includes('type="submit"'))
+    })
+
+    it('can log in a user', async () => {
+      const res = await fetch('https://localhost:3000/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: querystring.stringify({
+          username,
+          password
+        }),
+        redirect: 'manual'
+      })
+      const body = await res.text()
+      assert.strictEqual(
+        res.status,
+        302,
+        `Bad status code ${res.status}: ${body}`
+      )
+      assert.ok(res.headers.get('Location'))
+      assert.ok(res.headers.get('Set-Cookie'))
+      const location = res.headers.get('Location')
+      const cookie = res.headers.get('Set-Cookie')
+      const res2 = await fetch(new URL(location, 'https://localhost:3000/'), {
+        headers: { Cookie: cookie }
+      })
+      const body2 = await res2.text()
+      assert.strictEqual(
+        res2.status,
+        200,
+        `Bad status code ${res2.status}: ${body2}`
+      )
+      assert(body2.includes('Logged in'))
+      assert(body2.includes(username))
+      assert(body2.match('<span class="token">.+?</span>'))
     })
   })
 })
