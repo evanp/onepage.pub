@@ -3021,7 +3021,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Registration sets cookie', { only: true }, () => {
+  describe('Registration sets cookie', () => {
     it('can get cookie from registration', async () => {
       const username = 'testregcookie'
       const password = 'testregcookiepass'
