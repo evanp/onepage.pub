@@ -1842,6 +1842,8 @@ app.post('/register', wrap(async (req, res) => {
 app.get('/login', wrap(async (req, res) => {
   res.type('html')
   res.status(200)
+  res.header('X-Opp-Actor', user.actorId)
+  res.header('X-Opp-Token', token)
   res.end(`
     <html>
     <head>
