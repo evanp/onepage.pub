@@ -3,6 +3,7 @@ import { exec } from 'node:child_process'
 import assert from 'node:assert'
 import querystring from 'node:querystring'
 import { inspect } from 'node:util'
+import crypto from 'node:crypto'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
@@ -47,7 +48,7 @@ const registerUser = (() => {
 })()
 
 const registerActor = async (port = 3000) => {
-  const [username, token] = await registerUser(port)
+  const [username, token, , cookie] = await registerUser(port)
   const res = await fetch(
     `https://localhost:${port}/.well-known/webfinger?resource=acct:${username}@localhost:${port}`
   )
@@ -55,7 +56,7 @@ const registerActor = async (port = 3000) => {
   const actorId = obj.links[0].href
   const actorRes = await fetch(actorId)
   const actor = await actorRes.json()
-  return [actor, token]
+  return [actor, token, cookie]
 }
 
 const doActivity = async (actor, token, activity) => {
@@ -143,7 +144,13 @@ const canGetProxy = async (id, actor, token) => {
   return !!result
 }
 
-describe('onepage.pub', { only: true }, () => {
+const base64URLEncode = (str) =>
+  str.toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+
+describe('onepage.pub', () => {
   let child = null
   let remote = null
 
@@ -3055,6 +3062,183 @@ describe('onepage.pub', { only: true }, () => {
 
     it('has an OAuth token endpoint', async () => {
       assert.ok(actor.endpoints.oauthTokenEndpoint)
+    })
+  })
+
+  describe('OAuth authorization endpoint', () => {
+    let actor = null
+    let cookie = null
+    let code = null
+    let action = null
+    let csrfToken = null
+    let accessToken = null
+    let refreshToken = null
+    let accessToken2 = null
+    const clientId = 'test.onepage.pub'
+    const redirectUri = 'https://localhost:4000/oauth/callback'
+    const scope = 'read write'
+    const state = 'teststate'
+    const codeVerifier = base64URLEncode(crypto.randomBytes(32))
+    const hash = crypto.createHash('sha256').update(codeVerifier).digest()
+    const codeChallenge = base64URLEncode(hash)
+
+    before(async () => {
+      [actor, , cookie] = await registerActor()
+    })
+
+    it('can get authorization form', async () => {
+      const authz = actor.endpoints.oauthAuthorizationEndpoint
+      const responseType = 'code'
+      const qs = querystring.stringify({
+        response_type: responseType,
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        scope,
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge
+      })
+      const res = await fetch(`${authz}?${qs}`, {
+        headers: { Cookie: cookie }
+      })
+      const body = await res.text()
+      assert.strictEqual(res.status, 200)
+      assert(body.includes('<form'))
+      assert(body.includes('submit'))
+      action = body.match(/action="(.+?)"/)[1]
+      csrfToken = body.match(/name="csrf_token" value="(.+?)"/)[1]
+    })
+
+    it('can get authorization code', async () => {
+      const authz = actor.endpoints.oauthAuthorizationEndpoint
+      const post = new URL(action, authz)
+      const res2 = await fetch(post, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Cookie: cookie
+        },
+        body: querystring.stringify({
+          csrf_token: csrfToken,
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          scope,
+          state,
+          code_challenge: codeChallenge
+        }),
+        redirect: 'manual'
+      })
+      const body2 = await res2.text()
+      assert.strictEqual(res2.status, 302, `Bad status code ${res2.status}: ${body2}`)
+      assert.ok(res2.headers.get('Location'))
+      const location = res2.headers.get('Location')
+      assert.strictEqual(location.substring(0, redirectUri.length), redirectUri)
+      const locUrl = new URL(location)
+      code = locUrl.searchParams.get('code')
+      assert.ok(code)
+      const state2 = locUrl.searchParams.get('state')
+      assert.strictEqual(state2, state)
+    })
+
+    it('can get access code', async () => {
+      const tokUrl = actor.endpoints.oauthTokenEndpoint
+      const res3 = await fetch(tokUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: querystring.stringify({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: redirectUri,
+          code_verifier: codeVerifier,
+          client_id: clientId
+        })
+      })
+      const body3 = await res3.json()
+      assert.strictEqual(res3.status, 200, `Bad status code ${res3.status}: ${body3}`)
+      assert.strictEqual(res3.headers.get('Content-Type'), 'application/json; charset=utf-8')
+      accessToken = body3.access_token
+      assert.ok(accessToken)
+      assert.strictEqual(body3.token_type, 'Bearer')
+      assert.ok(body3.scope)
+      assert.ok(body3.expires_in)
+      refreshToken = body3.refresh_token
+      assert.ok(refreshToken)
+    })
+
+    it('can use the access token to read', async () => {
+      const res = await fetch(actor.inbox.id, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      })
+      const body = await res.json()
+      assert.strictEqual(res.status, 200, `Bad status code ${res.status}: ${body}`)
+    })
+
+    it('can use the access token to write', async () => {
+      const res = await fetch(actor.outbox.id, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/activity+json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          type: 'IntransitiveActivity'
+        })
+      })
+      const body = await res.json()
+      assert.strictEqual(res.status, 201, `Bad status code ${res.status}: ${body}`)
+    })
+
+    it('can get access code with refresh token', async () => {
+      const tokUrl = actor.endpoints.oauthTokenEndpoint
+      const res = await fetch(tokUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: querystring.stringify({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          scope
+        })
+      })
+      const body = await res.json()
+      assert.strictEqual(res.headers.get('Content-Type'), 'application/json; charset=utf-8')
+      accessToken2 = body.access_token
+      assert.ok(accessToken2)
+      assert.strictEqual(body.token_type, 'Bearer')
+      assert.ok(body.scope)
+      assert.ok(body.expires_in)
+    })
+
+    it('can use the refreshed access token to read', async () => {
+      const res = await fetch(actor.inbox.id, {
+        headers: {
+          Authorization: `Bearer ${accessToken2}`
+        }
+      })
+      const body = await res.json()
+      assert.strictEqual(res.status, 200, `Bad status code ${res.status}: ${body}`)
+    })
+
+    it('can use the refreshed access token to write', async () => {
+      const res = await fetch(actor.outbox.id, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/activity+json',
+          Authorization: `Bearer ${accessToken2}`
+        },
+        body: JSON.stringify({
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          type: 'IntransitiveActivity'
+        })
+      })
+      const body = await res.json()
+      assert.strictEqual(res.status, 201, `Bad status code ${res.status}: ${body}`)
     })
   })
 })

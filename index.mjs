@@ -15,6 +15,7 @@ import crypto from 'crypto'
 import winston from 'winston'
 import session from 'express-session'
 import cookieParser from 'cookie-parser'
+import querystring from 'node:querystring'
 
 // Configuration
 
@@ -43,10 +44,17 @@ const MAX_PAGE_SIZE = 20
 
 // Functions
 
-const sign = promisify(jwt.sign)
+const jwtsign = promisify(jwt.sign)
+const jwtverify = promisify(jwt.verify)
 const generateKeyPair = promisify(crypto.generateKeyPair)
 
 const isString = value => typeof value === 'string' || value instanceof String
+
+const base64URLEncode = (str) =>
+  str.toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
 
 async function toId (value) {
   if (typeof value === 'undefined') {
@@ -1727,6 +1735,15 @@ app.use(session({
   resave: false,
   saveUninitialized: false
 }))
+
+// CSRF token middleware
+const csrf = wrap(async (req, res, next) => {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = await nanoid()
+  }
+  next()
+})
+
 app.use(passport.initialize()) // Initialize Passport
 app.use(passport.session())
 
@@ -1770,7 +1787,7 @@ app.get('/', wrap(async (req, res) => {
   })
 }))
 
-app.get('/register', wrap(async (req, res) => {
+app.get('/register', csrf, wrap(async (req, res) => {
   res.type('html')
   res.status(200)
   res.end(`
@@ -1789,7 +1806,7 @@ app.get('/register', wrap(async (req, res) => {
     </html>`)
 }))
 
-app.post('/register', wrap(async (req, res) => {
+app.post('/register', csrf, wrap(async (req, res) => {
   if (req.get('Content-Type') !== 'application/x-www-form-urlencoded') {
     throw new createError.BadRequest('Invalid Content-Type')
   }
@@ -1811,7 +1828,7 @@ app.post('/register', wrap(async (req, res) => {
   const password = req.body.password
   const user = new User(username, password)
   await user.save()
-  const token = await sign(
+  const token = await jwtsign(
     {
       subject: user.actorId,
       issuer: req.protocol + '://' + req.get('host') + '/'
@@ -1839,7 +1856,7 @@ app.post('/register', wrap(async (req, res) => {
   })
 }))
 
-app.get('/login', wrap(async (req, res) => {
+app.get('/login', csrf, wrap(async (req, res) => {
   res.type('html')
   res.status(200)
   res.end(`
@@ -1857,7 +1874,7 @@ app.get('/login', wrap(async (req, res) => {
     </html>`)
 }))
 
-app.post('/login', passport.authenticate('local', {
+app.post('/login', csrf, passport.authenticate('local', {
   successRedirect: '/login/success',
   failureRedirect: '/login?error=1'
 }))
@@ -1870,7 +1887,7 @@ app.get('/login/success', passport.authenticate('session'), wrap(async (req, res
   if (!user) {
     throw new createError.InternalServerError('Invalid user even though isAuthenticated() is true')
   }
-  const token = await sign(
+  const token = await jwtsign(
     {
       subject: user.actorId,
       issuer: req.protocol + '://' + req.get('host') + '/'
@@ -1964,6 +1981,227 @@ app.post('/endpoint/proxyUrl',
     res.set('Content-Type', 'application/activity+json')
     res.json(fetchJson)
   }))
+
+app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wrap(async (req, res) => {
+  if (!req.isAuthenticated()) {
+    res.redirect('/login&returnTo=' + encodeURIComponent(req.originalUrl))
+  } else {
+    if (!req.query.client_id) {
+      throw new createError.BadRequest('Missing client_id')
+    }
+    if (!req.query.redirect_uri) {
+      throw new createError.BadRequest('Missing redirect_uri')
+    }
+    if (!req.query.response_type || req.query.response_type !== 'code') {
+      throw new createError.BadRequest('Missing or invalid response_type')
+    }
+    if (!req.query.scope) {
+      throw new createError.BadRequest('Missing scope')
+    }
+    if (!req.query.code_challenge) {
+      throw new createError.BadRequest('Missing code_challenge')
+    }
+    if (!req.query.code_challenge_method || req.query.code_challenge_method !== 'S256') {
+      throw new createError.BadRequest('Unsupported code challenge value')
+    }
+
+    res.type('html')
+    res.status(200)
+    res.end(`
+      <html>
+      <head>
+      <title>Authorize</title>
+      </head>
+      <body>
+      <p>
+        This app is asking to authorize access to your account.
+        <ul>
+          <li>Client: ${req.query.client_id}</li>
+          <li>Scope: ${req.query.scope}</li>
+        </ul>
+      </p>
+      <form method="POST" action="/endpoint/oauth/authorize">
+      <input type="hidden" name="csrf_token" value="${req.session.csrfToken}" />
+      <input type="hidden" name="client_id" value="${req.query.client_id}" />
+      <input type="hidden" name="redirect_uri" value="${req.query.redirect_uri}" />
+      <input type="hidden" name="scope" value="${req.query.scope}" />
+      <input type="hidden" name="code_challenge" value="${req.query.code_challenge}" />
+      <input type="hidden" name="state" value="${req.query.state}" />
+      <input type="submit" value="Authorize" />
+      </form>
+      </body>
+      </html>`)
+  }
+}))
+
+app.post('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wrap(async (req, res) => {
+  if (!req.isAuthenticated()) {
+    res.redirect('/login&returnTo=' + encodeURIComponent(req.originalUrl))
+  } else {
+    if (!req.body.csrf_token || req.body.csrf_token !== req.session.csrfToken) {
+      throw new createError.BadRequest('Invalid CSRF token')
+    }
+    if (!req.body.client_id) {
+      throw new createError.BadRequest('Missing client_id')
+    }
+    if (!req.body.redirect_uri) {
+      throw new createError.BadRequest('Missing redirect_uri')
+    }
+    if (!req.body.scope) {
+      throw new createError.BadRequest('Missing scope')
+    }
+    if (!req.body.code_challenge) {
+      throw new createError.BadRequest('Missing code_challenge')
+    }
+    // We use a JWT for the authorization code
+    const code = await jwtsign(
+      {
+        jwtid: await nanoid(),
+        type: 'authz',
+        subject: req.user.actorId,
+        scope: req.body.scope,
+        challenge: req.body.code_challenge,
+        client: req.body.client_id,
+        redir: req.body.redirect_uri,
+        expiresIn: '10m',
+        issuer: makeUrl('/')
+      },
+      KEY_DATA,
+      { algorithm: 'RS256' }
+    )
+    const state = req.body.state
+    res.redirect(req.body.redirect_uri + '?' + querystring.stringify({ code, state }))
+  }
+}))
+
+app.post('/endpoint/oauth/token', wrap(async (req, res) => {
+  if (req.get('Content-Type') !== 'application/x-www-form-urlencoded') {
+    throw new createError.BadRequest('Invalid Content-Type')
+  }
+  if (!req.body.grant_type || !['authorization_code', 'refresh_token'].includes(req.body.grant_type)) {
+    throw new createError.BadRequest('Invalid grant_type')
+  }
+  if (req.body.grant_type === 'authorization_code') {
+    if (!req.body.code) {
+      throw new createError.BadRequest('Missing code')
+    }
+    if (!req.body.redirect_uri) {
+      throw new createError.BadRequest('Missing redirect_uri')
+    }
+    if (!req.body.client_id) {
+      throw new createError.BadRequest('Missing client_id')
+    }
+    if (!req.body.code_verifier) {
+      throw new createError.BadRequest('Missing code_verifier')
+    }
+    const code = req.body.code
+    const fields = await jwtverify(code, KEY_DATA, { algorithm: 'RS256' })
+    if (fields.type !== 'authz') {
+      throw new createError.BadRequest('Invalid code')
+    }
+    if (fields.client !== req.body.client_id) {
+      throw new createError.BadRequest('Invalid client')
+    }
+    if (fields.redir !== req.body.redirect_uri) {
+      throw new createError.BadRequest('Invalid redirect_uri')
+    }
+    if (fields.challenge !== await base64URLEncode(crypto.createHash('sha256').update(req.body.code_verifier).digest())) {
+      throw new createError.BadRequest('Invalid code_verifier')
+    }
+    if (fields.issuer !== makeUrl('/')) {
+      throw new createError.BadRequest('Invalid issuer')
+    }
+    const user = User.fromActorId(fields.subject)
+    if (!user) {
+      throw new createError.BadRequest('Invalid user')
+    }
+    // TODO: check that jwtid has not be reused
+    const token = await jwtsign(
+      {
+        jwtid: await nanoid(),
+        type: 'access',
+        subject: fields.subject,
+        scope: fields.scope,
+        client: fields.client,
+        expiresIn: '1d',
+        issuer: makeUrl('/')
+      },
+      KEY_DATA,
+      { algorithm: 'RS256' }
+    )
+    const refreshToken = await jwtsign(
+      {
+        jwtid: await nanoid(),
+        type: 'refresh',
+        subject: fields.subject,
+        scope: fields.scope,
+        client: fields.client,
+        expiresIn: '30d',
+        issuer: makeUrl('/')
+      },
+      KEY_DATA,
+      { algorithm: 'RS256' }
+    )
+    res.set('Content-Type', 'application/json')
+    res.json({
+      access_token: token,
+      token_type: 'Bearer',
+      scope: fields.scope,
+      expires_in: 86400,
+      refresh_token: refreshToken
+    })
+  } else if (req.body.grant_type === 'refresh_token') {
+    if (!req.body.refresh_token) {
+      throw new createError.BadRequest('Missing refresh_token')
+    }
+    const refreshToken = req.body.refresh_token
+    const fields = await jwtverify(refreshToken, KEY_DATA, { algorithm: 'RS256' })
+    if (fields.type !== 'refresh') {
+      throw new createError.BadRequest('Invalid code')
+    }
+    if (fields.issuer !== makeUrl('/')) {
+      throw new createError.BadRequest('Invalid issuer')
+    }
+    const user = User.fromActorId(fields.subject)
+    if (!await user) {
+      throw new createError.BadRequest('Invalid user')
+    }
+    const token = await jwtsign(
+      {
+        jwtid: await nanoid(),
+        type: 'access',
+        subject: fields.subject,
+        scope: fields.scope,
+        client: fields.client,
+        expiresIn: '1d',
+        issuer: makeUrl('/')
+      },
+      KEY_DATA,
+      { algorithm: 'RS256' }
+    )
+    const newRefreshToken = await jwtsign(
+      {
+        jwtid: await nanoid(),
+        type: 'refresh',
+        subject: fields.subject,
+        scope: fields.scope,
+        client: fields.client,
+        expiresIn: '30d',
+        issuer: makeUrl('/')
+      },
+      KEY_DATA,
+      { algorithm: 'RS256' }
+    )
+    res.set('Content-Type', 'application/json')
+    res.json({
+      access_token: token,
+      token_type: 'Bearer',
+      scope: fields.scope,
+      expires_in: 86400,
+      refresh_token: newRefreshToken
+    })
+  }
+}))
 
 app.get('/:type/:id',
   expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),
