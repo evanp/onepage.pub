@@ -50,15 +50,19 @@ const registerUser = (() => {
   }
 })()
 
-const registerActor = async (port = 3000) => {
-  const [username, token, , cookie] = await registerUser(port)
+const userToActor = async (username, port = 3000) => {
   const res = await fetch(
     `https://localhost:${port}/.well-known/webfinger?resource=acct:${username}@localhost:${port}`
   )
   const obj = await res.json()
   const actorId = obj.links[0].href
   const actorRes = await fetch(actorId)
-  const actor = await actorRes.json()
+  return await actorRes.json()
+}
+
+const registerActor = async (port = 3000) => {
+  const [username, token, , cookie] = await registerUser(port)
+  const actor = await userToActor(username, port)
   return [actor, token, cookie]
 }
 
@@ -3403,7 +3407,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Cannot use authorization code as access token', { only: true }, () => {
+  describe('Cannot use authorization code as access token', () => {
     let actor = null
     let code = null
     let note = null
@@ -3425,7 +3429,7 @@ describe('onepage.pub', { only: true }, () => {
       })
       note = activity.object
     })
-    it('cannot use the authorization code to read', { only: true }, async () => {
+    it('cannot use the authorization code to read', async () => {
       // This is a private collection so should only be available to the actor
       const res = await fetch(actor.pendingFollowers.id, {
         headers: {
@@ -3437,14 +3441,14 @@ describe('onepage.pub', { only: true }, () => {
       assert.strictEqual(body.error, 'invalid_token')
       assert(body.error_description)
     })
-    it('cannot use the authorization code to write', { only: true }, async () => {
+    it('cannot use the authorization code to write', async () => {
       const status = await failActivity(actor, code, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         type: 'IntransitiveActivity'
       })
       assert.strictEqual(status, 401)
     })
-    it('cannot use the authorization code to read through proxy', { only: true }, async () => {
+    it('cannot use the authorization code to read through proxy', async () => {
       const res = await fetch(actor.endpoints.proxyUrl, {
         method: 'POST',
         headers: {
@@ -3460,7 +3464,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Cannot use refresh token as access token', { only: true }, () => {
+  describe('Cannot use refresh token as access token', () => {
     let actor = null
     let refreshToken = null
     let note = null
@@ -3483,7 +3487,7 @@ describe('onepage.pub', { only: true }, () => {
       })
       note = activity.object
     })
-    it('cannot use the refresh token to read', { only: true }, async () => {
+    it('cannot use the refresh token to read', async () => {
       // This is a private collection so should only be available to the actor
       const res = await fetch(actor.pendingFollowers.id, {
         headers: {
@@ -3495,14 +3499,14 @@ describe('onepage.pub', { only: true }, () => {
       assert.strictEqual(body.error, 'invalid_token')
       assert(body.error_description)
     })
-    it('cannot use the authorization code to write', { only: true }, async () => {
+    it('cannot use the authorization code to write', async () => {
       const status = await failActivity(actor, refreshToken, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         type: 'IntransitiveActivity'
       })
       assert.strictEqual(status, 401)
     })
-    it('cannot use the authorization code to read through proxy', { only: true }, async () => {
+    it('cannot use the authorization code to read through proxy', async () => {
       const res = await fetch(actor.endpoints.proxyUrl, {
         method: 'POST',
         headers: {
@@ -3515,6 +3519,93 @@ describe('onepage.pub', { only: true }, () => {
       const body = await res.json()
       assert.strictEqual(body.error, 'invalid_token')
       assert(body.error_description)
+    })
+  })
+
+  describe('Add Bootstrap', { only: true }, () => {
+    let username = null
+    let actor = null
+    let password = null
+    let cookie = null
+    before(async () => {
+      [username, , password, cookie] = await registerUser()
+      actor = await userToActor(username)
+    })
+    it('bootstrap in registration form', { only: true }, async () => {
+      const res = await fetch('https://localhost:3000/register')
+      const body = await res.text()
+      assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
+      assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
+    })
+    it('bootstrap in login form', { only: true }, async () => {
+      const res = await fetch('https://localhost:3000/login')
+      const body = await res.text()
+      assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
+      assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
+    })
+    it('bootstrap in registration results', { only: true }, async () => {
+      const username = 'testbootstrap'
+      const password = 'testbootstrap'
+      const res = await fetch('https://localhost:3000/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: querystring.stringify({
+          username,
+          password,
+          confirmation: password
+        })
+      })
+      const body = await res.text()
+      assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
+      assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
+    })
+    it('bootstrap in login results', { only: true }, async () => {
+      // NB: registered in previous test
+      const res = await fetch('https://localhost:3000/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: querystring.stringify({
+          username,
+          password
+        }),
+        redirect: 'manual'
+      })
+      const location = res.headers.get('Location')
+      const cookie = res.headers.get('Set-Cookie')
+      const res2 = await fetch(new URL(location, 'https://localhost:3000/'), {
+        headers: { Cookie: cookie }
+      })
+      const body2 = await res2.text()
+      assert.match(body2, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
+      assert.match(body2, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(body2, /<script src="\/popper\/popper.min.js"><\/script>/)
+    })
+    it('bootstrap in authorization form', { only: true }, async () => {
+      const state = crypto.randomBytes(16).toString('hex')
+      const authz = actor.endpoints.oauthAuthorizationEndpoint
+      const responseType = 'code'
+      const scope = 'read write'
+      const codeVerifier = crypto.randomBytes(32).toString('hex')
+      const codeChallenge = base64URLEncode(crypto.createHash('sha256').update(codeVerifier).digest())
+      const qs = querystring.stringify({
+        response_type: responseType,
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        scope,
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge
+      })
+      const res = await fetch(`${authz}?${qs}`, {
+        headers: { Cookie: cookie }
+      })
+      const body = await res.text()
+      assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
+      assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
   })
 })

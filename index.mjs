@@ -1792,6 +1792,9 @@ passport.deserializeUser(function (username, done) {
   })()
 })
 
+app.use('/bootstrap/', express.static('node_modules/bootstrap/dist/'))
+app.use('/popper/', express.static('node_modules/@popperjs/core/dist/umd'))
+
 app.get('/', wrap(async (req, res) => {
   const url = req.protocol + '://' + req.get('host') + req.originalUrl
   res.set('Content-Type', 'application/activity+json')
@@ -1810,6 +1813,7 @@ app.get('/register', csrf, wrap(async (req, res) => {
     <html>
     <head>
     <title>Register</title>
+    <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
     </head>
     <body>
     <form method="POST" action="/register">
@@ -1818,6 +1822,8 @@ app.get('/register', csrf, wrap(async (req, res) => {
     <label for="confirmation">Confirm</label> <input type="password" name="confirmation" placeholder="Confirm Password" />
     <input type="submit" value="Register" />
     </form>
+    <script src="/popper/popper.min.js"></script>
+    <script src="/bootstrap/js/bootstrap.min.js"></script>
     </body>
     </html>`)
 }))
@@ -1866,10 +1872,13 @@ app.post('/register', csrf, wrap(async (req, res) => {
       <html>
       <head>
       <title>Registered</title>
+      <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
       </head>
       <body>
       <p>Registered <a class="actor" href="${user.actorId}">${username}</a></p>
       <p>Personal access token is <span class="token">${token}</span>
+      <script src="/popper/popper.min.js"></script>
+      <script src="/bootstrap/js/bootstrap.min.js"></script>
       </body>
       </html>`)
   })
@@ -1881,7 +1890,8 @@ app.get('/login', csrf, wrap(async (req, res) => {
   res.end(`
     <html>
     <head>
-    <title>Register</title>
+    <title>Log in</title>
+    <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
     </head>
     <body>
     <form method="POST" action="/login">
@@ -1889,6 +1899,8 @@ app.get('/login', csrf, wrap(async (req, res) => {
     <label for="password">Password</label> <input type="password" name="password" placeholder="Password" />
     <input type="submit" value="Login" />
     </form>
+    <script src="/popper/popper.min.js"></script>
+    <script src="/bootstrap/js/bootstrap.min.js"></script>
     </body>
     </html>`)
 }))
@@ -1924,10 +1936,13 @@ app.get('/login/success', passport.authenticate('session'), wrap(async (req, res
     <html>
     <head>
     <title>Logged in</title>
+    <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
     </head>
     <body>
     <p>Logged in <a class="actor" href="${user.actorId}">${user.username}</a></p>
     <p>Personal access token is <span class="token">${token}</span>
+    <script src="/popper/popper.min.js"></script>
+    <script src="/bootstrap/js/bootstrap.min.js"></script>
     </body>
     </html>`)
 }))
@@ -2037,6 +2052,7 @@ app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wra
       <html>
       <head>
       <title>Authorize</title>
+      <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
       </head>
       <body>
       <p>
@@ -2055,6 +2071,8 @@ app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wra
       <input type="hidden" name="state" value="${req.query.state}" />
       <input type="submit" value="Authorize" />
       </form>
+      <script src="/popper/popper.min.js"></script>
+      <script src="/bootstrap/js/bootstrap.min.js"></script>
       </body>
       </html>`)
   }
