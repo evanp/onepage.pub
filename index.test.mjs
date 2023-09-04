@@ -3314,7 +3314,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('OAuth 2.0 read-only scope', { only: true }, () => {
+  describe('OAuth 2.0 read-only scope', () => {
     let actor = null
     let cookie = null
     let token = null
@@ -3335,20 +3335,20 @@ describe('onepage.pub', { only: true }, () => {
       })
       note = activity.object
     })
-    it('can get access code', { only: true }, async () => {
+    it('can get access code', async () => {
       token = await getAccessToken(actor, cookie, 'read')
       assert.ok(token)
     })
-    it('can use the access token to read local', { only: true }, async () => {
+    it('can use the access token to read local', async () => {
       // This is a private collection so should only be available to the actor
       const pendingFollowers = await getObject(actor.pendingFollowers.id, token)
       assert.strictEqual(pendingFollowers.totalItems, 0)
     })
-    it('can use the access token to read remote', { only: true }, async () => {
+    it('can use the access token to read remote', async () => {
       const remoteNote = await getObject(note.id, token)
       assert.strictEqual(remoteNote.contentMap?.en, 'Hello, world!')
     })
-    it('cannot use the access token to write', { only: true }, async () => {
+    it('cannot use the access token to write', async () => {
       const status = await failActivity(actor, token, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         type: 'IntransitiveActivity'
@@ -3357,7 +3357,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('OAuth 2.0 write-only scope', { only: true }, () => {
+  describe('OAuth 2.0 write-only scope', () => {
     let actor = null
     let cookie = null
     let token = null
@@ -3378,18 +3378,18 @@ describe('onepage.pub', { only: true }, () => {
       })
       note = activity.object
     })
-    it('can get write-only access code', { only: true }, async () => {
+    it('can get write-only access code', async () => {
       token = await getAccessToken(actor, cookie, 'write')
       assert.ok(token)
     })
-    it('can use the access token to write', { only: true }, async () => {
+    it('can use the access token to write', async () => {
       const activity = await doActivity(actor, token, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         type: 'IntransitiveActivity'
       })
       assert.ok(activity)
     })
-    it('cannot use the access token to read local', { only: true }, async () => {
+    it('cannot use the access token to read local', async () => {
       // This is a private collection so should only be available to the actor
       const res = await fetch(actor.pendingFollowers.id, {
         headers: {
@@ -3398,8 +3398,123 @@ describe('onepage.pub', { only: true }, () => {
       })
       assert.strictEqual(res.status, 403)
     })
-    it('cannot use the access token to read remote', { only: true }, async () => {
+    it('cannot use the access token to read remote', async () => {
       assert(!(await canGetProxy(note.id, actor, token)))
+    })
+  })
+
+  describe('Cannot use authorization code as access token', { only: true }, () => {
+    let actor = null
+    let code = null
+    let note = null
+    before(async () => {
+      let cookie = null;
+      [actor, , cookie] = await registerActor()
+      code = await getAuthCode(actor, cookie)
+      const [actor2, token2] = await registerActor(3001)
+      const activity = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      note = activity.object
+    })
+    it('cannot use the authorization code to read', { only: true }, async () => {
+      // This is a private collection so should only be available to the actor
+      const res = await fetch(actor.pendingFollowers.id, {
+        headers: {
+          Authorization: `Bearer ${code}`
+        }
+      })
+      assert.strictEqual(res.status, 401)
+      const body = await res.json()
+      assert.strictEqual(body.error, 'invalid_token')
+      assert(body.error_description)
+    })
+    it('cannot use the authorization code to write', { only: true }, async () => {
+      const status = await failActivity(actor, code, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'IntransitiveActivity'
+      })
+      assert.strictEqual(status, 401)
+    })
+    it('cannot use the authorization code to read through proxy', { only: true }, async () => {
+      const res = await fetch(actor.endpoints.proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Bearer ${code}`
+        },
+        body: querystring.stringify({ id: note.id })
+      })
+      assert.strictEqual(res.status, 401)
+      const body = await res.json()
+      assert.strictEqual(body.error, 'invalid_token')
+      assert(body.error_description)
+    })
+  })
+
+  describe('Cannot use refresh token as access token', { only: true }, () => {
+    let actor = null
+    let refreshToken = null
+    let note = null
+    before(async () => {
+      let cookie = null;
+      [actor, , cookie] = await registerActor()
+      const [code, codeVerifier] = await getAuthCode(actor, cookie);
+      [, refreshToken] = await getTokens(actor, code, codeVerifier)
+      const [actor2, token2] = await registerActor(3001)
+      const activity = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      note = activity.object
+    })
+    it('cannot use the refresh token to read', { only: true }, async () => {
+      // This is a private collection so should only be available to the actor
+      const res = await fetch(actor.pendingFollowers.id, {
+        headers: {
+          Authorization: `Bearer ${refreshToken}`
+        }
+      })
+      assert.strictEqual(res.status, 401)
+      const body = await res.json()
+      assert.strictEqual(body.error, 'invalid_token')
+      assert(body.error_description)
+    })
+    it('cannot use the authorization code to write', { only: true }, async () => {
+      const status = await failActivity(actor, refreshToken, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'IntransitiveActivity'
+      })
+      assert.strictEqual(status, 401)
+    })
+    it('cannot use the authorization code to read through proxy', { only: true }, async () => {
+      const res = await fetch(actor.endpoints.proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Bearer ${refreshToken}`
+        },
+        body: querystring.stringify({ id: note.id })
+      })
+      assert.strictEqual(res.status, 401)
+      const body = await res.json()
+      assert.strictEqual(body.error, 'invalid_token')
+      assert(body.error_description)
     })
   })
 })

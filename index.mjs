@@ -1744,6 +1744,22 @@ const csrf = wrap(async (req, res, next) => {
   next()
 })
 
+class JWTTypeError extends Error {
+  constructor (type) {
+    super(`Invalid JWT type ${type}`)
+    this.name = 'JWTTypeError'
+  }
+}
+
+// Check token type
+const tokenTypeCheck = wrap(async (req, res, next) => {
+  if (req.auth && req.auth.type && req.auth.type !== 'access') {
+    throw new JWTTypeError(req.auth.type)
+  } else {
+    next()
+  }
+})
+
 app.use(passport.initialize()) // Initialize Passport
 app.use(passport.session())
 
@@ -1956,6 +1972,7 @@ app.get('/.well-known/webfinger', wrap(async (req, res) => {
 
 app.post('/endpoint/proxyUrl',
   expressjwt({ secret: KEY_DATA, credentialsRequired: true, algorithms: ['RS256'] }),
+  tokenTypeCheck,
   wrap(async (req, res) => {
     const id = req.body.id
     if (!id) {
@@ -2214,6 +2231,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
 
 app.get('/:type/:id',
   expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),
+  tokenTypeCheck,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const full = req.protocol + '://' + req.get('host') + req.originalUrl
@@ -2263,6 +2281,7 @@ app.get('/:type/:id',
 
 app.post('/:type/:id',
   expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),
+  tokenTypeCheck,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const full = req.protocol + '://' + req.get('host') + req.originalUrl
@@ -2347,6 +2366,14 @@ app.use((err, req, res, next) => {
     } else {
       res.json({ message: err.message })
     }
+  } else if (err.name === 'UnauthorizedError') {
+    res.set('Content-Type', 'application/json')
+    res.status(401)
+    res.json({ error_description: err.message, error: 'invalid_token' })
+  } else if (err.name === 'JWTTypeError') {
+    res.set('Content-Type', 'application/json')
+    res.status(401)
+    res.json({ error_description: err.message, error: 'invalid_token' })
   } else {
     console.error(err)
     res.status(500)
