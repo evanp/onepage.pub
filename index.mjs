@@ -1830,8 +1830,11 @@ app.post('/register', csrf, wrap(async (req, res) => {
   await user.save()
   const token = await jwtsign(
     {
+      jwtid: await nanoid(),
+      type: 'access',
       subject: user.actorId,
-      issuer: req.protocol + '://' + req.get('host') + '/'
+      scope: 'read write',
+      issuer: makeUrl('/')
     },
     KEY_DATA,
     { algorithm: 'RS256' }
@@ -1889,8 +1892,11 @@ app.get('/login/success', passport.authenticate('session'), wrap(async (req, res
   }
   const token = await jwtsign(
     {
+      jwtid: await nanoid(),
+      type: 'access',
       subject: user.actorId,
-      issuer: req.protocol + '://' + req.get('host') + '/'
+      scope: 'read write',
+      issuer: makeUrl('/')
     },
     KEY_DATA,
     { algorithm: 'RS256' }
@@ -1958,6 +1964,9 @@ app.post('/endpoint/proxyUrl',
     const user = await User.fromActorId(req.auth?.subject)
     if (!user) {
       throw new createError.InternalServerError('Invalid user')
+    }
+    if (!req.auth.scope || !req.auth.scope.split(' ').includes('read')) {
+      throw new createError.Unauthorized('Missing read scope')
     }
     const actor = await user.getActor()
     const publicKey = new ActivityObject(await actor.prop('publicKey'))
@@ -2209,6 +2218,9 @@ app.get('/:type/:id',
   wrap(async (req, res) => {
     const full = req.protocol + '://' + req.get('host') + req.originalUrl
     const type = req.params.type
+    if (req.auth && req.auth.scope && !req.auth.scope.split(' ').includes('read')) {
+      throw new createError.Forbidden('Missing read scope')
+    }
     if (!(await ActivityObject.exists(full))) {
       throw new createError.NotFound('Object not found')
     }
@@ -2268,6 +2280,9 @@ app.post('/:type/:id',
     if (full === await owner.prop('outbox')) {
       if (req.auth?.subject !== await owner.id()) {
         throw new createError.Forbidden('You cannot post to this outbox')
+      }
+      if (!req.auth?.scope || !req.auth?.scope.split(' ').includes('write')) {
+        throw new createError.Forbidden('This app does not have permission to write to this outbox')
       }
       const ownerId = await owner.id()
       const ownerJson = await owner.json()

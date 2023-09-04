@@ -7,6 +7,9 @@ import crypto from 'node:crypto'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
+const clientId = 'https://test.onepage.pub'
+const redirectUri = 'https://test.onepage.pub/oauth/callback'
+
 const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
 const startServer = (port = 3000) => {
@@ -144,13 +147,82 @@ const canGetProxy = async (id, actor, token) => {
   return !!result
 }
 
+const getAuthCode = async (actor, cookie, scope = 'read write') => {
+  const state = crypto.randomBytes(16).toString('hex')
+  const authz = actor.endpoints.oauthAuthorizationEndpoint
+  const responseType = 'code'
+  const codeVerifier = crypto.randomBytes(32).toString('hex')
+  const codeChallenge = base64URLEncode(crypto.createHash('sha256').update(codeVerifier).digest())
+  const qs = querystring.stringify({
+    response_type: responseType,
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope,
+    state,
+    code_challenge_method: 'S256',
+    code_challenge: codeChallenge
+  })
+  const res = await fetch(`${authz}?${qs}`, {
+    headers: { Cookie: cookie }
+  })
+  const body = await res.text()
+  const action = body.match(/action="(.+?)"/)[1]
+  const csrfToken = body.match(/name="csrf_token" value="(.+?)"/)[1]
+  const post = new URL(action, authz)
+  const res2 = await fetch(post, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Cookie: cookie
+    },
+    body: querystring.stringify({
+      csrf_token: csrfToken,
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope,
+      state,
+      code_challenge: codeChallenge
+    }),
+    redirect: 'manual'
+  })
+  const location = res2.headers.get('Location')
+  const locUrl = new URL(location)
+  const code = locUrl.searchParams.get('code')
+  return [code, codeVerifier]
+}
+
+const getTokens = async (actor, code, codeVerifier) => {
+  const tokUrl = actor.endpoints.oauthTokenEndpoint
+  const res3 = await fetch(tokUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: querystring.stringify({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
+      client_id: clientId
+    })
+  })
+  const body3 = await res3.json()
+  return [body3.access_token, body3.refresh_token]
+}
+
+const getAccessToken = async (actor, cookie, scope = 'read write') => {
+  const [code, codeVerifier] = await getAuthCode(actor, cookie, scope)
+  const [accessToken] = await getTokens(actor, code, codeVerifier)
+  return accessToken
+}
+
 const base64URLEncode = (str) =>
   str.toString('base64')
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '')
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
 
@@ -3239,6 +3311,95 @@ describe('onepage.pub', () => {
       })
       const body = await res.json()
       assert.strictEqual(res.status, 201, `Bad status code ${res.status}: ${body}`)
+    })
+  })
+
+  describe('OAuth 2.0 read-only scope', { only: true }, () => {
+    let actor = null
+    let cookie = null
+    let token = null
+    let note = null
+    before(async () => {
+      [actor, , cookie] = await registerActor()
+      const [actor2, token2] = await registerActor(3001)
+      const activity = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      note = activity.object
+    })
+    it('can get access code', { only: true }, async () => {
+      token = await getAccessToken(actor, cookie, 'read')
+      assert.ok(token)
+    })
+    it('can use the access token to read local', { only: true }, async () => {
+      // This is a private collection so should only be available to the actor
+      const pendingFollowers = await getObject(actor.pendingFollowers.id, token)
+      assert.strictEqual(pendingFollowers.totalItems, 0)
+    })
+    it('can use the access token to read remote', { only: true }, async () => {
+      const remoteNote = await getObject(note.id, token)
+      assert.strictEqual(remoteNote.contentMap?.en, 'Hello, world!')
+    })
+    it('cannot use the access token to write', { only: true }, async () => {
+      const status = await failActivity(actor, token, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'IntransitiveActivity'
+      })
+      assert.strictEqual(status, 403)
+    })
+  })
+
+  describe('OAuth 2.0 write-only scope', { only: true }, () => {
+    let actor = null
+    let cookie = null
+    let token = null
+    let note = null
+    before(async () => {
+      [actor, , cookie] = await registerActor()
+      const [actor2, token2] = await registerActor(3001)
+      const activity = await doActivity(actor2, token2, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        to: [actor.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, world!'
+          }
+        }
+      })
+      note = activity.object
+    })
+    it('can get write-only access code', { only: true }, async () => {
+      token = await getAccessToken(actor, cookie, 'write')
+      assert.ok(token)
+    })
+    it('can use the access token to write', { only: true }, async () => {
+      const activity = await doActivity(actor, token, {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'IntransitiveActivity'
+      })
+      assert.ok(activity)
+    })
+    it('cannot use the access token to read local', { only: true }, async () => {
+      // This is a private collection so should only be available to the actor
+      const res = await fetch(actor.pendingFollowers.id, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      assert.strictEqual(res.status, 403)
+    })
+    it('cannot use the access token to read remote', { only: true }, async () => {
+      assert(!(await canGetProxy(note.id, actor, token)))
     })
   })
 })
