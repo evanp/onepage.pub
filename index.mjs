@@ -1796,36 +1796,116 @@ app.use('/bootstrap/', express.static('node_modules/bootstrap/dist/'))
 app.use('/popper/', express.static('node_modules/@popperjs/core/dist/umd'))
 
 app.get('/', wrap(async (req, res) => {
-  const url = req.protocol + '://' + req.get('host') + req.originalUrl
-  res.set('Content-Type', 'application/activity+json')
-  res.json({
-    '@context': CONTEXT,
-    id: url,
-    name: process.OPP_NAME || 'One Page Pub',
-    type: 'Service'
-  })
+  if (req.accepts('html')) {
+    res.send(page('Home', `
+    <h1>Welcome to ${HOSTNAME}</h1>
+    <p>This is an <a href="https://www.w3.org/TR/activitypub/">ActivityPub</a> server.</p>
+    <p>It is currently in development.</p>
+`, req.user))
+  } else if (req.accepts('json') || req.accepts('application/activity+json') || req.accepts('application/ld+json')) {
+    const url = makeUrl('/')
+    res.set('Content-Type', 'application/activity+json')
+    res.json({
+      '@context': CONTEXT,
+      id: url,
+      name: process.OPP_NAME || 'One Page Pub',
+      type: 'Service'
+    })
+  } else {
+    res.status(406).send('Not Acceptable')
+  }
 }))
+
+const page = (title, body, user = null) => {
+  return `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <title>${title}</title>
+      <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
+    </head>
+    <body>
+
+      <div class="container mx-auto" style="max-width: 600px;">
+        <nav class="navbar navbar-expand-lg navbar-light bg-light">
+          <a class="navbar-brand" href="/">${HOSTNAME}</a>
+          <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav">
+              <li class="nav-item active">
+                <a class="nav-link" href="/">Home</a>
+              </li>
+              ${(user)
+                ? `
+                <li class="nav-item active">
+                  <form action="/logout" method="POST" class="form-inline my-2 my-lg-0">
+                  <button type="submit" class="btn btn-link nav-link">Logout</button>
+                  </form>
+                </li>
+                `
+                : `
+                <li class="nav-item active">
+                  <a class="nav-link" href="/register">Register</a>
+                </li>
+                <li class="nav-item active">
+                  <a class="nav-link" href="/login">Log in</a>
+                </li>
+              `}
+            </ul>
+          </div>
+        </nav>
+
+        <div class="container">
+          <div class="row">
+            <div class="col">
+              <h1>${title}</h1>
+              ${body}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <script src="/popper/popper.min.js"></script>
+      <script src="/bootstrap/js/bootstrap.min.js"></script>
+    </body>
+  </html>`
+}
 
 app.get('/register', csrf, wrap(async (req, res) => {
   res.type('html')
   res.status(200)
-  res.end(`
-    <html>
-    <head>
-    <title>Register</title>
-    <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
-    </head>
-    <body>
+  res.end(page('Register', `
+    <div class="container mx-auto" style="max-width: 600px;">
     <form method="POST" action="/register">
-    <label for="username">Username</label> <input type="text" name="username" placeholder="Username" />
-    <label for="password">Password</label> <input type="password" name="password" placeholder="Password" />
-    <label for="confirmation">Confirm</label> <input type="password" name="confirmation" placeholder="Confirm Password" />
-    <input type="submit" value="Register" />
+      <div class="form-group row mb-3">
+        <label for="username" class="col-sm-4 col-form-label text-right">Username</label>
+        <div class="col-sm-8">
+        <input type="text" name="username" id="username" class="form-control" placeholder="Username" />
+        </div>
+      </div>
+      <div class="form-group row mb-3">
+        <label for="password" class="col-sm-4 col-form-label text-right">Password</label>
+        <div class="col-sm-8">
+          <input type="password" class="form-control" name="password" id="password">
+        </div>
+      </div>
+      <div class="form-group row mb-3">
+        <label for="confirmation" class="col-sm-4 col-form-label text-right">Confirm</label>
+        <div class="col-sm-8">
+          <input type="password" class="form-control" name="confirmation" id="confirmation">
+        </div>
+      </div>
+      <div class="form-group row">
+       <div class="col-sm-4"></div> <!-- Empty space equivalent to label width -->
+       <div class="col-sm-8">
+        <button type="submit" class="btn btn-primary">Register</button>
+        <button type="button" class="btn btn-secondary">Cancel</button>
+        </div>
+      </div>
     </form>
-    <script src="/popper/popper.min.js"></script>
-    <script src="/bootstrap/js/bootstrap.min.js"></script>
-    </body>
-    </html>`)
+  </div>`))
 }))
 
 app.post('/register', csrf, wrap(async (req, res) => {
@@ -1868,41 +1948,21 @@ app.post('/register', csrf, wrap(async (req, res) => {
     }
     res.type('html')
     res.status(200)
-    res.end(`
-      <html>
-      <head>
-      <title>Registered</title>
-      <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
-      </head>
-      <body>
+    res.end(page('Registered', `
       <p>Registered <a class="actor" href="${user.actorId}">${username}</a></p>
-      <p>Personal access token is <span class="token">${token}</span>
-      <script src="/popper/popper.min.js"></script>
-      <script src="/bootstrap/js/bootstrap.min.js"></script>
-      </body>
-      </html>`)
+      <p>Personal access token is <span class="token">${token}</span>`, user))
   })
 }))
 
 app.get('/login', csrf, wrap(async (req, res) => {
   res.type('html')
   res.status(200)
-  res.end(`
-    <html>
-    <head>
-    <title>Log in</title>
-    <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
-    </head>
-    <body>
+  res.end(page('Log in', `
     <form method="POST" action="/login">
     <label for="username">Username</label> <input type="text" name="username" placeholder="Username" />
     <label for="password">Password</label> <input type="password" name="password" placeholder="Password" />
     <input type="submit" value="Login" />
-    </form>
-    <script src="/popper/popper.min.js"></script>
-    <script src="/bootstrap/js/bootstrap.min.js"></script>
-    </body>
-    </html>`)
+    </form>`))
 }))
 
 app.post('/login', csrf, passport.authenticate('local', {
@@ -1932,19 +1992,19 @@ app.get('/login/success', passport.authenticate('session'), wrap(async (req, res
 
   res.type('html')
   res.status(200)
-  res.end(`
-    <html>
-    <head>
-    <title>Logged in</title>
-    <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
-    </head>
-    <body>
+  res.end(page('Logged in', `
     <p>Logged in <a class="actor" href="${user.actorId}">${user.username}</a></p>
-    <p>Personal access token is <span class="token">${token}</span>
-    <script src="/popper/popper.min.js"></script>
-    <script src="/bootstrap/js/bootstrap.min.js"></script>
-    </body>
-    </html>`)
+    <p>Personal access token is <span class="token">${token}</span>`, user))
+}))
+
+app.post('/logout', wrap(async (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      throw new createError.InternalServerError('Failed to logout')
+    } else {
+      res.redirect('/')
+    }
+  })
 }))
 
 app.get('/.well-known/webfinger', wrap(async (req, res) => {
@@ -2048,13 +2108,7 @@ app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wra
 
     res.type('html')
     res.status(200)
-    res.end(`
-      <html>
-      <head>
-      <title>Authorize</title>
-      <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
-      </head>
-      <body>
+    res.end(page('Authorize', `
       <p>
         This app is asking to authorize access to your account.
         <ul>
@@ -2070,11 +2124,7 @@ app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wra
       <input type="hidden" name="code_challenge" value="${req.query.code_challenge}" />
       <input type="hidden" name="state" value="${req.query.state}" />
       <input type="submit" value="Authorize" />
-      </form>
-      <script src="/popper/popper.min.js"></script>
-      <script src="/bootstrap/js/bootstrap.min.js"></script>
-      </body>
-      </html>`)
+      </form>`, req.user))
   }
 }))
 
