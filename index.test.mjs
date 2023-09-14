@@ -767,6 +767,69 @@ describe('onepage.pub', () => {
     })
   })
 
+  describe('Post to outbox with application/ld+json', () => {
+    let actor = null
+    let token = null
+    let res = null
+    let body = null
+    let obj = null
+
+    const activity = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'IntransitiveActivity',
+      to: 'https://www.w3.org/ns/activitystreams#Public'
+    }
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      res = await fetch(actor.outbox.id, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(activity)
+      })
+      body = await res.text()
+      obj = JSON.parse(body)
+    })
+    it('has the correct HTTP response', async () => {
+      assert.strictEqual(
+        res.status,
+        201,
+        `Bad status code ${res.status}: ${body}`
+      )
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/activity+json; charset=utf-8'
+      )
+    })
+
+    it('has an object id', async () => {
+      assert(obj.id)
+    })
+
+    it('has the correct object type', async () => {
+      assert.strictEqual(obj.type, activity.type)
+    })
+
+    it('has the correct addressees', async () => {
+      assert.strictEqual(obj.to?.id, activity.to)
+    })
+
+    it("appears in the actor's inbox", async () => {
+      const inbox = await (await fetch(actor.inbox.id)).json()
+      const inboxPage = await (await fetch(inbox.first.id)).json()
+      assert(inboxPage.orderedItems.some((act) => act.id === obj.id))
+    })
+
+    it("appears in the actor's outbox", async () => {
+      const outbox = await (await fetch(actor.outbox.id)).json()
+      const outboxPage = await (await fetch(outbox.first.id)).json()
+      assert(outboxPage.orderedItems.some((act) => act.id === obj.id))
+    })
+  })
+
   describe('Filter collections', () => {
     let actor1 = null
     let token1 = null

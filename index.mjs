@@ -1728,7 +1728,7 @@ app.use((req, res, next) => {
   next()
 })
 
-app.use(express.json({ type: ['application/json', 'application/activity+json'] })) // for parsing application/json
+app.use(express.json({ type: ['application/json', 'application/activity+json', 'application/ld+json'] })) // for parsing application/json
 app.use(express.urlencoded({ extended: true })) // for HTML forms
 
 // Enable session management
