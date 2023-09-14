@@ -70,7 +70,7 @@ const doActivity = async (actor, token, activity) => {
   const res = await fetch(actor.outbox.id, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/activity+json',
+      'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
       Authorization: `Bearer ${token}`
     },
     body: JSON.stringify(activity)
@@ -86,7 +86,7 @@ const failActivity = async (actor, token, activity) => {
   const res = await fetch(actor.outbox.id, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/activity+json',
+      'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
       Authorization: `Bearer ${token}`
     },
     body: JSON.stringify(activity)
@@ -846,7 +846,7 @@ describe('onepage.pub', () => {
       const res = await fetch(actor1.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(input)
@@ -912,7 +912,7 @@ describe('onepage.pub', () => {
       const res = await fetch(actor1.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(activity)
@@ -942,7 +942,7 @@ describe('onepage.pub', () => {
       const res = await fetch(actor2.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token2}`
         },
         body: JSON.stringify(activity)
@@ -1136,7 +1136,7 @@ describe('onepage.pub', () => {
       const res = await fetch(actor1.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(source)
@@ -1189,7 +1189,7 @@ describe('onepage.pub', () => {
       const res = await fetch(actor1.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(source)
@@ -1207,7 +1207,7 @@ describe('onepage.pub', () => {
       const updateRes = await fetch(actor1.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(updateSource)
@@ -1265,7 +1265,7 @@ describe('onepage.pub', () => {
       const res = await fetch(actor1.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(source)
@@ -1279,7 +1279,7 @@ describe('onepage.pub', () => {
       const deleteRes = await fetch(actor1.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(deleteSource)
@@ -1585,7 +1585,7 @@ describe('onepage.pub', () => {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token2}`,
-          'Content-Type': 'application/activity+json'
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
         },
         body: JSON.stringify({
           '@context': 'https://www.w3.org/ns/activitystreams',
@@ -3319,7 +3319,7 @@ describe('onepage.pub', () => {
       const res = await fetch(actor.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${accessToken}`
         },
         body: JSON.stringify({
@@ -3367,7 +3367,7 @@ describe('onepage.pub', () => {
       const res = await fetch(actor.outbox.id, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json',
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${accessToken2}`
         },
         body: JSON.stringify({
