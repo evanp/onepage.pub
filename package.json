@@ -23,6 +23,9 @@
   "devDependencies": {
     "standard": "^17.1.0"
   },
+  "scripts": {
+    "test": "node --test --test-reporter=spec"
+  },
   "version": "0.1.0",
   "engine": {
     "node": ">=20.0.0"
