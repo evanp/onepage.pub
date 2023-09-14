@@ -243,7 +243,12 @@ class ActivityObject {
   }
 
   static async makeId (type) {
-    return makeUrl(`${type.toLowerCase()}/${await nanoid()}`)
+    const best = ActivityObject.bestType(type)
+    if (best) {
+      return makeUrl(`${best.toLowerCase()}/${await nanoid()}`)
+    } else {
+      return makeUrl(`object/${await nanoid()}`)
+    }
   }
 
   static async getJSON (id) {
@@ -346,6 +351,37 @@ class ActivityObject {
       )))
     this.#id = data.id
     this.#json = data
+  }
+
+  static #coreTypes = ['Object', 'Link', 'Activity', 'IntransitiveActivity', 'Collection',
+    'OrderedCollection', 'CollectionPage', 'OrderedCollectionPage']
+
+  static #activityTypes = ['Accept', 'Add', 'Announce', 'Arrive', 'Block', 'Create',
+    'Delete', 'Dislike', 'Flag', 'Follow', 'Ignore', 'Invite', 'Join', 'Leave',
+    'Like', 'Listen', 'Move', 'Offer', 'Question', 'Reject', 'Read', 'Remove',
+    'TentativeReject', 'TentativeAccept', 'Travel', 'Undo', 'Update', 'View']
+
+  static #actorTypes = ['Application', 'Group', 'Organization', 'Person', 'Service']
+
+  static #objectTypes = [
+    'Article', 'Audio', 'Document', 'Event', 'Image', 'Note', 'Page', 'Place',
+    'Profile', 'Relationship', 'Tombstone', 'Video']
+
+  static #linkTypes = ['Mention']
+
+  static #knownTypes = [].concat(ActivityObject.#coreTypes, ActivityObject.#activityTypes,
+    ActivityObject.#actorTypes, ActivityObject.#objectTypes,
+    ActivityObject.#linkTypes)
+
+  static bestType (type) {
+    const types = (Array.isArray(type)) ? type : [type]
+    for (const item in types) {
+      if (item in ActivityObject.#knownTypes) {
+        return item
+      }
+    }
+    // TODO: more filtering here?
+    return types[0]
   }
 
   async cache (owner, addressees) {
@@ -1106,10 +1142,13 @@ class Activity extends ActivityObject {
         return activity
       }
     }
-
-    if (await this.type() in appliers) {
-      activity = await appliers[await this.type()]()
-      this._setJson(activity)
+    const type = await this.type()
+    const types = (Array.isArray(type)) ? type : [type]
+    for (const item in types) {
+      if (item in appliers) {
+        activity = await appliers[item]()
+        this._setJson(activity)
+      }
     }
   }
 
@@ -2388,7 +2427,6 @@ app.get('/:type/:id',
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const full = req.protocol + '://' + req.get('host') + req.originalUrl
-    const type = req.params.type
     if (req.auth && req.auth.scope && !req.auth.scope.split(' ').includes('read')) {
       throw new createError.Forbidden('Missing read scope')
     }
@@ -2402,10 +2440,6 @@ app.get('/:type/:id',
       } else {
         throw new createError.Unauthorized(`You must provide credentials to read ${full}`)
       }
-    }
-    const objType = await obj.type()
-    if (objType.toLowerCase() !== type && objType !== 'Tombstone') {
-      throw new createError.InternalServerError('Invalid object type')
     }
     const output = await obj.expanded()
     for (const name of ['items', 'orderedItems']) {
@@ -2465,7 +2499,8 @@ app.post('/:type/:id',
         .filter((a) => a)
         .flat()
         .map(toId))
-      data.id = await ActivityObject.makeId(data.type || 'Activity')
+      const type = data.type || 'Activity'
+      data.id = await ActivityObject.makeId(type)
       data.actor = ownerId
       const activity = new Activity(data)
       await activity.apply(ownerJson, addressees)

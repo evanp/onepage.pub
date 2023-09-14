@@ -231,7 +231,7 @@ const cantUpdate = async (actor, token, object, properties) => {
   })
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
 
@@ -3794,6 +3794,40 @@ describe('onepage.pub', () => {
     it('cannot change startIndex', async () => {
       const object = await getObject(actor.followers.first, token)
       assert(await cantUpdate(actor, token, object, { startIndex: 50 }))
+    })
+  })
+
+  describe('Multiple activity types', { only: true }, () => {
+    let actor = null
+    let token = null
+    let activity = null
+    before(async () => {
+      [actor, token] = await registerActor()
+    })
+    it('can post an activity with multiple types', { only: true }, async () => {
+      activity = await doActivity(actor, token, {
+        '@context': [
+          'https://www.w3.org/ns/activitystreams',
+          {
+            Meditate: {
+              '@type': '@id'
+            }
+          }
+        ],
+        type: ['Meditate', 'IntransitiveActivity']
+      })
+      assert.ok(activity)
+    })
+    it('activity has multiple types', { only: true }, async () => {
+      assert(Array.isArray(activity.type))
+      assert(activity.type.includes('Meditate'))
+      assert(activity.type.includes('IntransitiveActivity'))
+    })
+    it('can fetch new activity', { only: true }, async () => {
+      const act2 = await getObject(activity.id, token)
+      assert(Array.isArray(act2.type))
+      assert(act2.type.includes('Meditate'))
+      assert(act2.type.includes('IntransitiveActivity'))
     })
   })
 })
