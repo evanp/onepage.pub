@@ -1904,7 +1904,7 @@ app.get('/register', csrf, wrap(async (req, res) => {
        <div class="col-sm-4"></div> <!-- Empty space equivalent to label width -->
        <div class="col-sm-8">
         <button type="submit" class="btn btn-primary">Register</button>
-        <button type="button" class="btn btn-secondary">Cancel</button>
+        <a href='/' class="btn btn-secondary">Cancel</a>
         </div>
       </div>
     </form>
@@ -1961,10 +1961,27 @@ app.get('/login', csrf, wrap(async (req, res) => {
   res.type('html')
   res.status(200)
   res.end(page('Log in', `
+    <div class="container mx-auto" style="max-width: 600px;">
     <form method="POST" action="/login">
-    <label for="username">Username</label> <input type="text" name="username" placeholder="Username" />
-    <label for="password">Password</label> <input type="password" name="password" placeholder="Password" />
-    <input type="submit" value="Login" />
+    <div class="form-group row mb-3">
+      <label for="username" class="col-sm-4 col-form-label text-right">Username</label>
+      <div class="col-sm-8">
+        <input type="text" name="username" id="username" class="form-control" placeholder="Username" />
+      </div>
+    </div>
+    <div class="form-group row mb-3">
+      <label for="password" class="col-sm-4 col-form-label text-right">Password</label>
+      <div class="col-sm-8">
+        <input type="password" class="form-control" name="password" id="password">
+      </div>
+    </div>
+    <div class="form-group row">
+       <div class="col-sm-4"></div> <!-- Empty space equivalent to label width -->
+       <div class="col-sm-8">
+        <button type="submit" class="btn btn-primary">Login</button>
+        <a href='/' class="btn btn-secondary">Cancel</a>
+      </div>
+    </div>
     </form>`))
 }))
 
