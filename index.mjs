@@ -68,6 +68,9 @@ async function toId (value) {
 }
 
 function makeUrl (relative) {
+  if (relative.length > 0 && relative[0] === '/') {
+    relative = relative.slice(1)
+  }
   if (PORT === 443) {
     return `https://${HOSTNAME}/${relative}`
   } else {
@@ -1803,7 +1806,7 @@ app.get('/', wrap(async (req, res) => {
     <p>It is currently in development.</p>
 `, req.user))
   } else if (req.accepts('json') || req.accepts('application/activity+json') || req.accepts('application/ld+json')) {
-    const url = makeUrl('/')
+    const url = makeUrl('')
     res.set('Content-Type', 'application/activity+json')
     res.json({
       '@context': CONTEXT,
@@ -1936,7 +1939,7 @@ app.post('/register', csrf, wrap(async (req, res) => {
       type: 'access',
       subject: user.actorId,
       scope: 'read write',
-      issuer: makeUrl('/')
+      issuer: makeUrl('')
     },
     KEY_DATA,
     { algorithm: 'RS256' }
@@ -1984,7 +1987,7 @@ app.get('/login/success', passport.authenticate('session'), wrap(async (req, res
       type: 'access',
       subject: user.actorId,
       scope: 'read write',
-      issuer: makeUrl('/')
+      issuer: makeUrl('')
     },
     KEY_DATA,
     { algorithm: 'RS256' }
@@ -2147,6 +2150,7 @@ app.post('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wr
     if (!req.body.code_challenge) {
       throw new createError.BadRequest('Missing code_challenge')
     }
+    logger.debug(req.body)
     // We use a JWT for the authorization code
     const code = await jwtsign(
       {
@@ -2158,13 +2162,15 @@ app.post('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wr
         client: req.body.client_id,
         redir: req.body.redirect_uri,
         expiresIn: '10m',
-        issuer: makeUrl('/')
+        issuer: makeUrl('')
       },
       KEY_DATA,
       { algorithm: 'RS256' }
     )
     const state = req.body.state
-    res.redirect(req.body.redirect_uri + '?' + querystring.stringify({ code, state }))
+    const location = req.body.redirect_uri + '?' + querystring.stringify({ code, state })
+    logger.debug(location)
+    res.redirect(location)
   }
 }))
 
@@ -2202,7 +2208,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
     if (fields.challenge !== await base64URLEncode(crypto.createHash('sha256').update(req.body.code_verifier).digest())) {
       throw new createError.BadRequest('Invalid code_verifier')
     }
-    if (fields.issuer !== makeUrl('/')) {
+    if (fields.issuer !== makeUrl('')) {
       throw new createError.BadRequest('Invalid issuer')
     }
     const user = User.fromActorId(fields.subject)
@@ -2218,7 +2224,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
         scope: fields.scope,
         client: fields.client,
         expiresIn: '1d',
-        issuer: makeUrl('/')
+        issuer: makeUrl('')
       },
       KEY_DATA,
       { algorithm: 'RS256' }
@@ -2231,7 +2237,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
         scope: fields.scope,
         client: fields.client,
         expiresIn: '30d',
-        issuer: makeUrl('/')
+        issuer: makeUrl('')
       },
       KEY_DATA,
       { algorithm: 'RS256' }
@@ -2253,7 +2259,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
     if (fields.type !== 'refresh') {
       throw new createError.BadRequest('Invalid code')
     }
-    if (fields.issuer !== makeUrl('/')) {
+    if (fields.issuer !== makeUrl('')) {
       throw new createError.BadRequest('Invalid issuer')
     }
     const user = User.fromActorId(fields.subject)
@@ -2268,7 +2274,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
         scope: fields.scope,
         client: fields.client,
         expiresIn: '1d',
-        issuer: makeUrl('/')
+        issuer: makeUrl('')
       },
       KEY_DATA,
       { algorithm: 'RS256' }
@@ -2281,7 +2287,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
         scope: fields.scope,
         client: fields.client,
         expiresIn: '30d',
-        issuer: makeUrl('/')
+        issuer: makeUrl('')
       },
       KEY_DATA,
       { algorithm: 'RS256' }

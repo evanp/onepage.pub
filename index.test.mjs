@@ -170,10 +170,8 @@ const getAuthCode = async (actor, cookie, scope = 'read write') => {
     headers: { Cookie: cookie }
   })
   const body = await res.text()
-  const action = body.match(/action="(.+?)"/)[1]
   const csrfToken = body.match(/name="csrf_token" value="(.+?)"/)[1]
-  const post = new URL(action, authz)
-  const res2 = await fetch(post, {
+  const res2 = await fetch(authz, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -226,7 +224,7 @@ const base64URLEncode = (str) =>
     .replace(/\//g, '_')
     .replace(/=/g, '')
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
 
@@ -242,7 +240,11 @@ describe('onepage.pub', { only: true }, () => {
 
   describe('Root object', () => {
     it('can get the root object', async () => {
-      const res = await fetch('https://localhost:3000/')
+      const res = await fetch('https://localhost:3000/', {
+        headers: {
+          Accept: 'application/activity+json,application/ld+json,application/json'
+        }
+      })
       const obj = await res.json()
       assert.strictEqual(obj.type, 'Service')
       assert.strictEqual(obj.name, 'One Page Pub')
@@ -3145,7 +3147,6 @@ describe('onepage.pub', { only: true }, () => {
     let actor = null
     let cookie = null
     let code = null
-    let action = null
     let csrfToken = null
     let accessToken = null
     let refreshToken = null
@@ -3181,14 +3182,12 @@ describe('onepage.pub', { only: true }, () => {
       assert.strictEqual(res.status, 200)
       assert(body.includes('<form'))
       assert(body.includes('submit'))
-      action = body.match(/action="(.+?)"/)[1]
       csrfToken = body.match(/name="csrf_token" value="(.+?)"/)[1]
     })
 
     it('can get authorization code', async () => {
       const authz = actor.endpoints.oauthAuthorizationEndpoint
-      const post = new URL(action, authz)
-      const res2 = await fetch(post, {
+      const res2 = await fetch(authz, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -3339,20 +3338,20 @@ describe('onepage.pub', { only: true }, () => {
       })
       note = activity.object
     })
-    it('can get access code', async () => {
+    it('can get read-only access code', async () => {
       token = await getAccessToken(actor, cookie, 'read')
       assert.ok(token)
     })
-    it('can use the access token to read local', async () => {
+    it('can use the read-only access token to read local', async () => {
       // This is a private collection so should only be available to the actor
       const pendingFollowers = await getObject(actor.pendingFollowers.id, token)
       assert.strictEqual(pendingFollowers.totalItems, 0)
     })
-    it('can use the access token to read remote', async () => {
+    it('can use the read-only access token to read remote', async () => {
       const remoteNote = await getObject(note.id, token)
       assert.strictEqual(remoteNote.contentMap?.en, 'Hello, world!')
     })
-    it('cannot use the access token to write', async () => {
+    it('cannot use the read-only access token to write', async () => {
       const status = await failActivity(actor, token, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         type: 'IntransitiveActivity'
@@ -3386,14 +3385,14 @@ describe('onepage.pub', { only: true }, () => {
       token = await getAccessToken(actor, cookie, 'write')
       assert.ok(token)
     })
-    it('can use the access token to write', async () => {
+    it('can use the write-only access token to write', async () => {
       const activity = await doActivity(actor, token, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         type: 'IntransitiveActivity'
       })
       assert.ok(activity)
     })
-    it('cannot use the access token to read local', async () => {
+    it('cannot use the write-only access token to read local', async () => {
       // This is a private collection so should only be available to the actor
       const res = await fetch(actor.pendingFollowers.id, {
         headers: {
@@ -3402,7 +3401,7 @@ describe('onepage.pub', { only: true }, () => {
       })
       assert.strictEqual(res.status, 403)
     })
-    it('cannot use the access token to read remote', async () => {
+    it('cannot use the write-only access token to read remote', async () => {
       assert(!(await canGetProxy(note.id, actor, token)))
     })
   })
@@ -3522,7 +3521,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Add Bootstrap', { only: true }, () => {
+  describe('Add Bootstrap', () => {
     let username = null
     let actor = null
     let password = null
@@ -3531,21 +3530,21 @@ describe('onepage.pub', { only: true }, () => {
       [username, , password, cookie] = await registerUser()
       actor = await userToActor(username)
     })
-    it('bootstrap in registration form', { only: true }, async () => {
+    it('bootstrap in registration form', async () => {
       const res = await fetch('https://localhost:3000/register')
       const body = await res.text()
       assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
       assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
       assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
-    it('bootstrap in login form', { only: true }, async () => {
+    it('bootstrap in login form', async () => {
       const res = await fetch('https://localhost:3000/login')
       const body = await res.text()
       assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
       assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
       assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
-    it('bootstrap in registration results', { only: true }, async () => {
+    it('bootstrap in registration results', async () => {
       const username = 'testbootstrap'
       const password = 'testbootstrap'
       const res = await fetch('https://localhost:3000/register', {
@@ -3562,7 +3561,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
       assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
-    it('bootstrap in login results', { only: true }, async () => {
+    it('bootstrap in login results', async () => {
       // NB: registered in previous test
       const res = await fetch('https://localhost:3000/login', {
         method: 'POST',
@@ -3583,7 +3582,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.match(body2, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
       assert.match(body2, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
-    it('bootstrap in authorization form', { only: true }, async () => {
+    it('bootstrap in authorization form', async () => {
       const state = crypto.randomBytes(16).toString('hex')
       const authz = actor.endpoints.oauthAuthorizationEndpoint
       const responseType = 'code'
