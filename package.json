@@ -12,7 +12,7 @@
     "http-errors": "^2.0.0",
     "https": "^1.0.0",
     "jsonwebtoken": "^9.0.2",
-    "nanoid": "^4.0.2",
+    "nanoid": "^5.0.1",
     "passport": "^0.6.0",
     "passport-local": "^1.0.0",
     "passport-oauth2": "^1.7.0",
