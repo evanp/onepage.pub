@@ -133,7 +133,6 @@ const getMembers = async (collection, token = null) => {
 
 const isInStream = async (collection, object, token = null) => {
   const members = await getMembers(collection, token)
-  console.dir(members)
   return members.some((item) => item.id === object.id)
 }
 
