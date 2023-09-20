@@ -743,8 +743,10 @@ class Activity extends ActivityObject {
             throw new createError.BadRequest('Already pending follower')
           }
         }
+        logger.debug(`adding ${await this.id()} to ${await pendingFollowing.id()}`)
         await pendingFollowing.prepend(this)
         if (isUser) {
+          logger.debug(`adding ${await this.id()} to ${await pendingFollowers.id()}`)
           await pendingFollowers.prepend(this)
         }
         return activity
@@ -1158,7 +1160,7 @@ class Activity extends ActivityObject {
     }
     const type = await this.type()
     const types = (Array.isArray(type)) ? type : [type]
-    for (const item in types) {
+    for (const item of types) {
       if (item in appliers) {
         activity = await appliers[item]()
         this._setJson(activity)
