@@ -99,8 +99,14 @@ const failActivity = async (actor, token, activity) => {
 }
 
 const getObject = async (id, token = null) => {
+  const headers = {
+    Accept: 'application/ld+json; profile="https://www.w3.org/ns/activitystreams",application/activity+json,application/json'
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
   const res = await fetch(id, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {}
+    headers
   })
   if (res.status !== 200) {
     throw new Error(`Bad status code ${res.status}`)
@@ -127,6 +133,7 @@ const getMembers = async (collection, token = null) => {
 
 const isInStream = async (collection, object, token = null) => {
   const members = await getMembers(collection, token)
+  console.dir(members)
   return members.some((item) => item.id === object.id)
 }
 
@@ -987,6 +994,18 @@ describe('onepage.pub', { only: true }, () => {
         type: 'Follow',
         object: actor2.id
       })
+    })
+
+    it('has an id', () => {
+      assert(follow.id)
+    })
+
+    it('has the right object', () => {
+      assert.strictEqual(follow.object.id, actor2.id)
+    })
+
+    it('has the right type', () => {
+      assert.strictEqual(follow.type, 'Follow')
     })
 
     it("appears in the actor's pending following", async () => {

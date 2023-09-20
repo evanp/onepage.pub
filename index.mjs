@@ -375,7 +375,7 @@ class ActivityObject {
 
   static bestType (type) {
     const types = (Array.isArray(type)) ? type : [type]
-    for (const item in types) {
+    for (const item of types) {
       if (item in ActivityObject.#knownTypes) {
         return item
       }
@@ -589,7 +589,14 @@ class ActivityObject {
 
   async expanded () {
     // force a full read
-    const object = await ActivityObject.getJSON(await this.id())
+    const id = await this.id()
+    if (!id) {
+      throw new Error('No id for object being expanded')
+    }
+    const object = await ActivityObject.getJSON(id)
+    if (!object) {
+      throw new Error(`No such object: ${id}`)
+    }
     const toBrief = async (value) => {
       if (value) {
         const obj = new ActivityObject(value)
@@ -609,8 +616,15 @@ class ActivityObject {
       }
     }
 
-    if (await this.needsExpandedObject() && await this.prop('object')) {
-      const activityObject = new ActivityObject(await this.prop('object'))
+    if (await this.needsExpandedObject()) {
+      const objectProp = await this.prop('object')
+      if (!objectProp) {
+        throw new Error(`Object of type ${object.type} needs expanded object property but has no such property`)
+      }
+      if (!objectProp.id) {
+        throw new Error(`Object of type ${object.type} needs expanded object property but that property has no id`)
+      }
+      const activityObject = new ActivityObject(objectProp)
       object.object = await activityObject.expanded()
     }
 
