@@ -238,7 +238,7 @@ const cantUpdate = async (actor, token, object, properties) => {
   })
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
 
@@ -3816,14 +3816,14 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Multiple activity types', { only: true }, () => {
+  describe('Multiple activity types', () => {
     let actor = null
     let token = null
     let activity = null
     before(async () => {
       [actor, token] = await registerActor()
     })
-    it('can post an activity with multiple types', { only: true }, async () => {
+    it('can post an activity with multiple types', async () => {
       activity = await doActivity(actor, token, {
         '@context': [
           'https://www.w3.org/ns/activitystreams',
@@ -3837,12 +3837,12 @@ describe('onepage.pub', { only: true }, () => {
       })
       assert.ok(activity)
     })
-    it('activity has multiple types', { only: true }, async () => {
+    it('activity has multiple types', async () => {
       assert(Array.isArray(activity.type))
       assert(activity.type.includes('Meditate'))
       assert(activity.type.includes('IntransitiveActivity'))
     })
-    it('can fetch new activity', { only: true }, async () => {
+    it('can fetch new activity', async () => {
       const act2 = await getObject(activity.id, token)
       assert(Array.isArray(act2.type))
       assert(act2.type.includes('Meditate'))
