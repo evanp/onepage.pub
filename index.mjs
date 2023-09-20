@@ -813,6 +813,18 @@ class Activity extends ActivityObject {
             }
           }
         }
+        // prevent updating object properties directly
+        for (const prop of ['replies', 'likes', 'shares', 'attributedTo']) {
+          if (prop in activity.object && await toId(activity.object[prop]) !== await toId(await object.prop(prop))) {
+            throw new createError.BadRequest(`Cannot update ${prop} directly`)
+          }
+        }
+        // prevent updating non-object properties directly
+        for (const prop of ['published', 'updated']) {
+          if (prop in activity.object && activity.object[prop] !== object.prop(prop)) {
+            throw new createError.BadRequest(`Cannot update ${prop} directly`)
+          }
+        }
         await object.patch(activity.object)
         activity.object = await object.json()
         return activity

@@ -224,6 +224,13 @@ const base64URLEncode = (str) =>
     .replace(/\//g, '_')
     .replace(/=/g, '')
 
+const cantUpdate = async (actor, token, object, properties) => {
+  return failActivity(actor, token, {
+    type: 'Update',
+    object: { ...object, ...properties }
+  })
+}
+
 describe('onepage.pub', () => {
   let child = null
   let remote = null
@@ -3668,6 +3675,53 @@ describe('onepage.pub', () => {
       assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
       assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
       assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
+    })
+  })
+
+  describe('Cannot overwrite object properties', () => {
+    let actor = null
+    let token = null
+    let object = null
+    before(async () => {
+      [actor, token] = await registerActor()
+      const activity = await doActivity(actor, token, {
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, World!'
+          }
+        }
+      })
+      object = activity.object
+    })
+
+    it('cannot change id', async () => {
+      assert(await cantUpdate(actor, token, object, { id: 'https://example.com/object/1' }))
+    })
+
+    it('cannot change replies', async () => {
+      assert(await cantUpdate(actor, token, object, { replies: 'https://example.com/collection/3' }))
+    })
+
+    it('cannot change likes', async () => {
+      assert(await cantUpdate(actor, token, object, { likes: 'https://example.com/collection/4' }))
+    })
+
+    it('cannot change shares', async () => {
+      assert(await cantUpdate(actor, token, object, { shares: 'https://example.com/collection/5' }))
+    })
+
+    it('cannot change published', async () => {
+      assert(await cantUpdate(actor, token, object, { published: '20230920T00:00:00Z' }))
+    })
+
+    it('cannot change updated', async () => {
+      assert(await cantUpdate(actor, token, object, { updated: '20230920T00:00:00Z' }))
+    })
+
+    it('cannot change attributedTo', async () => {
+      assert(await cantUpdate(actor, token, object, { attributedTo: 'https://example.com/user/3' }))
     })
   })
 })
