@@ -231,7 +231,7 @@ const cantUpdate = async (actor, token, object, properties) => {
   })
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
 
@@ -3725,7 +3725,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Cannot overwrite collection properties', { only: true }, () => {
+  describe('Cannot overwrite collection properties', () => {
     let actor = null
     let token = null
     let object = null
@@ -3734,28 +3734,66 @@ describe('onepage.pub', { only: true }, () => {
       object = actor.followers
     })
 
-    it('cannot change first', { only: true }, async () => {
+    it('cannot change first', async () => {
       assert(await cantUpdate(actor, token, object, { first: 'https://example.com/object/1' }))
     })
 
-    it('cannot change last', { only: true }, async () => {
+    it('cannot change last', async () => {
       assert(await cantUpdate(actor, token, object, { last: 'https://example.com/collection/3' }))
     })
 
-    it('cannot change current', { only: true }, async () => {
+    it('cannot change current', async () => {
       assert(await cantUpdate(actor, token, object, { current: 'https://example.com/collection/4' }))
     })
 
-    it('cannot change items', { only: true }, async () => {
+    it('cannot change items', async () => {
       assert(await cantUpdate(actor, token, object, { items: ['https://example.com/foo/bar'] }))
     })
 
-    it('cannot change orderedItems', { only: true }, async () => {
+    it('cannot change orderedItems', async () => {
       assert(await cantUpdate(actor, token, object, { orderedItems: ['https://example.com/foo/bar'] }))
     })
 
-    it('cannot change totalItems', { only: true }, async () => {
+    it('cannot change totalItems', async () => {
       assert(await cantUpdate(actor, token, object, { totalItems: 69 }))
+    })
+  })
+
+  describe('Cannot overwrite collection page properties', () => {
+    let actor = null
+    let token = null
+    before(async () => {
+      [actor, token] = await registerActor()
+    })
+
+    it('cannot change next', async () => {
+      const object = await getObject(actor.followers.first, token)
+      assert(await cantUpdate(actor, token, object, { next: 'https://example.com/object/1' }))
+    })
+
+    it('cannot change prev', async () => {
+      const object = await getObject(actor.followers.first, token)
+      assert(await cantUpdate(actor, token, object, { prev: 'https://example.com/collection/3' }))
+    })
+
+    it('cannot change partOf', async () => {
+      const object = await getObject(actor.followers.first, token)
+      assert(await cantUpdate(actor, token, object, { partOf: 'https://example.com/collection/25' }))
+    })
+
+    it('cannot change items', async () => {
+      const object = await getObject(actor.followers.first, token)
+      assert(await cantUpdate(actor, token, object, { items: ['https://example.com/foo/bar'] }))
+    })
+
+    it('cannot change orderedItems', async () => {
+      const object = await getObject(actor.followers.first, token)
+      assert(await cantUpdate(actor, token, object, { orderedItems: ['https://example.com/foo/bar'] }))
+    })
+
+    it('cannot change startIndex', async () => {
+      const object = await getObject(actor.followers.first, token)
+      assert(await cantUpdate(actor, token, object, { startIndex: 50 }))
     })
   })
 })

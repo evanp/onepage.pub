@@ -820,6 +820,27 @@ class Activity extends ActivityObject {
               throw new createError.BadRequest(`Cannot update ${prop} directly`)
             }
           }
+          for (const prop of ['totalItems']) {
+            if (prop in activity.object && activity.object[prop] !== await object.prop(prop)) {
+              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            }
+          }
+        }
+        // prevent updating collection properties directly
+        if (await object.isCollectionPage()) {
+          for (const prop of ['prev', 'next', 'partOf']) {
+            if (prop in activity.object && await toId(activity.object[prop]) !== await toId(await object.prop(prop))) {
+              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            }
+          }
+          for (const prop of ['startIndex']) {
+            if (prop in activity.object && activity.object[prop] !== await object.prop(prop)) {
+              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            }
+          }
+        }
+        // Common between page and collection
+        if (await object.isCollection() || await object.isCollectionPage()) {
           for (const prop of ['items', 'orderedItems']) {
             if (prop in activity.object) {
               const proposed = activity.object[prop]
@@ -840,11 +861,6 @@ class Activity extends ActivityObject {
               }
             }
           }
-          for (const prop of ['totalItems']) {
-            if (prop in activity.object && activity.object[prop] !== await object.prop(prop)) {
-              throw new createError.BadRequest(`Cannot update ${prop} directly`)
-            }
-          }
         }
         // prevent updating object properties directly
         for (const prop of ['replies', 'likes', 'shares', 'attributedTo']) {
@@ -855,6 +871,7 @@ class Activity extends ActivityObject {
         // prevent updating non-object properties directly
         for (const prop of ['published', 'updated']) {
           if (prop in activity.object && activity.object[prop] !== await object.prop(prop)) {
+            logger.debug(`Update mismatch for ${prop}: ${activity.object[prop]} !== ${await object.prop(prop)} `)
             throw new createError.BadRequest(`Cannot update ${prop} directly`)
           }
         }
