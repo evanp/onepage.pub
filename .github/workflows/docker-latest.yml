@@ -1,0 +1,58 @@
+name: Push app to GHCR
+
+on:
+  workflow_dispatch:
+
+  push:
+    paths:
+      - "*"
+    branches: [ "main" ]
+
+jobs:
+
+  runTests:
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v3
+
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 20
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run tests
+      run: |
+        npm run test
+
+  pushToGHCR:
+    needs: runTests
+    runs-on: ubuntu-latest
+    steps:
+
+    - uses: actions/checkout@v3
+
+    - name: Log in to the Container registry
+      uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build Docker image
+      env:
+        VERSION: ${{ github.sha }}
+        IMAGE: ghcr.io/open-earth-foundation/citycatalyst
+      run: |
+        docker build -t $IMAGE:$VERSION app
+        docker tag $IMAGE:$VERSION $IMAGE:latest
+
+    - name: Push Docker image
+      env:
+        VERSION: ${{ github.sha }}
+        IMAGE: ghcr.io/open-earth-foundation/citycatalyst
+      run: |
+        docker push $IMAGE:$VERSION
+        docker push $IMAGE:latest
