@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
 
   push:
-    paths:
-      - "*"
     branches: [ "main" ]
 
 jobs:
@@ -44,7 +42,7 @@ jobs:
     - name: Build Docker image
       env:
         VERSION: ${{ github.sha }}
-        IMAGE: ghcr.io/open-earth-foundation/citycatalyst
+        IMAGE: ghcr.io/evanp/onepage.pub
       run: |
         docker build -t $IMAGE:$VERSION app
         docker tag $IMAGE:$VERSION $IMAGE:latest

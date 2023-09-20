@@ -1,0 +1,58 @@
+name: Push tags to ECR stable
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+
+jobs:
+    runTests:
+        runs-on: ubuntu-latest
+        steps:
+
+        - uses: actions/checkout@v3
+
+        - uses: actions/setup-node@v3
+          with:
+            node-version: 20
+
+        - name: Install dependencies
+          run: npm install
+
+        - name: Run tests
+          run: npm run test
+
+    pushToGHCR:
+        needs: runTests
+        runs-on: ubuntu-latest
+        steps:
+
+        - uses: actions/checkout@v3
+
+        - name: Log in to the Container registry
+          uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Pushing target-gap to ECR
+          env:
+            SHA: ${{ github.sha }}
+            IMAGE: ghcr.io/evanp/onepage.pub
+          run: |
+            export VERSION=`node -pe "require('./package.json').version"`
+            export MAJOR=${VERSION%.*.*}
+            export MINOR=${VERSION%.*}
+            echo Version: ${VERSION} Major: ${MAJOR} Minor: ${MINOR}
+            docker build -t $IMAGE:$SHA .
+            docker tag $IMAGE:$SHA $IMAGE:$VERSION
+            docker tag $IMAGE:$SHA $IMAGE:$MAJOR
+            docker tag $IMAGE:$SHA $IMAGE:$MINOR
+            docker tag $IMAGE:$SHA $IMAGE:stable
+            docker push $IMAGE:$SHA
+            docker push $IMAGE:$VERSION
+            docker push $IMAGE:$MAJOR
+            docker push $IMAGE:$MINOR
+            docker push $IMAGE:stable
