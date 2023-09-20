@@ -231,7 +231,7 @@ const cantUpdate = async (actor, token, object, properties) => {
   })
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
 
@@ -3722,6 +3722,40 @@ describe('onepage.pub', () => {
 
     it('cannot change attributedTo', async () => {
       assert(await cantUpdate(actor, token, object, { attributedTo: 'https://example.com/user/3' }))
+    })
+  })
+
+  describe('Cannot overwrite collection properties', { only: true }, () => {
+    let actor = null
+    let token = null
+    let object = null
+    before(async () => {
+      [actor, token] = await registerActor()
+      object = actor.followers
+    })
+
+    it('cannot change first', { only: true }, async () => {
+      assert(await cantUpdate(actor, token, object, { first: 'https://example.com/object/1' }))
+    })
+
+    it('cannot change last', { only: true }, async () => {
+      assert(await cantUpdate(actor, token, object, { last: 'https://example.com/collection/3' }))
+    })
+
+    it('cannot change current', { only: true }, async () => {
+      assert(await cantUpdate(actor, token, object, { current: 'https://example.com/collection/4' }))
+    })
+
+    it('cannot change items', { only: true }, async () => {
+      assert(await cantUpdate(actor, token, object, { items: ['https://example.com/foo/bar'] }))
+    })
+
+    it('cannot change orderedItems', { only: true }, async () => {
+      assert(await cantUpdate(actor, token, object, { orderedItems: ['https://example.com/foo/bar'] }))
+    })
+
+    it('cannot change totalItems', { only: true }, async () => {
+      assert(await cantUpdate(actor, token, object, { totalItems: 69 }))
     })
   })
 })

@@ -813,6 +813,39 @@ class Activity extends ActivityObject {
             }
           }
         }
+        // prevent updating collection properties directly
+        if (await object.isCollection()) {
+          for (const prop of ['first', 'last', 'current']) {
+            if (prop in activity.object && await toId(activity.object[prop]) !== await toId(await object.prop(prop))) {
+              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            }
+          }
+          for (const prop of ['items', 'orderedItems']) {
+            if (prop in activity.object) {
+              const proposed = activity.object[prop]
+              const current = await object.prop(prop)
+              if (!current) {
+                throw new createError.BadRequest(`Cannot insert ${prop} directly`)
+              }
+              if (!Array.isArray(proposed)) {
+                throw new createError.BadRequest(`Cannot insert scalar value for ${prop}`)
+              }
+              if (proposed.length !== current.length) {
+                throw new createError.BadRequest(`Cannot change size of ${prop}`)
+              }
+              for (const i in current) {
+                if (proposed[i] !== current[i]) {
+                  throw new createError.BadRequest(`Cannot change values of ${prop}`)
+                }
+              }
+            }
+          }
+          for (const prop of ['totalItems']) {
+            if (prop in activity.object && activity.object[prop] !== await object.prop(prop)) {
+              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            }
+          }
+        }
         // prevent updating object properties directly
         for (const prop of ['replies', 'likes', 'shares', 'attributedTo']) {
           if (prop in activity.object && await toId(activity.object[prop]) !== await toId(await object.prop(prop))) {
@@ -821,7 +854,7 @@ class Activity extends ActivityObject {
         }
         // prevent updating non-object properties directly
         for (const prop of ['published', 'updated']) {
-          if (prop in activity.object && activity.object[prop] !== object.prop(prop)) {
+          if (prop in activity.object && activity.object[prop] !== await object.prop(prop)) {
             throw new createError.BadRequest(`Cannot update ${prop} directly`)
           }
         }
