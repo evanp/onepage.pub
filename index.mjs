@@ -2646,7 +2646,7 @@ const cleanup = () => {
       process.exit(0)
     })
   })
-};
+}
 
 // Listen for SIGINT (Ctrl+C) and SIGTERM (Termination) signals
 
@@ -2656,7 +2656,7 @@ process.on('SIGINT', () => {
 })
 
 process.on('SIGTERM', () => {
-  logger.info(`Closing app on SIGINT on ${PORT}`)
+  logger.info(`Closing app on SIGTERM on ${PORT}`)
   cleanup()
 })
 

@@ -1,5 +1,5 @@
 import { describe, before, after, it } from 'node:test'
-import { exec } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import assert from 'node:assert'
 import querystring from 'node:querystring'
 import { inspect } from 'node:util'
@@ -14,7 +14,7 @@ const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
 const startServer = (port = 3000) => {
   return new Promise((resolve, reject) => {
-    const server = exec('node index.mjs', { env: { ...process.env, OPP_PORT: port } })
+    const server = spawn('node', ['index.mjs'], { env: { ...process.env, OPP_PORT: port } })
     server.on('error', reject)
     server.stdout.on('data', (data) => {
       if (data.toString().includes('Listening')) {
@@ -237,7 +237,7 @@ const cantUpdate = async (actor, token, object, properties) => {
   })
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
 
@@ -247,8 +247,8 @@ describe('onepage.pub', () => {
   })
 
   after(() => {
-    child.kill()
-    remote.kill()
+    child.kill('SIGTERM')
+    remote.kill('SIGTERM')
   })
 
   describe('Root object', () => {
