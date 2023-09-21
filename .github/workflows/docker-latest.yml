@@ -22,8 +22,7 @@ jobs:
       run: npm install
 
     - name: Run tests
-      run: |
-        npm run test
+      run: npm run test
 
   pushToGHCR:
     needs: runTests
