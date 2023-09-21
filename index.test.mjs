@@ -14,7 +14,7 @@ const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
 const startServer = (port = 3000) => {
   return new Promise((resolve, reject) => {
-    const server = exec(`OPP_PORT=${port} node index.mjs`)
+    const server = exec('node index.mjs', { env: { ...process.env, OPP_PORT: port } })
     server.on('error', reject)
     server.stdout.on('data', (data) => {
       if (data.toString().includes('Listening')) {
