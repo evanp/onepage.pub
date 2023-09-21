@@ -49,7 +49,7 @@ jobs:
     - name: Push Docker image
       env:
         VERSION: ${{ github.sha }}
-        IMAGE: ghcr.io/open-earth-foundation/citycatalyst
+        IMAGE: ghcr.io/evanp/onepage.pub
       run: |
         docker push $IMAGE:$VERSION
         docker push $IMAGE:latest
