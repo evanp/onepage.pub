@@ -1033,18 +1033,25 @@ describe('onepage.pub', () => {
     before(async () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
-      follow = await doActivity(actor1, token1, {
+      const followActivity = {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
-      })
-      await doActivity(actor2, token2, {
+      }
+      follow = await doActivity(actor1, token1, followActivity)
+      const acceptActivity = {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
-      })
+      }
+      try {
+        await doActivity(actor2, token2, acceptActivity)
+      } catch (err) {
+        console.error(err)
+        throw err
+      }
     })
 
     it("puts the actor in the other's followers", async () => {

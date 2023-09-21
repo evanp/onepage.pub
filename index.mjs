@@ -610,22 +610,12 @@ class ActivityObject {
       if (prop in object) {
         if (Array.isArray(object[prop])) {
           object[prop] = await Promise.all(object[prop].map(toBrief))
+        } else if (prop === 'object' && await this.needsExpandedObject()) {
+          object[prop] = await (new ActivityObject(object[prop])).expanded()
         } else {
           object[prop] = await toBrief(object[prop])
         }
       }
-    }
-
-    if (await this.needsExpandedObject()) {
-      const objectProp = await this.prop('object')
-      if (!objectProp) {
-        throw new Error(`Object of type ${object.type} needs expanded object property but has no such property`)
-      }
-      if (!objectProp.id) {
-        throw new Error(`Object of type ${object.type} needs expanded object property but that property has no id`)
-      }
-      const activityObject = new ActivityObject(objectProp)
-      object.object = await activityObject.expanded()
     }
 
     return object
@@ -696,7 +686,10 @@ class ActivityObject {
   }
 
   async needsExpandedObject () {
-    return ['Create', 'Update', 'Accept', 'Reject', 'Announce'].includes(await this.type())
+    const needs = ['Create', 'Update', 'Accept', 'Reject', 'Announce']
+    const type = await this.type()
+    const types = (Array.isArray(type)) ? type : [type]
+    return types.some((t) => needs.includes(t))
   }
 }
 
