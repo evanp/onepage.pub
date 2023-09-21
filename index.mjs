@@ -108,6 +108,15 @@ class Database {
       logger.silly('all() SQL: ' + params[0], params.slice(1))
       db.all(...params)
     })
+    this.close = () => new Promise((resolve, reject) => {
+      db.close((err) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve()
+        }
+      })
+    })
   }
 }
 
@@ -2624,15 +2633,42 @@ process.on('uncaughtException', (err) => {
   console.error(err)
 })
 
+// Define a function for cleanup tasks
+const cleanup = () => {
+  logger.info(`Closing server on ${PORT}`)
+  server.close(() => {
+    logger.info(`Server on ${PORT} is closed`)
+    logger.info(`Closing database on ${PORT}`)
+    db.close().then(() => {
+      logger.info(`Closed database on ${PORT}`)
+      logger.info(`Closing logger on ${PORT}`)
+      logger.close()
+      process.exit(0)
+    })
+  })
+};
+
+// Listen for SIGINT (Ctrl+C) and SIGTERM (Termination) signals
+
+process.on('SIGINT', () => {
+  logger.info(`Closing app on SIGINT on ${PORT}`)
+  cleanup()
+})
+
+process.on('SIGTERM', () => {
+  logger.info(`Closing app on SIGINT on ${PORT}`)
+  cleanup()
+})
+
 process.on('exit', (code) => {
   console.log(`About to exit with code: ${code}`)
 })
 
-// Start server with SSL
-https.createServer({
+const server = https.createServer({
   key: KEY_DATA,
   cert: CERT_DATA
 }, app)
-  .listen(PORT, HOSTNAME, () => {
-    console.log(`Listening on ${HOSTNAME}:${PORT}`)
-  })
+
+server.listen(PORT, HOSTNAME, () => {
+  console.log(`Listening on ${HOSTNAME}:${PORT}`)
+})
