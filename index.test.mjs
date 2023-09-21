@@ -3855,4 +3855,148 @@ describe('onepage.pub', () => {
       assert(act2.type.includes('IntransitiveActivity'))
     })
   })
+
+  describe('Implicit create', () => {
+    let actor = null
+    let token = null
+    before(async () => {
+      [actor, token] = await registerActor()
+    })
+    it('known type is wrapped a Create activity', async () => {
+      const activity = await doActivity(actor, token, {
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, World!'
+        }
+      })
+      assert.ok(activity.id)
+      assert.strictEqual(activity.type, 'Create')
+      assert.ok(activity.object)
+      assert.strictEqual(activity.object.type, 'Note')
+      assert.ok(activity.object.contentMap)
+      assert.strictEqual(activity.object.contentMap.en, 'Hello, World!')
+    })
+
+    it('extension type with known object type is wrapped', async () => {
+      const activity = await doActivity(actor, token, {
+        '@context': [
+          'https://www.w3.org/ns/activitystreams',
+          {
+            test: 'https://evanp.github.io/onepage.pub/test#',
+            Salute: {
+              '@id': 'test:Salute',
+              '@type': '@id'
+            }
+          }
+        ],
+        type: ['Salute', 'Note'],
+        contentMap: {
+          en: 'Hello, World!'
+        }
+      })
+      assert.ok(activity.id)
+      assert.strictEqual(activity.type, 'Create')
+      assert.ok(activity.object)
+      assert.ok(activity.object.type.includes('Note'))
+      assert.ok(activity.object.type.includes('Salute'))
+      assert.ok(activity.object.contentMap)
+      assert.strictEqual(activity.object.contentMap.en, 'Hello, World!')
+    })
+
+    it('extension type with known activity type is not wrapped', async () => {
+      const activity = await doActivity(actor, token, {
+        '@context': [
+          'https://www.w3.org/ns/activitystreams',
+          {
+            test: 'https://evanp.github.io/onepage.pub/test#',
+            Think: {
+              '@id': 'test:Think',
+              '@type': '@id'
+            }
+          }
+        ],
+        type: ['Think', 'IntransitiveActivity']
+      })
+      assert.ok(activity.id)
+      assert.ok(activity.type.includes('Think'))
+      assert.ok(activity.type.includes('IntransitiveActivity'))
+    })
+
+    it('extension type with ducktype properties is not wrapped', async () => {
+      const activity = await doActivity(actor, token, {
+        '@context': [
+          'https://www.w3.org/ns/activitystreams',
+          {
+            test: 'https://evanp.github.io/onepage.pub/test#',
+            Bake: {
+              '@id': 'test:Bake',
+              '@type': '@id'
+            },
+            Cake: {
+              '@id': 'test:Cake',
+              '@type': '@id'
+            }
+          }
+        ],
+        type: 'Bake',
+        object: {
+          type: 'Cake',
+          nameMap: {
+            en: 'A chocolate cake'
+          }
+        }
+      })
+      assert.ok(activity.id)
+      assert.ok(activity.type.includes('Bake'))
+      assert.ok(activity.type.includes('Activity'))
+    })
+
+    it('extension type without ducktype properties is not wrapped', async () => {
+      const activity = await doActivity(actor, token, {
+        '@context': [
+          'https://www.w3.org/ns/activitystreams',
+          {
+            test: 'https://evanp.github.io/onepage.pub/test#',
+            Cake: {
+              '@id': 'test:Cake',
+              '@type': '@id'
+            }
+          }
+        ],
+        type: 'Cake',
+        nameMap: {
+          en: 'A chocolate cake'
+        }
+      })
+      assert.ok(activity.id)
+      assert.strictEqual(activity.type, 'Create')
+      assert.ok(activity.object.type.includes('Cake'))
+      assert.ok(activity.object.type.includes('Object'))
+    })
+
+    it('absent type without ducktype properties is not wrapped', async () => {
+      const activity = await doActivity(actor, token, {
+        nameMap: {
+          en: 'A chocolate cake'
+        }
+      })
+      assert.ok(activity.id)
+      assert.strictEqual(activity.type, 'Create')
+      assert.strictEqual(activity.object.type, 'Object')
+    })
+
+    it('absent type with ducktype properties is not wrapped', async () => {
+      const activity = await doActivity(actor, token, {
+        instrument: {
+          id: 'http://foo.example/object/app',
+          type: 'Application',
+          nameMap: {
+            en: 'MyCoolApp'
+          }
+        }
+      })
+      assert.ok(activity.id)
+      assert.strictEqual(activity.type, 'Activity')
+    })
+  })
 })

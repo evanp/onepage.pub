@@ -384,6 +384,22 @@ class ActivityObject {
     return types[0]
   }
 
+  static isActivityType (type) {
+    const types = (Array.isArray(type)) ? type : [type]
+    return types.some(t => {
+      return ['Activity', 'IntransitiveActivity'].includes(t) ||
+        ActivityObject.#activityTypes.includes(t)
+    })
+  }
+
+  static isObjectType (type) {
+    const types = (Array.isArray(type)) ? type : [type]
+    return types.some(t => {
+      return ['Object', 'Link', 'Collection', 'CollectionPage', 'OrderedCollection', 'OrderedCollectionPage'].includes(t) ||
+        ActivityObject.#objectTypes.includes(t)
+    })
+  }
+
   async cache (owner, addressees) {
     const dataId = await this.id()
     const data = await this.json()
@@ -1222,6 +1238,11 @@ class Activity extends ActivityObject {
     for (const addressee of expanded) {
       pq.add(sendTo(addressee))
     }
+  }
+
+  static duckType (data) {
+    const props = ['actor', 'object', 'target', 'result', 'origin', 'instrument']
+    return props.some(p => p in data)
   }
 }
 
@@ -2502,14 +2523,29 @@ app.post('/:type/:id',
       const ownerId = await owner.id()
       const ownerJson = await owner.json()
       const outbox = await Collection.fromActivityObject(obj)
-      const data = req.body
+      let data = req.body
       const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
         .map((prop) => data[prop])
         .filter((a) => a)
         .flat()
         .map(toId))
-      const type = data.type || 'Activity'
-      data.id = await ActivityObject.makeId(type)
+      // We do some testing for implicit create
+      const type = data.type
+      if (ActivityObject.isActivityType(type)) {
+        // all good
+      } else if (ActivityObject.isObjectType(type)) {
+        data = { type: 'Create', object: data }
+      } else if (Activity.duckType(data)) {
+        data.type = (Array.isArray(data.type))
+          ? data.type.concat('Activity')
+          : ((data.type) ? [data.type, 'Activity'] : 'Activity')
+      } else {
+        data.type = (Array.isArray(data.type))
+          ? data.type.concat('Object')
+          : ((data.type) ? [data.type, 'Object'] : 'Object')
+        data = { type: 'Create', object: data }
+      }
+      data.id = await ActivityObject.makeId(data.type)
       data.actor = ownerId
       const activity = new Activity(data)
       await activity.apply(ownerJson, addressees)
