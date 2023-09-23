@@ -25,6 +25,7 @@ jobs:
       run: npm run test
 
   docker:
+    needs: runTests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
