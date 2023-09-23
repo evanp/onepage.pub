@@ -12,9 +12,9 @@ const redirectUri = 'https://test.onepage.pub/oauth/callback'
 
 const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
-const startServer = (port = 3000) => {
+const startServer = (port = 3000, props = {}) => {
   return new Promise((resolve, reject) => {
-    const server = spawn('node', ['index.mjs'], { env: { ...process.env, OPP_PORT: port } })
+    const server = spawn('node', ['index.mjs'], { env: { ...process.env, ...props, OPP_PORT: port } })
     server.on('error', reject)
     server.stdout.on('data', (data) => {
       if (data.toString().includes('Listening')) {
@@ -237,7 +237,7 @@ const cantUpdate = async (actor, token, object, properties) => {
   })
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
 
@@ -3997,6 +3997,88 @@ describe('onepage.pub', { only: true }, () => {
       })
       assert.ok(activity.id)
       assert.strictEqual(activity.type, 'Activity')
+    })
+  })
+
+  describe('Invitation code', () => {
+    const CODE = 'icky-serving-18750'
+    let server = null
+    before(async () => {
+      server = await startServer(3002, { OPP_INVITE_CODE: CODE })
+    })
+    after(() => {
+      server.kill()
+    })
+    it('registration form has invitation code input', async () => {
+      const res = await fetch('https://localhost:3002/register')
+      const body = await res.text()
+      assert(body.includes('name="invitecode"'))
+    })
+    it('registration without an invitation code fails', async () => {
+      const username = 'testusernocode1'
+      const password = 'testpasswordnocode1'
+      const res = await fetch('https://localhost:3002/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: querystring.stringify({
+          username,
+          password,
+          confirmation: password
+        })
+      })
+      const body = await res.text()
+      assert.strictEqual(
+        res.status,
+        400,
+        `Bad status code ${res.status}: ${body}`
+      )
+    })
+    it('registration with wrong invitation code fails', async () => {
+      const username = 'testuserbadcode1'
+      const password = 'testpasswordbadcode1'
+      const res = await fetch('https://localhost:3002/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: querystring.stringify({
+          username,
+          password,
+          confirmation: password,
+          invitecode: 'bad-code-11111'
+        })
+      })
+      const body = await res.text()
+      assert.strictEqual(
+        res.status,
+        400,
+        `Bad status code ${res.status}: ${body}`
+      )
+    })
+    it('registration with correct invitation code succeeds', async () => {
+      const username = 'testusergoodcode1'
+      const password = 'testpasswordgoodcode1'
+      const res = await fetch('https://localhost:3000/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: querystring.stringify({
+          username,
+          password,
+          confirmation: password,
+          invitecode: CODE
+        })
+      })
+      const body = await res.text()
+      assert.strictEqual(
+        res.status,
+        200,
+        `Bad status code ${res.status}: ${body}`
+      )
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'text/html; charset=utf-8'
+      )
+      assert(body.includes('Registered'))
+      assert(body.includes(username))
+      assert(body.match('<span class="token">.+?</span>'))
     })
   })
 })

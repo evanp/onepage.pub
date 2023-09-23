@@ -26,7 +26,7 @@ const KEY = process.env.OPP_KEY || 'localhost.key'
 const CERT = process.env.OPP_CERT || 'localhost.crt'
 const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
 const SESSION_SECRET = process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
-
+const INVITE_CODE = process.env.OPP_INVITE_CODE || null
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
 
@@ -2022,6 +2022,14 @@ app.get('/register', csrf, wrap(async (req, res) => {
   res.end(page('Register', `
     <div class="container mx-auto" style="max-width: 600px;">
     <form method="POST" action="/register">
+      ${(!INVITE_CODE || INVITE_CODE.length === 0)
+        ? ''
+        : `<div class="form-group row mb-3">
+        <label for="invitecode" class="col-sm-4 col-form-label text-right">Invite code</label>
+        <div class="col-sm-8">
+        <input type="text" name="invitecode" id="invitecode" class="form-control" placeholder="Invite code" />
+        </div>
+      </div>`}
       <div class="form-group row mb-3">
         <label for="username" class="col-sm-4 col-form-label text-right">Username</label>
         <div class="col-sm-8">
@@ -2063,6 +2071,9 @@ app.post('/register', csrf, wrap(async (req, res) => {
   }
   if (req.body.password !== req.body.confirmation) {
     throw new createError.BadRequest('Passwords do not match')
+  }
+  if (INVITE_CODE && INVITE_CODE.length > 0 && (!req.body.invitecode || req.body.invitecode !== INVITE_CODE)) {
+    throw new createError.BadRequest('Correct invite code required')
   }
   const username = req.body.username
 
