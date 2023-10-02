@@ -4,6 +4,7 @@ import assert from 'node:assert'
 import querystring from 'node:querystring'
 import { inspect } from 'node:util'
 import crypto from 'node:crypto'
+import path from 'node:path'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
@@ -237,7 +238,19 @@ const cantUpdate = async (actor, token, object, properties) => {
   })
 }
 
-describe('onepage.pub', () => {
+const settle = async (port = 3000) => {
+  let count = null
+
+  do {
+    const res = await fetch(`https://localhost:${port}/queue`)
+    count = await res.json()
+    if (count > 0) {
+      await delay(1)
+    }
+  } while (count > 0)
+}
+
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
 
@@ -4079,6 +4092,78 @@ describe('onepage.pub', () => {
       assert(body.includes('Registered'))
       assert(body.includes(username))
       assert(body.match('<span class="token">.+?</span>'))
+    })
+  })
+
+  describe('Blocklist file', { only: true }, () => {
+    let [actor1, token1] = [null, null]
+    let [actor2, token2] = [null, null]
+    let [actor3, token3] = [null, null]
+    let server = null
+    let created = null
+    before(async () => {
+      // TODO: figure out how to set the path for the blocklist better
+      server = await startServer(3003,
+        { OPP_BLOCK_LIST: path.join('.', 'blocklist.csv') }
+      );
+      [actor1, token1] = await registerActor(3000);
+      [actor2, token2] = await registerActor(3001);
+      [actor3, token3] = await registerActor(3003)
+      created = await doActivity(actor3, token3, {
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, World!'
+          }
+        }
+      })
+      await settle(3003)
+    })
+    after(async () => {
+      await settle(3000)
+      await settle(3001)
+      await settle(3003)
+      server.kill()
+    })
+
+    it('can receive from unblocked', { only: true }, async () => {
+      const activity = await doActivity(actor1, token1, {
+        to: [actor3.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: `Hello, ${actor3.name}!`
+          }
+        }
+      })
+      await settle(3000)
+      assert.ok(isInStream(actor3.inbox, activity, token3))
+    })
+
+    it('cannot receive from blocked', { only: true }, async () => {
+      const activity = await doActivity(actor2, token2, {
+        to: [actor3.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: `Hello, ${actor3.name}!`
+          }
+        }
+      })
+      await settle(3001)
+      assert.ok(!await isInStream(actor3.inbox, activity, token3))
+    })
+
+    it('will accept read from unblocked', { only: true }, async () => {
+      assert.ok(await canGetProxy(created.object.id, actor1, token1))
+    })
+
+    it('will not accept read from blocked', { only: true }, async () => {
+      assert.ok(!await canGetProxy(created.object.id, actor2, token2))
     })
   })
 })

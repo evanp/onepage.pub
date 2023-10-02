@@ -27,8 +27,22 @@ const CERT = process.env.OPP_CERT || 'localhost.crt'
 const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
 const SESSION_SECRET = process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
 const INVITE_CODE = process.env.OPP_INVITE_CODE || null
+const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
+
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
+const BLOCKED_DOMAINS = (() => {
+  const domains = []
+  if (BLOCK_LIST) {
+    const data = fs.readFileSync(BLOCK_LIST, { encoding: 'utf-8' })
+    const lines = data.split('\n')
+    for (const line of lines) {
+      const fields = line.split(',')
+      domains.push(fields[0])
+    }
+  }
+  return domains
+})()
 
 // Constants
 
@@ -84,6 +98,12 @@ function standardEndpoints () {
     oauthAuthorizationEndpoint: makeUrl('endpoint/oauth/authorize'),
     oauthTokenEndpoint: makeUrl('endpoint/oauth/token')
   }
+}
+
+function domainIsBlocked (url) {
+  const u = new URL(url)
+  const hostname = u.host
+  return BLOCKED_DOMAINS.includes(hostname)
 }
 
 // Classes
@@ -221,14 +241,17 @@ class PromiseQueue {
 
   add (operation, title = null) {
     return new Promise((resolve, reject) => {
+      this.count++
       this.last = this.last
         .then(() => {
           return operation
         })
         .then((...args) => {
+          this.count--
           resolve(...args)
         })
         .catch((err) => {
+          this.count--
           reject(err)
         })
     })
@@ -470,6 +493,10 @@ class ActivityObject {
     const owner = await this.owner()
     const addressees = await this.addressees()
     const addresseeIds = await Promise.all(addressees.map((addressee) => addressee.id()))
+    // subjects from blocked domains can never read
+    if (subject && domainIsBlocked(subject)) {
+      return false
+    }
     if (subject && await User.isUser(owner)) {
       const blockedProp = await owner.prop('blocked')
       const blocked = new Collection(blockedProp)
@@ -1220,27 +1247,37 @@ class Activity extends ActivityObject {
       let other = new ActivityObject(addressee)
       if (await User.isUser(other)) {
         // Local delivery
+        logger.debug(`Local delivery for ${activity.id} to ${addressee}`)
         const inbox = new Collection(await other.prop('inbox'))
         await inbox.prependData(activity)
       } else {
+        logger.debug(`Remote delivery for ${activity.id} to ${addressee}`)
         other = await ActivityObject.fromRemote(addressee)
         const inboxProp = await other.prop('inbox')
         if (!inboxProp) {
-          return
+          throw new Error(`Cannot deliver to ${addressee}: no 'inbox' property`)
         }
         const inbox = await toId(inboxProp)
         const date = new Date().toUTCString()
         const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date)
-        const res = await fetch(inbox, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/activity+json; charset=utf-8',
-            Signature: signature.header,
-            Date: date
-          },
-          body
-        })
-        await res.text()
+        try {
+          const res = await fetch(inbox, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/activity+json; charset=utf-8',
+              Signature: signature.header,
+              Date: date
+            },
+            body
+          })
+          const resBody = await res.text()
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            throw new Error(`Bad status ${res.statusCode} for delivery to ${inbox}: ${resBody}`)
+          }
+        } catch (err) {
+          logger.warning(`Failed delivery to ${inbox}: ${err.message}`)
+          throw err
+        }
       }
     }
 
@@ -2016,6 +2053,12 @@ const page = (title, body, user = null) => {
   </html>`
 }
 
+app.get('/queue', wrap(async (req, res) => {
+  res.status(200)
+  res.type('json')
+  res.json(pq.count)
+}))
+
 app.get('/register', csrf, wrap(async (req, res) => {
   res.type('html')
   res.status(200)
@@ -2583,6 +2626,9 @@ app.post('/:type/:id',
     } else if (full === await owner.prop('inbox')) { // remote delivery
       if (!req.auth?.subject) {
         throw new createError.Unauthorized('Invalid HTTP signature')
+      }
+      if (domainIsBlocked(req.auth.subject)) {
+        throw new createError.Forbidden('Remote delivery blocked')
       }
       const remote = new ActivityObject(req.auth.subject)
       if (await User.isUser(remote)) {
