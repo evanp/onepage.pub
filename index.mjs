@@ -21,7 +21,7 @@ import querystring from 'node:querystring'
 
 const DATABASE = process.env.OPP_DATABASE || ':memory:'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
-const PORT = process.env.OPP_PORT || 3000
+const PORT = process.env.OPP_PORT || 65380
 const KEY = process.env.OPP_KEY || 'localhost.key'
 const CERT = process.env.OPP_CERT || 'localhost.crt'
 const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'

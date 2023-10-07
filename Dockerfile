@@ -24,5 +24,5 @@ WORKDIR /app
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=build /app .
 # Expose the listening port
-EXPOSE 3000
+EXPOSE 65380
 CMD [ "node", "index.mjs" ]
