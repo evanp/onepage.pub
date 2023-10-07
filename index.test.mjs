@@ -5,15 +5,23 @@ import querystring from 'node:querystring'
 import { inspect } from 'node:util'
 import crypto from 'node:crypto'
 import path from 'node:path'
+import https from 'node:https'
+import fs from 'node:fs'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
-const clientId = 'https://test.onepage.pub'
-const redirectUri = 'https://test.onepage.pub/oauth/callback'
+const MAIN_PORT = 50941 // V
+const REMOTE_PORT = 51996 // Cr
+const CLIENT_PORT = 54938 // Mn
+const THIRD_PORT = 55845 // Fe
+const FOURTH_PORT = 58933 // Co
+
+const CLIENT_ID = `https://localhost:${CLIENT_PORT}/client`
+const REDIRECT_URI = `https://localhost:${CLIENT_PORT}/oauth/callback`
 
 const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
-const startServer = (port = 3000, props = {}) => {
+const startServer = (port = MAIN_PORT, props = {}) => {
   return new Promise((resolve, reject) => {
     const server = spawn('node', ['index.mjs'], { env: { ...process.env, ...props, OPP_PORT: port } })
     server.on('error', reject)
@@ -29,9 +37,46 @@ const startServer = (port = 3000, props = {}) => {
   })
 }
 
+const startClientServer = (port = CLIENT_PORT) => {
+  return new Promise((resolve, reject) => {
+    const options = {
+      key: fs.readFileSync('localhost.key'),
+      cert: fs.readFileSync('localhost.crt')
+    }
+    const server = https.createServer(options, (req, res) => {
+      if (req.url.startsWith('/client')) {
+        res.writeHead(200, {
+          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
+        })
+        res.end(JSON.stringify({
+          '@context': [
+            'https://www.w3.org/ns/activitystreams',
+            'https://purl.archive.org/socialweb/oauth'
+          ],
+          type: 'Application',
+          id: CLIENT_ID,
+          redirectURI: REDIRECT_URI,
+          nameMap: {
+            en: 'Test scripts for onepage.pub'
+          }
+        }))
+      } else {
+        res.writeHead(404)
+        res.end()
+      }
+    })
+
+    server.on('error', reject)
+
+    server.listen(port, 'localhost', () => {
+      resolve(server)
+    })
+  })
+}
+
 const registerUser = (() => {
   let i = 100
-  return async (port = 3000) => {
+  return async (port = MAIN_PORT) => {
     i++
     const username = `testuser${i}`
     const password = `testpassword${i}`
@@ -51,7 +96,7 @@ const registerUser = (() => {
   }
 })()
 
-const userToActor = async (username, port = 3000) => {
+const userToActor = async (username, port = MAIN_PORT) => {
   const res = await fetch(
     `https://localhost:${port}/.well-known/webfinger?resource=acct:${username}@localhost:${port}`
   )
@@ -61,7 +106,7 @@ const userToActor = async (username, port = 3000) => {
   return await actorRes.json()
 }
 
-const registerActor = async (port = 3000) => {
+const registerActor = async (port = MAIN_PORT) => {
   const [username, token, , cookie] = await registerUser(port)
   const actor = await userToActor(username, port)
   return [actor, token, cookie]
@@ -166,8 +211,8 @@ const getAuthCode = async (actor, cookie, scope = 'read write') => {
   const codeChallenge = base64URLEncode(crypto.createHash('sha256').update(codeVerifier).digest())
   const qs = querystring.stringify({
     response_type: responseType,
-    client_id: clientId,
-    redirect_uri: redirectUri,
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
     scope,
     state,
     code_challenge_method: 'S256',
@@ -186,8 +231,8 @@ const getAuthCode = async (actor, cookie, scope = 'read write') => {
     },
     body: querystring.stringify({
       csrf_token: csrfToken,
-      client_id: clientId,
-      redirect_uri: redirectUri,
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
       scope,
       state,
       code_challenge: codeChallenge
@@ -210,9 +255,9 @@ const getTokens = async (actor, code, codeVerifier) => {
     body: querystring.stringify({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: redirectUri,
+      redirect_uri: REDIRECT_URI,
       code_verifier: codeVerifier,
-      client_id: clientId
+      client_id: CLIENT_ID
     })
   })
   const body3 = await res3.json()
@@ -238,7 +283,7 @@ const cantUpdate = async (actor, token, object, properties) => {
   })
 }
 
-const settle = async (port = 3000) => {
+const settle = async (port = MAIN_PORT) => {
   let count = null
 
   do {
@@ -253,20 +298,23 @@ const settle = async (port = 3000) => {
 describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
+  let client = null
 
   before(async () => {
-    child = await startServer(3000)
-    remote = await startServer(3001)
+    child = await startServer(MAIN_PORT)
+    remote = await startServer(REMOTE_PORT)
+    client = await startClientServer(CLIENT_PORT)
   })
 
   after(() => {
     child.kill('SIGTERM')
     remote.kill('SIGTERM')
+    client.close()
   })
 
   describe('Root object', () => {
     it('can get the root object', async () => {
-      const res = await fetch('https://localhost:3000/', {
+      const res = await fetch(`https://localhost:${MAIN_PORT}/`, {
         headers: {
           Accept: 'application/activity+json,application/ld+json,application/json'
         }
@@ -274,13 +322,13 @@ describe('onepage.pub', { only: true }, () => {
       const obj = await res.json()
       assert.strictEqual(obj.type, 'Service')
       assert.strictEqual(obj.name, 'One Page Pub')
-      assert.strictEqual(obj.id, 'https://localhost:3000/')
+      assert.strictEqual(obj.id, `https://localhost:${MAIN_PORT}/`)
     })
   })
 
   describe('Registration', () => {
     it('can get a registration form', async () => {
-      const res = await fetch('https://localhost:3000/register')
+      const res = await fetch(`https://localhost:${MAIN_PORT}/register`)
       const body = await res.text()
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
@@ -296,7 +344,7 @@ describe('onepage.pub', { only: true }, () => {
     it('can register a user', async () => {
       const username = 'testuser1'
       const password = 'testpassword1'
-      const res = await fetch('https://localhost:3000/register', {
+      const res = await fetch(`https://localhost:${MAIN_PORT}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: querystring.stringify({
@@ -328,7 +376,7 @@ describe('onepage.pub', { only: true }, () => {
     })
     it('can get information about a user', async () => {
       const res = await fetch(
-        `https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`
+        `https://localhost:${MAIN_PORT}/.well-known/webfinger?resource=acct:${username}@localhost:${MAIN_PORT}`
       )
       if (res.status !== 200) {
         const body = await res.text()
@@ -340,10 +388,10 @@ describe('onepage.pub', { only: true }, () => {
         'application/jrd+json; charset=utf-8'
       )
       const obj = await res.json()
-      assert.strictEqual(obj.subject, `acct:${username}@localhost:3000`)
+      assert.strictEqual(obj.subject, `acct:${username}@localhost:${MAIN_PORT}`)
       assert.strictEqual(obj.links[0].rel, 'self')
       assert.strictEqual(obj.links[0].type, 'application/activity+json')
-      assert(obj.links[0].href.startsWith('https://localhost:3000/person/'))
+      assert(obj.links[0].href.startsWith(`https://localhost:${MAIN_PORT}/person/`))
     })
   })
 
@@ -357,7 +405,7 @@ describe('onepage.pub', { only: true }, () => {
     before(async () => {
       [username] = await registerUser()
       const res = await fetch(
-        `https://localhost:3000/.well-known/webfinger?resource=acct:${username}@localhost:3000`
+        `https://localhost:${MAIN_PORT}/.well-known/webfinger?resource=acct:${username}@localhost:${MAIN_PORT}`
       )
       const obj = await res.json()
       actorId = obj.links[0].href
@@ -429,7 +477,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.equal('string', typeof actorObj.inbox.id)
       assert(
         actorObj.inbox.id.startsWith(
-          'https://localhost:3000/orderedcollection/'
+          `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
@@ -439,7 +487,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.equal('string', typeof actorObj.outbox.id)
       assert(
         actorObj.outbox.id.startsWith(
-          'https://localhost:3000/orderedcollection/'
+          `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
@@ -449,7 +497,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.equal('string', typeof actorObj.followers.id)
       assert(
         actorObj.followers.id.startsWith(
-          'https://localhost:3000/orderedcollection/'
+          `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
@@ -459,7 +507,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.equal('string', typeof actorObj.following.id)
       assert(
         actorObj.following.id.startsWith(
-          'https://localhost:3000/orderedcollection/'
+          `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
@@ -469,7 +517,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.equal('string', typeof actorObj.liked.id)
       assert(
         actorObj.liked.id.startsWith(
-          'https://localhost:3000/orderedcollection/'
+          `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
@@ -479,7 +527,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.equal('string', typeof actorObj.blocked.id)
       assert(
         actorObj.blocked.id.startsWith(
-          'https://localhost:3000/orderedcollection/'
+          `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
@@ -489,7 +537,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.equal('string', typeof actorObj.pendingFollowers.id)
       assert(
         actorObj.blocked.id.startsWith(
-          'https://localhost:3000/orderedcollection/'
+          `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
@@ -499,7 +547,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.equal('string', typeof actorObj.pendingFollowing.id)
       assert(
         actorObj.blocked.id.startsWith(
-          'https://localhost:3000/orderedcollection/'
+          `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
@@ -508,7 +556,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(actorObj.publicKey)
       assert.equal('object', typeof actorObj.publicKey)
       assert.equal('string', typeof actorObj.publicKey.id)
-      assert(actorObj.publicKey.id.startsWith('https://localhost:3000/key/'))
+      assert(actorObj.publicKey.id.startsWith(`https://localhost:${MAIN_PORT}/key/`))
       assert.equal('string', typeof actorObj.publicKey.type)
       assert.equal('Key', actorObj.publicKey.type)
       assert.equal('string', typeof actorObj.publicKey.owner)
@@ -549,7 +597,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
       )
     })
     it('can get actor outbox', async () => {
@@ -566,7 +614,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
       )
     })
     it('can get actor followers', async () => {
@@ -583,7 +631,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
       )
     })
     it('can get actor following', async () => {
@@ -600,7 +648,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
       )
     })
     it('can get actor liked', async () => {
@@ -617,7 +665,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
       )
     })
 
@@ -653,7 +701,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
       )
     })
 
@@ -689,7 +737,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
       )
     })
 
@@ -725,7 +773,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith('https://localhost:3000/orderedcollectionpage/')
+        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
       )
     })
   })
@@ -925,8 +973,8 @@ describe('onepage.pub', { only: true }, () => {
     let token2 = null
 
     before(async () => {
-      [actor1, token1] = await registerActor(3000);
-      [actor2, token2] = await registerActor(3001)
+      [actor1, token1] = await registerActor(MAIN_PORT);
+      [actor2, token2] = await registerActor(REMOTE_PORT)
     })
 
     it('sends to remote addressees', async () => {
@@ -2032,7 +2080,7 @@ describe('onepage.pub', { only: true }, () => {
     let follow = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2067,7 +2115,7 @@ describe('onepage.pub', { only: true }, () => {
     let follow = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2135,7 +2183,7 @@ describe('onepage.pub', { only: true }, () => {
     let follow = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2209,7 +2257,7 @@ describe('onepage.pub', { only: true }, () => {
     let self = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001);
+      [actor2, token2] = await registerActor(REMOTE_PORT);
       [actor3, token3] = await registerActor()
       follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
@@ -2315,7 +2363,7 @@ describe('onepage.pub', { only: true }, () => {
     let createReply = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2380,7 +2428,7 @@ describe('onepage.pub', { only: true }, () => {
     let updateNote = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2447,7 +2495,7 @@ describe('onepage.pub', { only: true }, () => {
     let createNote = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2513,7 +2561,7 @@ describe('onepage.pub', { only: true }, () => {
     let like = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2568,7 +2616,7 @@ describe('onepage.pub', { only: true }, () => {
     let announce = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2618,7 +2666,7 @@ describe('onepage.pub', { only: true }, () => {
     let createAlbum = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2684,7 +2732,7 @@ describe('onepage.pub', { only: true }, () => {
     let createAlbum = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor2.id,
@@ -2803,7 +2851,7 @@ describe('onepage.pub', { only: true }, () => {
     let like = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor1.id],
@@ -2865,7 +2913,7 @@ describe('onepage.pub', { only: true }, () => {
     let share = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor1.id],
@@ -2926,7 +2974,7 @@ describe('onepage.pub', { only: true }, () => {
     let follow = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor1.id],
@@ -2975,7 +3023,7 @@ describe('onepage.pub', { only: true }, () => {
     let follow = null
     before(async () => {
       [actor1, token1] = await registerActor();
-      [actor2, token2] = await registerActor(3001)
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor1.id],
@@ -3166,7 +3214,7 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('can get Login page', async () => {
-      const res = await fetch('https://localhost:3000/login')
+      const res = await fetch(`https://localhost:${MAIN_PORT}/login`)
       const body = await res.text()
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
@@ -3180,7 +3228,7 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('can log in a user', async () => {
-      const res = await fetch('https://localhost:3000/login', {
+      const res = await fetch(`https://localhost:${MAIN_PORT}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: querystring.stringify({
@@ -3199,7 +3247,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.ok(res.headers.get('Set-Cookie'))
       const location = res.headers.get('Location')
       const cookie = res.headers.get('Set-Cookie')
-      const res2 = await fetch(new URL(location, 'https://localhost:3000/'), {
+      const res2 = await fetch(new URL(location, `https://localhost:${MAIN_PORT}/`), {
         headers: { Cookie: cookie }
       })
       const body2 = await res2.text()
@@ -3218,7 +3266,7 @@ describe('onepage.pub', { only: true }, () => {
     it('can get cookie from registration', async () => {
       const username = 'testregcookie'
       const password = 'testregcookiepass'
-      const reg = await fetch('https://localhost:3000/register', {
+      const reg = await fetch(`https://localhost:${MAIN_PORT}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: querystring.stringify({
@@ -3259,8 +3307,6 @@ describe('onepage.pub', { only: true }, () => {
     let accessToken = null
     let refreshToken = null
     let accessToken2 = null
-    const clientId = 'test.onepage.pub'
-    const redirectUri = 'https://localhost:4000/oauth/callback'
     const scope = 'read write'
     const state = 'teststate'
     const codeVerifier = base64URLEncode(crypto.randomBytes(32))
@@ -3276,8 +3322,8 @@ describe('onepage.pub', { only: true }, () => {
       const responseType = 'code'
       const qs = querystring.stringify({
         response_type: responseType,
-        client_id: clientId,
-        redirect_uri: redirectUri,
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
         scope,
         state,
         code_challenge_method: 'S256',
@@ -3303,8 +3349,8 @@ describe('onepage.pub', { only: true }, () => {
         },
         body: querystring.stringify({
           csrf_token: csrfToken,
-          client_id: clientId,
-          redirect_uri: redirectUri,
+          client_id: CLIENT_ID,
+          redirect_uri: REDIRECT_URI,
           scope,
           state,
           code_challenge: codeChallenge
@@ -3315,7 +3361,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.strictEqual(res2.status, 302, `Bad status code ${res2.status}: ${body2}`)
       assert.ok(res2.headers.get('Location'))
       const location = res2.headers.get('Location')
-      assert.strictEqual(location.substring(0, redirectUri.length), redirectUri)
+      assert.strictEqual(location.substring(0, REDIRECT_URI.length), REDIRECT_URI)
       const locUrl = new URL(location)
       code = locUrl.searchParams.get('code')
       assert.ok(code)
@@ -3333,9 +3379,9 @@ describe('onepage.pub', { only: true }, () => {
         body: querystring.stringify({
           grant_type: 'authorization_code',
           code,
-          redirect_uri: redirectUri,
+          redirect_uri: REDIRECT_URI,
           code_verifier: codeVerifier,
-          client_id: clientId
+          client_id: CLIENT_ID
         })
       })
       const body3 = await res3.json()
@@ -3432,7 +3478,7 @@ describe('onepage.pub', { only: true }, () => {
     let note = null
     before(async () => {
       [actor, , cookie] = await registerActor()
-      const [actor2, token2] = await registerActor(3001)
+      const [actor2, token2] = await registerActor(REMOTE_PORT)
       const activity = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor.id],
@@ -3475,7 +3521,7 @@ describe('onepage.pub', { only: true }, () => {
     let note = null
     before(async () => {
       [actor, , cookie] = await registerActor()
-      const [actor2, token2] = await registerActor(3001)
+      const [actor2, token2] = await registerActor(REMOTE_PORT)
       const activity = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor.id],
@@ -3522,7 +3568,7 @@ describe('onepage.pub', { only: true }, () => {
       let cookie = null;
       [actor, , cookie] = await registerActor()
       code = await getAuthCode(actor, cookie)
-      const [actor2, token2] = await registerActor(3001)
+      const [actor2, token2] = await registerActor(REMOTE_PORT)
       const activity = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor.id],
@@ -3580,7 +3626,7 @@ describe('onepage.pub', { only: true }, () => {
       [actor, , cookie] = await registerActor()
       const [code, codeVerifier] = await getAuthCode(actor, cookie);
       [, refreshToken] = await getTokens(actor, code, codeVerifier)
-      const [actor2, token2] = await registerActor(3001)
+      const [actor2, token2] = await registerActor(REMOTE_PORT)
       const activity = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor.id],
@@ -3639,14 +3685,14 @@ describe('onepage.pub', { only: true }, () => {
       actor = await userToActor(username)
     })
     it('bootstrap in registration form', async () => {
-      const res = await fetch('https://localhost:3000/register')
+      const res = await fetch(`https://localhost:${MAIN_PORT}/register`)
       const body = await res.text()
       assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
       assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
       assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
     it('bootstrap in login form', async () => {
-      const res = await fetch('https://localhost:3000/login')
+      const res = await fetch(`https://localhost:${MAIN_PORT}/login`)
       const body = await res.text()
       assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
       assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
@@ -3655,7 +3701,7 @@ describe('onepage.pub', { only: true }, () => {
     it('bootstrap in registration results', async () => {
       const username = 'testbootstrap'
       const password = 'testbootstrap'
-      const res = await fetch('https://localhost:3000/register', {
+      const res = await fetch(`https://localhost:${MAIN_PORT}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: querystring.stringify({
@@ -3671,7 +3717,7 @@ describe('onepage.pub', { only: true }, () => {
     })
     it('bootstrap in login results', async () => {
       // NB: registered in previous test
-      const res = await fetch('https://localhost:3000/login', {
+      const res = await fetch(`https://localhost:${MAIN_PORT}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: querystring.stringify({
@@ -3682,7 +3728,7 @@ describe('onepage.pub', { only: true }, () => {
       })
       const location = res.headers.get('Location')
       const cookie = res.headers.get('Set-Cookie')
-      const res2 = await fetch(new URL(location, 'https://localhost:3000/'), {
+      const res2 = await fetch(new URL(location, `https://localhost:${MAIN_PORT}/`), {
         headers: { Cookie: cookie }
       })
       const body2 = await res2.text()
@@ -3699,8 +3745,8 @@ describe('onepage.pub', { only: true }, () => {
       const codeChallenge = base64URLEncode(crypto.createHash('sha256').update(codeVerifier).digest())
       const qs = querystring.stringify({
         response_type: responseType,
-        client_id: clientId,
-        redirect_uri: redirectUri,
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
         scope,
         state,
         code_challenge_method: 'S256',
@@ -4017,20 +4063,20 @@ describe('onepage.pub', { only: true }, () => {
     const CODE = 'icky-serving-18750'
     let server = null
     before(async () => {
-      server = await startServer(3002, { OPP_INVITE_CODE: CODE })
+      server = await startServer(THIRD_PORT, { OPP_INVITE_CODE: CODE })
     })
     after(() => {
       server.kill()
     })
     it('registration form has invitation code input', async () => {
-      const res = await fetch('https://localhost:3002/register')
+      const res = await fetch(`https://localhost:${THIRD_PORT}/register`)
       const body = await res.text()
       assert(body.includes('name="invitecode"'))
     })
     it('registration without an invitation code fails', async () => {
       const username = 'testusernocode1'
       const password = 'testpasswordnocode1'
-      const res = await fetch('https://localhost:3002/register', {
+      const res = await fetch(`https://localhost:${THIRD_PORT}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: querystring.stringify({
@@ -4049,7 +4095,7 @@ describe('onepage.pub', { only: true }, () => {
     it('registration with wrong invitation code fails', async () => {
       const username = 'testuserbadcode1'
       const password = 'testpasswordbadcode1'
-      const res = await fetch('https://localhost:3002/register', {
+      const res = await fetch(`https://localhost:${THIRD_PORT}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: querystring.stringify({
@@ -4069,7 +4115,7 @@ describe('onepage.pub', { only: true }, () => {
     it('registration with correct invitation code succeeds', async () => {
       const username = 'testusergoodcode1'
       const password = 'testpasswordgoodcode1'
-      const res = await fetch('https://localhost:3000/register', {
+      const res = await fetch(`https://localhost:${MAIN_PORT}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: querystring.stringify({
@@ -4103,12 +4149,12 @@ describe('onepage.pub', { only: true }, () => {
     let created = null
     before(async () => {
       // TODO: figure out how to set the path for the blocklist better
-      server = await startServer(3003,
+      server = await startServer(FOURTH_PORT,
         { OPP_BLOCK_LIST: path.join('.', 'blocklist.csv') }
       );
-      [actor1, token1] = await registerActor(3000);
-      [actor2, token2] = await registerActor(3001);
-      [actor3, token3] = await registerActor(3003)
+      [actor1, token1] = await registerActor(MAIN_PORT);
+      [actor2, token2] = await registerActor(REMOTE_PORT);
+      [actor3, token3] = await registerActor(FOURTH_PORT)
       created = await doActivity(actor3, token3, {
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
@@ -4119,12 +4165,12 @@ describe('onepage.pub', { only: true }, () => {
           }
         }
       })
-      await settle(3003)
+      await settle(FOURTH_PORT)
     })
     after(async () => {
-      await settle(3000)
-      await settle(3001)
-      await settle(3003)
+      await settle(MAIN_PORT)
+      await settle(REMOTE_PORT)
+      await settle(FOURTH_PORT)
       server.kill()
     })
 
@@ -4139,7 +4185,7 @@ describe('onepage.pub', { only: true }, () => {
           }
         }
       })
-      await settle(3000)
+      await settle(MAIN_PORT)
       assert.ok(isInStream(actor3.inbox, activity, token3))
     })
 
@@ -4154,7 +4200,7 @@ describe('onepage.pub', { only: true }, () => {
           }
         }
       })
-      await settle(3001)
+      await settle(REMOTE_PORT)
       assert.ok(!await isInStream(actor3.inbox, activity, token3))
     })
 
