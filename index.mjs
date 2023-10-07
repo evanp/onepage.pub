@@ -101,7 +101,17 @@ function standardEndpoints () {
 }
 
 function domainIsBlocked (url) {
-  const u = new URL(url)
+  if (typeof url !== 'string') {
+    logger.warn(`Invalid URL: ${JSON.stringify(url)}`)
+    return false
+  }
+  let u = null
+  try {
+    u = new URL(url)
+  } catch (err) {
+    logger.warn(`Invalid URL: ${url}`)
+    return false
+  }
   const hostname = u.host
   return BLOCKED_DOMAINS.includes(hostname)
 }
@@ -493,6 +503,9 @@ class ActivityObject {
     const owner = await this.owner()
     const addressees = await this.addressees()
     const addresseeIds = await Promise.all(addressees.map((addressee) => addressee.id()))
+    if (subject && typeof subject !== 'string') {
+      throw new Error(`Unexpected subject: ${JSON.stringify(subject)}`)
+    }
     // subjects from blocked domains can never read
     if (subject && domainIsBlocked(subject)) {
       return false
@@ -1255,7 +1268,8 @@ class Activity extends ActivityObject {
         other = await ActivityObject.fromRemote(addressee)
         const inboxProp = await other.prop('inbox')
         if (!inboxProp) {
-          throw new Error(`Cannot deliver to ${addressee}: no 'inbox' property`)
+          logger.warn(`Cannot deliver to ${addressee}: no 'inbox' property`)
+          return
         }
         const inbox = await toId(inboxProp)
         const date = new Date().toUTCString()
@@ -1511,7 +1525,7 @@ class RemoteActivity extends Activity {
             await inReplyTo.expand()
             const inReplyToOwner = await inReplyTo.owner()
             if (inReplyToOwner && await inReplyToOwner.id() === await ownerObj.id()) {
-              if (!await inReplyTo.canRead(remote)) {
+              if (!await inReplyTo.canRead(await remoteObj.id())) {
                 throw new Error('Cannot reply to something you cannot read!')
               }
               const replies = new Collection(await inReplyTo.prop('replies'))
@@ -2627,10 +2641,14 @@ app.post('/:type/:id',
       if (!req.auth?.subject) {
         throw new createError.Unauthorized('Invalid HTTP signature')
       }
-      if (domainIsBlocked(req.auth.subject)) {
+      const remote = new ActivityObject(req.auth.subject)
+      const remoteId = await remote.id()
+      if (!(typeof remoteId === 'string')) {
+        throw new createError.InternalServerError(`Invalid remote id ${JSON.stringify(remoteId)}`)
+      }
+      if (domainIsBlocked(remoteId)) {
         throw new createError.Forbidden('Remote delivery blocked')
       }
-      const remote = new ActivityObject(req.auth.subject)
       if (await User.isUser(remote)) {
         throw new createError.Forbidden('Remote delivery only')
       }
