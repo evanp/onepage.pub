@@ -295,7 +295,7 @@ const settle = async (port = MAIN_PORT) => {
   } while (count > 0)
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -2370,14 +2370,14 @@ describe('onepage.pub', { only: true }, () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.followers.id],
@@ -2389,7 +2389,7 @@ describe('onepage.pub', { only: true }, () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createReply = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.id, actor2.followers.id],
@@ -2402,7 +2402,7 @@ describe('onepage.pub', { only: true }, () => {
           inReplyTo: createNote.object.id
         }
       })
-      await delay(100)
+      await settle(MAIN_PORT)
     })
 
     it("note appears in the actor's inbox", async () => {
@@ -4141,7 +4141,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Blocklist file', { only: true }, () => {
+  describe('Blocklist file', () => {
     let [actor1, token1] = [null, null]
     let [actor2, token2] = [null, null]
     let [actor3, token3] = [null, null]
@@ -4174,7 +4174,7 @@ describe('onepage.pub', { only: true }, () => {
       server.kill()
     })
 
-    it('can receive from unblocked', { only: true }, async () => {
+    it('can receive from unblocked', async () => {
       const activity = await doActivity(actor1, token1, {
         to: [actor3.id],
         type: 'Create',
@@ -4189,7 +4189,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.ok(isInStream(actor3.inbox, activity, token3))
     })
 
-    it('cannot receive from blocked', { only: true }, async () => {
+    it('cannot receive from blocked', async () => {
       const activity = await doActivity(actor2, token2, {
         to: [actor3.id],
         type: 'Create',
@@ -4204,11 +4204,11 @@ describe('onepage.pub', { only: true }, () => {
       assert.ok(!await isInStream(actor3.inbox, activity, token3))
     })
 
-    it('will accept read from unblocked', { only: true }, async () => {
+    it('will accept read from unblocked', async () => {
       assert.ok(await canGetProxy(created.object.id, actor1, token1))
     })
 
-    it('will not accept read from blocked', { only: true }, async () => {
+    it('will not accept read from blocked', async () => {
       assert.ok(!await canGetProxy(created.object.id, actor2, token2))
     })
   })
