@@ -996,7 +996,7 @@ describe('onepage.pub', () => {
       })
       const body = await res.text()
       const obj = JSON.parse(body)
-      await delay(100)
+      await settle(MAIN_PORT)
       const inbox = await (
         await fetch(actor2.inbox.id, {
           headers: { Authorization: `Bearer ${token2}` }
@@ -1027,7 +1027,7 @@ describe('onepage.pub', () => {
       const body = await res.text()
       const obj = JSON.parse(body)
       // Wait for delivery!
-      await delay(100)
+      await settle(REMOTE_PORT)
       const inbox = await (
         await fetch(actor1.inbox.id, {
           headers: { Authorization: `Bearer ${token1}` }
@@ -2021,7 +2021,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       assert(!(await isInStream(actor1.inbox, createPublic, token1)))
     })
 
@@ -2037,7 +2037,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       assert(!(await isInStream(actor1.inbox, createFollowersOnly, token1)))
     })
   })
@@ -2090,7 +2090,7 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
     })
 
     it("appears in the actor's pending following", async () => {
@@ -2125,14 +2125,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it("removes the follow from the actor's pending following", async () => {
@@ -2160,7 +2160,7 @@ describe('onepage.pub', () => {
           en: 'Hello, world!'
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       assert(await isInStream(actor1.inbox, createNote, token1))
     })
 
@@ -2173,7 +2173,7 @@ describe('onepage.pub', () => {
           en: 'Hello, world!'
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       assert(await isInStream(actor1.inbox, createNote, token1))
     })
   })
@@ -2193,14 +2193,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Reject',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it("does not appear in the actor's pending following", async () => {
@@ -2228,7 +2228,7 @@ describe('onepage.pub', () => {
           en: 'Hello, world!'
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       assert(!(await isInStream(actor1.inbox, createNote, token1)))
     })
 
@@ -2241,7 +2241,7 @@ describe('onepage.pub', () => {
           en: 'Hello, world!'
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       assert(!(await isInStream(actor1.inbox, createNote, token1)))
     })
   })
@@ -2268,14 +2268,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       pub = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2320,7 +2320,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it('follower can get public note through proxy', async () => {
@@ -2438,14 +2438,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2457,7 +2457,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       updateNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2469,7 +2469,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it('correct value in proxy', async () => {
@@ -2505,14 +2505,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2524,14 +2524,14 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Delete',
         object: createNote.object.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it('correct value in proxy', async () => {
@@ -2571,14 +2571,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2590,14 +2590,14 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       like = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
         type: 'Like',
         object: createNote.object.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
     })
 
     it('like is in the likes collection', async () => {
@@ -2626,14 +2626,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2645,14 +2645,14 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       announce = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
         type: 'Announce',
         object: createNote.object.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
     })
 
     it('share is in the shares collection', async () => {
@@ -2676,14 +2676,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createAlbum = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2697,7 +2697,7 @@ describe('onepage.pub', () => {
           items: []
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2709,7 +2709,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
@@ -2717,7 +2717,7 @@ describe('onepage.pub', () => {
         object: createNote.object.id,
         target: createAlbum.object.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it('correct count in proxy', async () => {
@@ -2742,14 +2742,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor2.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createAlbum = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2763,7 +2763,7 @@ describe('onepage.pub', () => {
           items: []
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2775,7 +2775,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
@@ -2783,7 +2783,7 @@ describe('onepage.pub', () => {
         object: createNote.object.id,
         target: createAlbum.object.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
@@ -2791,7 +2791,7 @@ describe('onepage.pub', () => {
         object: createNote.object.id,
         target: createAlbum.object.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it('correct count in proxy', async () => {
@@ -2821,18 +2821,21 @@ describe('onepage.pub', () => {
           }
         }
       })
+      await settle(MAIN_PORT)
       announce = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Announce',
         object: createNote.object.id
       })
+      await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Undo',
         object: announce.id
       })
+      await settle(REMOTE_PORT)
     })
 
     it('correct count of shares', async () => {
@@ -2861,14 +2864,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor1.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.id],
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       createNote = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2880,21 +2883,21 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       like = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Like',
         object: createNote.object.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Undo',
         object: like.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it('activity is not in object likes stream', async () => {
@@ -2923,14 +2926,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor1.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.id],
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       createNote = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public'],
@@ -2942,21 +2945,21 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       share = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Announce',
         object: createNote.object.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Undo',
         object: share.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it('activity is not in object shares stream', async () => {
@@ -2984,21 +2987,21 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor1.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor2.id],
         type: 'Accept',
         object: follow.id
       })
-      await delay(100)
+      await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Undo',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it('actor is no longer in followers', async () => {
@@ -3033,14 +3036,14 @@ describe('onepage.pub', () => {
         type: 'Follow',
         object: actor1.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
         to: [actor1.id],
         type: 'Undo',
         object: follow.id
       })
-      await delay(100)
+      await settle(REMOTE_PORT)
     })
 
     it('actor is not in followers', async () => {
