@@ -298,7 +298,7 @@ const settle = async (port = MAIN_PORT) => {
   } while (count > 0)
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
   let client = null
@@ -4310,7 +4310,7 @@ describe('onepage.pub', () => {
     })
   })
 
-  describe('Proxy mode', () => {
+  describe('Proxy mode', { only: true }, () => {
     let process = null
     before(async () => {
       process = await startServer(THIRD_PORT, {
@@ -4345,6 +4345,14 @@ describe('onepage.pub', () => {
       const text = await reg.text()
       assert.ok(text.match(/<span class="token">(.*?)<\/span>/))
       assert.ok(reg.headers.get('Set-Cookie'))
+    })
+    it('readiness endpoint works', { only: true }, async () => {
+      const res = await fetch(`http://localhost:${THIRD_PORT}/ready`)
+      assert.strictEqual(res.status, 200)
+    })
+    it('liveness endpoint works', { only: true }, async () => {
+      const res = await fetch(`http://localhost:${THIRD_PORT}/live`)
+      assert.strictEqual(res.status, 200)
     })
   })
 })

@@ -152,6 +152,15 @@ class Database {
       })
     })
   }
+
+  ready () {
+    try {
+      const value = this.get('SELECT 1')
+      return !!value
+    } catch (err) {
+      return false
+    }
+  }
 }
 
 class HTTPSignature {
@@ -2237,6 +2246,22 @@ app.post('/logout', wrap(async (req, res) => {
       res.redirect('/')
     }
   })
+}))
+
+app.get('/live', wrap(async (req, res) => {
+  res.status(200)
+  res.set('Content-Type', 'text/plain')
+  res.end('OK')
+}))
+
+app.get('/ready', wrap(async (req, res) => {
+  const dbReady = await db.ready()
+  if (!dbReady) {
+    throw new createError.InternalServerError('Database not ready')
+  }
+  res.status(200)
+  res.set('Content-Type', 'text/plain')
+  res.end('OK')
 }))
 
 app.get('/.well-known/webfinger', wrap(async (req, res) => {
