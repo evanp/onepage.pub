@@ -89,9 +89,11 @@ persistence:
 onepagePub:
   database: "/data/one-page-pub.db"
   hostname: "localhost"
-  key: "localhost.key"
-  cert: "localhost.crt"
-  log_level: "warn"
+  address: '0.0.0.0'
+  key: 'localhost.key'
+  cert: 'localhost.crt'
+  log_level: "info"
   session_secret: "insecure-session-secret"
   invite_code: null
   block_list: null
+  origin: "https://localhost"
