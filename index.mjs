@@ -52,6 +52,10 @@ const BLOCKED_CONTEXT = 'https://purl.archive.org/socialweb/blocked'
 const PENDING_CONTEXT = 'https://purl.archive.org/socialweb/pending'
 const CONTEXT = [AS_CONTEXT, SEC_CONTEXT, BLOCKED_CONTEXT, PENDING_CONTEXT]
 
+const LD_MEDIA_TYPE = 'application/ld+json'
+const ACTIVITY_MEDIA_TYPE = 'application/activity+json'
+const JSON_MEDIA_TYPE = 'application/json'
+const ACCEPT_HEADER = `${LD_MEDIA_TYPE};q=1.0, ${ACTIVITY_MEDIA_TYPE};q=0.9, ${JSON_MEDIA_TYPE};q=0.3`
 const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public'
 const PUBLIC_OBJ = { id: PUBLIC, nameMap: { en: 'Public' }, type: 'Collection' }
 const MAX_PAGE_SIZE = 20
@@ -735,7 +739,7 @@ class ActivityObject {
       let res = null
       try {
         res = await fetch(id, {
-          headers: { Accept: 'application/activity+json, application/ld+json, application/json' }
+          headers: { Accept: ACCEPT_HEADER }
         })
       } catch (err) {
         console.error(err)
@@ -2318,8 +2322,41 @@ app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wra
     if (!req.query.client_id) {
       throw new createError.BadRequest('Missing client_id')
     }
+    let clientIdUrl = null
+    let clientData = null
+    try {
+      clientIdUrl = new URL(req.query.client_id)
+    } catch {
+      throw new createError.BadRequest('Invalid client_id')
+    }
+    if (clientIdUrl.protocol !== 'https:') {
+      throw new createError.BadRequest('Invalid client_id')
+    }
+    try {
+      const clientRes = await fetch(req.query.client_id, {
+        headers: {
+          Accept: ACCEPT_HEADER
+        }
+      })
+      if (clientRes.status !== 200) {
+        throw new createError.BadRequest('Invalid client_id')
+      }
+      const mediaType = clientRes.headers.get('Content-Type').split(';')[0].trim()
+      if (![LD_MEDIA_TYPE, ACTIVITY_MEDIA_TYPE, JSON_MEDIA_TYPE].includes(mediaType)) {
+        throw new createError.BadRequest('Invalid client_id')
+      }
+      clientData = await clientRes.json()
+      if (!clientData.redirectURI) {
+        throw new createError.BadRequest('Invalid client_id')
+      }
+    } catch (err) {
+      throw new createError.BadRequest('Invalid client_id')
+    }
     if (!req.query.redirect_uri) {
       throw new createError.BadRequest('Missing redirect_uri')
+    }
+    if (req.query.redirect_uri !== clientData.redirectURI) {
+      throw new createError.BadRequest('Invalid redirect_uri')
     }
     if (!req.query.response_type || req.query.response_type !== 'code') {
       throw new createError.BadRequest('Missing or invalid response_type')

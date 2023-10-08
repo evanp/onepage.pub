@@ -18,6 +18,7 @@ const FOURTH_PORT = 58933 // Co
 
 const CLIENT_ID = `https://localhost:${CLIENT_PORT}/client`
 const REDIRECT_URI = `https://localhost:${CLIENT_PORT}/oauth/callback`
+const AS2 = 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
 
 const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
@@ -37,7 +38,20 @@ const startServer = (port = MAIN_PORT, props = {}) => {
   })
 }
 
-const startClientServer = (port = CLIENT_PORT) => {
+const defaultClient = {
+  '@context': [
+    'https://www.w3.org/ns/activitystreams',
+    'https://purl.archive.org/socialweb/oauth'
+  ],
+  type: 'Application',
+  id: CLIENT_ID,
+  redirectURI: REDIRECT_URI,
+  nameMap: {
+    en: 'Test scripts for onepage.pub'
+  }
+}
+
+const startClientServer = (port = CLIENT_PORT, client = JSON.stringify(defaultClient), contentType = AS2) => {
   return new Promise((resolve, reject) => {
     const options = {
       key: fs.readFileSync('localhost.key'),
@@ -46,20 +60,9 @@ const startClientServer = (port = CLIENT_PORT) => {
     const server = https.createServer(options, (req, res) => {
       if (req.url.startsWith('/client')) {
         res.writeHead(200, {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
+          'Content-Type': contentType
         })
-        res.end(JSON.stringify({
-          '@context': [
-            'https://www.w3.org/ns/activitystreams',
-            'https://purl.archive.org/socialweb/oauth'
-          ],
-          type: 'Application',
-          id: CLIENT_ID,
-          redirectURI: REDIRECT_URI,
-          nameMap: {
-            en: 'Test scripts for onepage.pub'
-          }
-        }))
+        res.end(client)
       } else {
         res.writeHead(404)
         res.end()
@@ -4210,6 +4213,97 @@ describe('onepage.pub', () => {
 
     it('will not accept read from blocked', async () => {
       assert.ok(!await canGetProxy(created.object.id, actor2, token2))
+    })
+  })
+
+  describe('Validate OAuth client ID', () => {
+    let actor = null
+    let authz = null
+    let cookie = null
+    const responseType = 'code'
+    const scope = 'read write'
+    const state = 'teststate'
+    const codeVerifier = base64URLEncode(crypto.randomBytes(32))
+    const hash = crypto.createHash('sha256').update(codeVerifier).digest()
+    const codeChallenge = base64URLEncode(hash)
+    let nonAS2Server = null
+    let mismatchUriServer = null
+
+    before(async () => {
+      [actor, , cookie] = await registerActor()
+      authz = actor.endpoints.oauthAuthorizationEndpoint
+      const nonAS2Client =
+      'name: foo\n' +
+      'type: bar\n' +
+      'redirectURI: https://notimportant.example/callback'
+      nonAS2Server = await startClientServer(THIRD_PORT, nonAS2Client, 'application/yaml')
+      const mismatchUriClient = { ...defaultClient, redirectURI: 'https://mismatch.example/callback' }
+      mismatchUriServer = await startClientServer(FOURTH_PORT, JSON.stringify(mismatchUriClient))
+    })
+    after(async () => {
+      nonAS2Server.close()
+      mismatchUriServer.close()
+    })
+    it('refuses client ID that is not an HTTPS URL', async () => {
+      const responseType = 'code'
+      const qs = querystring.stringify({
+        response_type: responseType,
+        client_id: 'urn:uuid:C792DF04-9B6D-4545-BC9D-9F35FECA2B58',
+        redirect_uri: REDIRECT_URI,
+        scope,
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge
+      })
+      const res = await fetch(`${authz}?${qs}`, {
+        headers: { Cookie: cookie }
+      })
+      assert.ok(res.status >= 400 && res.status < 500, `Bad status code ${res.status}`)
+    })
+    it('refuses client ID that does not exist', async () => {
+      const qs = querystring.stringify({
+        response_type: responseType,
+        client_id: 'https://dne.example/client',
+        redirect_uri: REDIRECT_URI,
+        scope,
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge
+      })
+      const res = await fetch(`${authz}?${qs}`, {
+        headers: { Cookie: cookie }
+      })
+      assert.ok(res.status >= 400 && res.status < 500, `Bad status code ${res.status}`)
+    })
+    it('refuses client ID that does not return an AS2 object', async () => {
+      const qs = querystring.stringify({
+        response_type: responseType,
+        client_id: `https://localhost:${THIRD_PORT}/client`,
+        redirect_uri: REDIRECT_URI,
+        scope,
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge
+      })
+      const res = await fetch(`${authz}?${qs}`, {
+        headers: { Cookie: cookie }
+      })
+      assert.ok(res.status >= 400 && res.status < 500, `Bad status code ${res.status}`)
+    })
+    it('refuses client ID that does not have a matching redirectURI', async () => {
+      const qs = querystring.stringify({
+        response_type: responseType,
+        client_id: `https://localhost:${FOURTH_PORT}/client`,
+        redirect_uri: REDIRECT_URI,
+        scope,
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge
+      })
+      const res = await fetch(`${authz}?${qs}`, {
+        headers: { Cookie: cookie }
+      })
+      assert.ok(res.status >= 400 && res.status < 500, `Bad status code ${res.status}`)
     })
   })
 })
