@@ -4306,4 +4306,42 @@ describe('onepage.pub', () => {
       assert.ok(res.status >= 400 && res.status < 500, `Bad status code ${res.status}`)
     })
   })
+
+  describe('Proxy mode', () => {
+    let process = null
+    before(async () => {
+      process = await startServer(THIRD_PORT, {
+        OPP_ORIGIN: 'https://social.example'
+      })
+    })
+    after(async () => {
+      process.kill('SIGTERM')
+    })
+    it('responds to HTTP requests', async () => {
+      const res = await fetch(`http://localhost:${THIRD_PORT}/`)
+      assert.strictEqual(res.status, 200)
+    })
+    it('uses origin URLs for server ID', async () => {
+      const res = await fetch(`http://localhost:${THIRD_PORT}/`,
+        { headers: { Accept: 'application/activity+json' } })
+      const json = await res.json()
+      assert.strictEqual(json.id, 'https://social.example/')
+    })
+    it('can register a user', async () => {
+      const username = 'proxyuser1'
+      const password = 'proxypassword1'
+      const reg = await fetch(`http://localhost:${THIRD_PORT}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: querystring.stringify({
+          username,
+          password,
+          confirmation: password
+        })
+      })
+      const text = await reg.text()
+      assert.ok(text.match(/<span class="token">(.*?)<\/span>/))
+      assert.ok(reg.headers.get('Set-Cookie'))
+    })
+  })
 })

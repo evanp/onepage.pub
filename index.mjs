@@ -4,6 +4,7 @@ import passport from 'passport'
 import LocalStrategy from 'passport-local'
 import fs from 'fs'
 import https from 'https'
+import http from 'http'
 import wrap from 'express-async-handler'
 import createError from 'http-errors'
 import { nanoid } from 'nanoid/async'
@@ -28,6 +29,9 @@ const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
 const SESSION_SECRET = process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
 const INVITE_CODE = process.env.OPP_INVITE_CODE || null
 const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
+const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
+
+// Calculated constants
 
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
@@ -89,11 +93,7 @@ function makeUrl (relative) {
   if (relative.length > 0 && relative[0] === '/') {
     relative = relative.slice(1)
   }
-  if (PORT === 443) {
-    return `https://${HOSTNAME}/${relative}`
-  } else {
-    return `https://${HOSTNAME}:${PORT}/${relative}`
-  }
+  return `${ORIGIN}/${relative}`
 }
 
 function standardEndpoints () {
@@ -2776,10 +2776,15 @@ process.on('exit', (code) => {
   console.log(`About to exit with code: ${code}`)
 })
 
-const server = https.createServer({
-  key: KEY_DATA,
-  cert: CERT_DATA
-}, app)
+// If we're public, run with ORIGIN. Otherwise,
+// run with HTTPS
+
+const server = (process.env.OPP_ORIGIN)
+  ? http.createServer(app)
+  : https.createServer({
+    key: KEY_DATA,
+    cert: CERT_DATA
+  }, app)
 
 server.listen(PORT, HOSTNAME, () => {
   console.log(`Listening on ${HOSTNAME}:${PORT}`)
