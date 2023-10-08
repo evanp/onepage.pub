@@ -49,7 +49,8 @@ jobs:
             export MAJOR=${VERSION%.*.*}
             export MINOR=${VERSION%.*}
             echo Version: ${VERSION} Major: ${MAJOR} Minor: ${MINOR}
-            docker build -t $IMAGE:$SHA .
+            docker buildx create --use
+            docker buildx build --platform linux/amd64,linux/arm64 -t $IMAGE:$SHA .
             docker tag $IMAGE:$SHA $IMAGE:$VERSION
             docker tag $IMAGE:$SHA $IMAGE:$MAJOR
             docker tag $IMAGE:$SHA $IMAGE:$MINOR
