@@ -24,7 +24,14 @@ const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
 const startServer = (port = MAIN_PORT, props = {}) => {
   return new Promise((resolve, reject) => {
-    const server = spawn('node', ['index.mjs'], { env: { OPP_HOSTNAME: 'localhost', OPP_ADDRESS: '127.0.0.1', ...process.env, ...props, OPP_PORT: port } })
+    const server = spawn('node', ['index.mjs'], {
+      env: {
+        OPP_HOSTNAME: 'localhost',
+        ...process.env,
+        ...props,
+        OPP_PORT: port
+      }
+    })
     server.on('error', reject)
     server.stdout.on('data', (data) => {
       if (data.toString().includes('Listening')) {
@@ -298,7 +305,7 @@ const settle = async (port = MAIN_PORT) => {
   } while (count > 0)
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -4310,7 +4317,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Proxy mode', { only: true }, () => {
+  describe('Proxy mode', () => {
     let process = null
     before(async () => {
       process = await startServer(THIRD_PORT, {
@@ -4346,11 +4353,11 @@ describe('onepage.pub', { only: true }, () => {
       assert.ok(text.match(/<span class="token">(.*?)<\/span>/))
       assert.ok(reg.headers.get('Set-Cookie'))
     })
-    it('readiness endpoint works', { only: true }, async () => {
+    it('readiness endpoint works', async () => {
       const res = await fetch(`http://localhost:${THIRD_PORT}/ready`)
       assert.strictEqual(res.status, 200)
     })
-    it('liveness endpoint works', { only: true }, async () => {
+    it('liveness endpoint works', async () => {
       const res = await fetch(`http://localhost:${THIRD_PORT}/live`)
       assert.strictEqual(res.status, 200)
     })

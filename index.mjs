@@ -22,7 +22,6 @@ import querystring from 'node:querystring'
 
 const DATABASE = process.env.OPP_DATABASE || ':memory:'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
-const ADDRESS = process.env.OPP_ADDRESS || '0.0.0.0'
 const PORT = process.env.OPP_PORT || 65380
 const KEY = process.env.OPP_KEY || 'localhost.key'
 const CERT = process.env.OPP_CERT || 'localhost.crt'
@@ -2812,6 +2811,6 @@ const server = (process.env.OPP_ORIGIN)
     cert: CERT_DATA
   }, app)
 
-server.listen(PORT, ADDRESS, () => {
-  console.log(`Listening on ${ADDRESS}:${PORT}`)
+server.listen(PORT, () => {
+  console.log(`Listening on ${PORT}`)
 })

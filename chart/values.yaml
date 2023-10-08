@@ -88,7 +88,7 @@ persistence:
 
 onepagePub:
   database: "/data/one-page-pub.db"
-  hostname: "localhost"
+  hostname: "0.0.0.0"
   address: '0.0.0.0'
   key: 'localhost.key'
   cert: 'localhost.crt'
