@@ -47,6 +47,6 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/evanp/onepage.pub:latest
+          tags: ghcr.io/evanp/onepage.pub:latest,ghcr.io/evanp/onepage.pub:${{ github.sha }}
           cache-from: type=registry,ref=ghcr.io/evanp/onepage.pub:latest
           cache-to: type=inline
