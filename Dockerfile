@@ -1,5 +1,5 @@
 # ---- Base Node ----
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 # Set working directory
 WORKDIR /app
 # Copy project file
@@ -18,7 +18,7 @@ COPY . /app
 RUN npm install
 
 # --- Release with Alpine ----
-FROM node:20-alpine AS release
+FROM node:20-slim AS release
 # Set working directory
 WORKDIR /app
 COPY --from=dependencies /app/node_modules ./node_modules
