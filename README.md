@@ -22,7 +22,7 @@ This project has multiple goals. First, it's a demonstration of how to build an 
 
 ActivityPub defines a client API for creating, reading, updating, and deleting social data, and a server-to-server for delivering that data to remote servers.
 
-onepage.pub implements as much as possible of the ActivityPub API and protocol in a single JavaScript module. It doesn't use any Activity Streams- or ActivityPub-specific libraries. At 1300+ lines of code, it's not exactly a one-page program, but it's still pretty small.
+onepage.pub implements as much as possible of the ActivityPub API and protocol in a single JavaScript module. It doesn't use any Activity Streams- or ActivityPub-specific libraries. At 2800+ lines of code, it's not exactly a one-page program, but it's still pretty small.
 
 It is a **headless** server. It includes only a rudimentary Web UI for registration, login, logout, and OAuth 2.0 authorization flow. Everything else is done through the API.
 
@@ -54,6 +54,16 @@ everyone's links to you.
 - OPP_PORT: the port to listen on (default: `3000`). Same caveat as above.
 - OPP_KEY: path to your SSL private key file (default: `localhost.key`).
 - OPP_CERT: path to your SSL certificate file (default: `localhost.cert`).
+- OPP_LOG_LEVEL: the level of logging to do (default: `info`). Can be `debug`, `info`, `warn`, or `error`.
+- OPP_SESSION_SECRET: a random value to use for secrets in sessions. You should change this to something random.
+- OPP_INVITE_CODE: If this is non-blank, then only users who have this code can register.
+- OPP_BLOCK_LIST: a blocklist file for blocking domains. In Mastodon
+blockfile format. Null by default, which is bad.
+- OPP_ORIGIN: The origin part of URLs, like 'https://host.example:53443'. If this is set, the server will use it for all generated
+URLs, and listen on http instead of https. This is what you want
+if you're using Kubernetes or another proxy to terminate SSL.
+- OPP_NAME: a name to show for the server. Defaults to the hostname part
+  of the origin.
 
 ## API
 
