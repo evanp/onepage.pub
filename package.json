@@ -24,7 +24,10 @@
     "standard": "^17.1.0"
   },
   "scripts": {
-    "test": "node --test --test-reporter=spec"
+    "start": "node index.mjs",
+    "test": "node --test --test-reporter=spec",
+    "test:only": "node --test --test-only --test-reporter=spec",
+    "ver": "echo $npm_package_version"
   },
   "version": "0.2.1",
   "engine": {

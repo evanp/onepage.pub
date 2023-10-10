@@ -4362,4 +4362,24 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.status, 200)
     })
   })
+
+  describe('Version in footer', () => {
+    it('version in main page footer', async () => {
+      const res = await fetch(`https://localhost:${MAIN_PORT}/`)
+      const body = await res.text()
+      assert.match(body, /<span class="version">.+?<\/span>/)
+    })
+
+    it('version in registration page footer', async () => {
+      const res = await fetch(`https://localhost:${MAIN_PORT}/register`)
+      const body = await res.text()
+      assert.match(body, /<span class="version">.+?<\/span>/)
+    })
+
+    it('version in login page footer', async () => {
+      const res = await fetch(`https://localhost:${MAIN_PORT}/login`)
+      const body = await res.text()
+      assert.match(body, /<span class="version">.+?<\/span>/)
+    })
+  })
 })

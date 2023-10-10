@@ -2024,16 +2024,29 @@ app.get('/', wrap(async (req, res) => {
 }))
 
 const page = (title, body, user = null) => {
+  const version = process.env.npm_package_version
   return `
   <!DOCTYPE html>
   <html>
     <head>
       <title>${title}</title>
       <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
+      <style>
+      .outer {
+        margin-bottom: 100px; /* Margin bottom by footer height */
+      }
+      .footer {
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+        background-color: "light grey"; /* Footer background color */
+        padding: 10px 0;
+      }
+      </style>
     </head>
     <body>
 
-      <div class="container mx-auto" style="max-width: 600px;">
+      <div class="container mx-auto outer" style="max-width: 600px;">
         <nav class="navbar navbar-expand-lg navbar-light bg-light">
           <a class="navbar-brand" href="/">${HOSTNAME}</a>
           <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -2070,6 +2083,14 @@ const page = (title, body, user = null) => {
               <h1>${title}</h1>
               ${body}
             </div>
+          </div>
+        </div>
+
+        <div class="footer bg-light" style="max-width: 600px;">
+          <div class="container text-center">
+          <p>
+            One Page Pub ${(version) ? `<span class="version">${version}</span>` : ''}
+            | <a href="https://github.com/evanp/onepage.pub" target="_blank">GitHub</a></p>
           </div>
         </div>
       </div>
