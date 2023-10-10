@@ -30,6 +30,7 @@ const SESSION_SECRET = process.env.OPP_SESSION_SECRET || 'insecure-session-secre
 const INVITE_CODE = process.env.OPP_INVITE_CODE || null
 const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
 const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
+const NAME = process.env.OPP_NAME || (new URL(ORIGIN)).hostname
 
 // Calculated constants
 
@@ -2029,7 +2030,7 @@ const page = (title, body, user = null) => {
   <!DOCTYPE html>
   <html>
     <head>
-      <title>${title}</title>
+      <title>${title} - ${NAME}</title>
       <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css">
       <style>
       .outer {
@@ -2048,7 +2049,7 @@ const page = (title, body, user = null) => {
 
       <div class="container mx-auto outer" style="max-width: 600px;">
         <nav class="navbar navbar-expand-lg navbar-light bg-light">
-          <a class="navbar-brand" href="/">${HOSTNAME}</a>
+          <a class="navbar-brand" href="/">${NAME}</a>
           <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
           </button>
