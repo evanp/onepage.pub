@@ -2484,7 +2484,12 @@ app.post('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wr
 }))
 
 app.post('/endpoint/oauth/token', wrap(async (req, res) => {
-  if (req.get('Content-Type') !== 'application/x-www-form-urlencoded') {
+  const contentTypeHeader = req.get('Content-Type')
+  if (!contentTypeHeader) {
+    throw new createError.BadRequest('Invalid Content-Type')
+  }
+  const mediaType = contentTypeHeader.split(';')[0].trim()
+  if (mediaType !== 'application/x-www-form-urlencoded') {
     throw new createError.BadRequest('Invalid Content-Type')
   }
   if (!req.body.grant_type || !['authorization_code', 'refresh_token'].includes(req.body.grant_type)) {
