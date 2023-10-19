@@ -2006,7 +2006,6 @@ app.use('/popper/', express.static('node_modules/@popperjs/core/dist/umd'))
 app.get('/', wrap(async (req, res) => {
   if (req.accepts('html')) {
     res.send(page('Home', `
-    <h1>Welcome to ${HOSTNAME}</h1>
     <p>This is an <a href="https://www.w3.org/TR/activitypub/">ActivityPub</a> server.</p>
     <p>It is currently in development.</p>
 `, req.user))
