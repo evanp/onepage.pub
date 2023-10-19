@@ -2617,7 +2617,7 @@ app.get('/:type/:id',
   tokenTypeCheck,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
-    const full = req.protocol + '://' + req.get('host') + req.originalUrl
+    const full = makeUrl(req.originalUrl)
     if (req.auth && req.auth.scope && !req.auth.scope.split(' ').includes('read')) {
       throw new createError.Forbidden('Missing read scope')
     }
@@ -2662,7 +2662,7 @@ app.post('/:type/:id',
   tokenTypeCheck,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
-    const full = req.protocol + '://' + req.get('host') + req.originalUrl
+    const full = makeUrl(req.originalUrl)
     const obj = new ActivityObject(full)
     if (!obj) {
       throw new createError.NotFound('Object not found')
