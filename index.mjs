@@ -752,7 +752,7 @@ class ActivityObject {
           headers: { Accept: ACCEPT_HEADER }
         })
       } catch (err) {
-        console.error(err)
+        logger.error('Error getting remote object:', err)
         throw err
       }
       if (res.status !== 200) {
@@ -2763,7 +2763,7 @@ app.post('/:type/:id',
 app.use((err, req, res, next) => {
   if (createError.isHttpError(err)) {
     if (err.statusCode > 500) {
-      console.error(err)
+      logger.error(`Error status ${err.statusCode}: `, err)
     }
     res.status(err.statusCode)
     if (res.expose) {
@@ -2780,20 +2780,18 @@ app.use((err, req, res, next) => {
     res.status(401)
     res.json({ error_description: err.message, error: 'invalid_token' })
   } else {
-    console.error(err)
+    logger.error('Error status 500: ', err)
     res.status(500)
     res.json({ message: err.message })
   }
 })
 
 process.on('unhandledRejection', (err) => {
-  console.log('Unhandled rejection')
-  console.error(err)
+  logger.error('Unhandled rejection: ', err)
 })
 
 process.on('uncaughtException', (err) => {
-  console.log('Uncaught exception')
-  console.error(err)
+  logger.error('Uncaught exception: ', err)
 })
 
 // Define a function for cleanup tasks
