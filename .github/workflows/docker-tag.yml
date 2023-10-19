@@ -40,7 +40,7 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Pushing target-gap to ECR
+        - name: Pushing onepage.pub to GHCR
           env:
             SHA: ${{ github.sha }}
             IMAGE: ghcr.io/evanp/onepage.pub
