@@ -4382,4 +4382,81 @@ describe('onepage.pub', () => {
       assert.match(body, /<span class="version">.+?<\/span>/)
     })
   })
+
+  describe('Authorization when unauthenticated', () => {
+    let actor = null
+    const responseType = 'code'
+    const scope = 'read write'
+    const state = 'teststate'
+    const codeVerifier = base64URLEncode(crypto.randomBytes(32))
+    const hash = crypto.createHash('sha256').update(codeVerifier).digest()
+    const codeChallenge = base64URLEncode(hash)
+    let authz = null
+    let username = null
+    let password = null
+
+    before(async () => {
+      [username, , password] = await registerUser()
+      actor = await userToActor(username)
+      authz = actor.endpoints.oauthAuthorizationEndpoint
+    })
+
+    it('redirects to login if unauthenticated', async () => {
+      const qs = querystring.stringify({
+        response_type: responseType,
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        scope,
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge
+      })
+      const res = await fetch(`${authz}?${qs}`, { redirect: 'manual' })
+      assert.strictEqual(res.status, 302)
+      const location = res.headers.get('Location')
+      assert.strictEqual(location, '/login')
+      const cookie = res.headers.get('Set-Cookie')
+      assert.ok(cookie)
+
+      const res2 = await fetch(
+        new URL(location, `https://localhost:${MAIN_PORT}/`),
+        { headers: { Cookie: cookie } }
+      )
+      assert.strictEqual(res2.status, 200)
+
+      const res3 = await fetch(`https://localhost:${MAIN_PORT}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Cookie: cookie
+        },
+        body: querystring.stringify({
+          username,
+          password
+        }),
+        redirect: 'manual'
+      })
+      const body3 = await res3.text()
+      assert.strictEqual(
+        res3.status,
+        302,
+        `Bad status code ${res3.status}: ${body3}`
+      )
+      const location2 = res3.headers.get('Location')
+      assert.ok(location2.startsWith('/endpoint/oauth/authorize'))
+      const cookie2 = res3.headers.get('Set-Cookie')
+      const res5 = await fetch(new URL(location2, `https://localhost:${MAIN_PORT}/`), {
+        headers: { Cookie: cookie2 },
+        redirect: 'manual'
+      })
+      const body5 = await res5.text()
+      assert.strictEqual(
+        res5.status,
+        200,
+        `Bad status code ${res5.status}: ${body5}`
+      )
+      assert(body5.includes('Authorize'))
+      assert(body5.includes(CLIENT_ID))
+    })
+  })
 })

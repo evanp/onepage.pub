@@ -2227,10 +2227,30 @@ app.get('/login', csrf, wrap(async (req, res) => {
     </form>`))
 }))
 
-app.post('/login', csrf, passport.authenticate('local', {
-  successRedirect: '/login/success',
-  failureRedirect: '/login?error=1'
-}))
+app.post('/login', (req, res, next) => {
+  const redirectTo = req.session.redirectTo
+  passport.authenticate('local', (err, user, info) => {
+    if (err) {
+      res.redirect('/login?error=1')
+      return
+    }
+    if (!user) {
+      res.redirect('/login')
+      return
+    }
+    req.login(user, (err) => {
+      if (err) {
+        next(err)
+        return
+      }
+      if (redirectTo) {
+        res.redirect(redirectTo)
+      } else {
+        res.redirect('/login/success')
+      }
+    })
+  })(req, res, next)
+})
 
 app.get('/login/success', passport.authenticate('session'), wrap(async (req, res) => {
   if (!req.isAuthenticated()) {
@@ -2240,6 +2260,7 @@ app.get('/login/success', passport.authenticate('session'), wrap(async (req, res
   if (!user) {
     throw new createError.InternalServerError('Invalid user even though isAuthenticated() is true')
   }
+
   const token = await jwtsign(
     {
       jwtid: await nanoid(),
@@ -2363,7 +2384,8 @@ app.post('/endpoint/proxyUrl',
 
 app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wrap(async (req, res) => {
   if (!req.isAuthenticated()) {
-    res.redirect('/login&returnTo=' + encodeURIComponent(req.originalUrl))
+    req.session.redirectTo = req.originalUrl
+    res.redirect('/login')
   } else {
     if (!req.query.client_id) {
       throw new createError.BadRequest('Missing client_id')
