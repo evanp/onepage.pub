@@ -1927,7 +1927,8 @@ const app = express()
 app.use((req, res, next) => {
   const oldEnd = res.end
   res.end = function (...args) {
-    logger.info(`${res.statusCode} ${req.method} ${req.url}`)
+    const subject = req.auth?.subject || '-'
+    logger.info(`${res.statusCode} ${req.method} ${req.url} (${subject})`)
     oldEnd.apply(this, args)
   }
   next()
@@ -2480,7 +2481,6 @@ app.post('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wr
     if (!req.body.code_challenge) {
       throw new createError.BadRequest('Missing code_challenge')
     }
-    logger.debug(req.body)
     // We use a JWT for the authorization code
     const code = await jwtsign(
       {
@@ -2499,7 +2499,6 @@ app.post('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wr
     )
     const state = req.body.state
     const location = req.body.redirect_uri + '?' + querystring.stringify({ code, state })
-    logger.debug(location)
     res.redirect(location)
   }
 }))
