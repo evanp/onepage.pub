@@ -2673,6 +2673,21 @@ app.get('/:type/:id',
     }
     if (await User.isUser(obj)) {
       output.endpoints = standardEndpoints()
+      // XXX: Mastodon only accepts URLs here :(
+
+      const urlProps = [
+        'inbox',
+        'outbox',
+        'followers',
+        'following',
+        'liked'
+      ]
+
+      for (const prop of urlProps) {
+        if (output[prop]) {
+          output[prop] = await toId(output[prop])
+        }
+      }
     }
     if (output.type === 'Tombstone') {
       res.status(410)

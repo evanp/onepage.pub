@@ -2,7 +2,6 @@ import { describe, before, after, it } from 'node:test'
 import { spawn } from 'node:child_process'
 import assert from 'node:assert'
 import querystring from 'node:querystring'
-import { inspect } from 'node:util'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import https from 'node:https'
@@ -123,7 +122,7 @@ const registerActor = async (port = MAIN_PORT) => {
 }
 
 const doActivity = async (actor, token, activity) => {
-  const res = await fetch(actor.outbox.id, {
+  const res = await fetch(actor.outbox, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -139,7 +138,7 @@ const doActivity = async (actor, token, activity) => {
 }
 
 const failActivity = async (actor, token, activity) => {
-  const res = await fetch(actor.outbox.id, {
+  const res = await fetch(actor.outbox, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -171,10 +170,11 @@ const getObject = async (id, token = null) => {
 }
 
 const getMembers = async (collection, token = null) => {
-  if (!collection || !collection.id) {
-    throw new Error(`Invalid collection: ${inspect(collection)}`)
+  const url = typeof collection === 'string' ? collection : collection.id
+  if (!url) {
+    throw new Error(`Invalid collection ${collection}`)
   }
-  const coll = await getObject(collection.id, token)
+  const coll = await getObject(url, token)
   let members = []
   for (let page = coll.first; page; page = page.next) {
     const pageObj = await getObject(page.id, token)
@@ -483,50 +483,45 @@ describe('onepage.pub', () => {
     })
 
     it('has a valid inbox', () => {
-      assert.equal('object', typeof actorObj.inbox)
-      assert.equal('string', typeof actorObj.inbox.id)
+      assert.equal('string', typeof actorObj.inbox)
       assert(
-        actorObj.inbox.id.startsWith(
+        actorObj.inbox.startsWith(
           `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
 
     it('has a valid outbox', () => {
-      assert.equal('object', typeof actorObj.outbox)
-      assert.equal('string', typeof actorObj.outbox.id)
+      assert.equal('string', typeof actorObj.outbox)
       assert(
-        actorObj.outbox.id.startsWith(
+        actorObj.outbox.startsWith(
           `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
 
     it('has a valid followers', () => {
-      assert.equal('object', typeof actorObj.followers)
-      assert.equal('string', typeof actorObj.followers.id)
+      assert.equal('string', typeof actorObj.followers)
       assert(
-        actorObj.followers.id.startsWith(
+        actorObj.followers.startsWith(
           `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
 
     it('has a valid following', () => {
-      assert.equal('object', typeof actorObj.following)
-      assert.equal('string', typeof actorObj.following.id)
+      assert.equal('string', typeof actorObj.following)
       assert(
-        actorObj.following.id.startsWith(
+        actorObj.following.startsWith(
           `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
     })
 
     it('has a valid liked', () => {
-      assert.equal('object', typeof actorObj.liked)
-      assert.equal('string', typeof actorObj.liked.id)
+      assert.equal('string', typeof actorObj.liked)
       assert(
-        actorObj.liked.id.startsWith(
+        actorObj.liked.startsWith(
           `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
@@ -546,7 +541,7 @@ describe('onepage.pub', () => {
       assert.equal('object', typeof actorObj.pendingFollowers)
       assert.equal('string', typeof actorObj.pendingFollowers.id)
       assert(
-        actorObj.blocked.id.startsWith(
+        actorObj.pendingFollowers.id.startsWith(
           `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
@@ -556,7 +551,7 @@ describe('onepage.pub', () => {
       assert.equal('object', typeof actorObj.pendingFollowing)
       assert.equal('string', typeof actorObj.pendingFollowing.id)
       assert(
-        actorObj.blocked.id.startsWith(
+        actorObj.pendingFollowing.id.startsWith(
           `https://localhost:${MAIN_PORT}/orderedcollection/`
         )
       )
@@ -594,14 +589,14 @@ describe('onepage.pub', () => {
       [, token2] = await registerActor()
     })
     it('can get actor inbox', async () => {
-      const res = await fetch(actor.inbox.id)
+      const res = await fetch(actor.inbox)
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
         'application/activity+json; charset=utf-8'
       )
       const obj = await res.json()
-      assert.strictEqual(obj.id, actor.inbox.id)
+      assert.strictEqual(obj.id, actor.inbox)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
@@ -611,14 +606,14 @@ describe('onepage.pub', () => {
       )
     })
     it('can get actor outbox', async () => {
-      const res = await fetch(actor.outbox.id)
+      const res = await fetch(actor.outbox)
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
         'application/activity+json; charset=utf-8'
       )
       const obj = await res.json()
-      assert.strictEqual(obj.id, actor.outbox.id)
+      assert.strictEqual(obj.id, actor.outbox)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
@@ -628,14 +623,14 @@ describe('onepage.pub', () => {
       )
     })
     it('can get actor followers', async () => {
-      const res = await fetch(actor.followers.id)
+      const res = await fetch(actor.followers)
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
         'application/activity+json; charset=utf-8'
       )
       const obj = await res.json()
-      assert.strictEqual(obj.id, actor.followers.id)
+      assert.strictEqual(obj.id, actor.followers)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
@@ -645,14 +640,14 @@ describe('onepage.pub', () => {
       )
     })
     it('can get actor following', async () => {
-      const res = await fetch(actor.following.id)
+      const res = await fetch(actor.following)
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
         'application/activity+json; charset=utf-8'
       )
       const obj = await res.json()
-      assert.strictEqual(obj.id, actor.following.id)
+      assert.strictEqual(obj.id, actor.following)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
@@ -662,14 +657,14 @@ describe('onepage.pub', () => {
       )
     })
     it('can get actor liked', async () => {
-      const res = await fetch(actor.liked.id)
+      const res = await fetch(actor.liked)
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
         'application/activity+json; charset=utf-8'
       )
       const obj = await res.json()
-      assert.strictEqual(obj.id, actor.liked.id)
+      assert.strictEqual(obj.id, actor.liked)
       assert.strictEqual(obj.type, 'OrderedCollection')
       assert.strictEqual(obj.totalItems, 0)
       assert(obj.nameMap?.en)
@@ -803,7 +798,7 @@ describe('onepage.pub', () => {
 
     before(async () => {
       [actor, token] = await registerActor()
-      res = await fetch(actor.outbox.id, {
+      res = await fetch(actor.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/activity+json; charset=utf-8',
@@ -839,13 +834,13 @@ describe('onepage.pub', () => {
     })
 
     it("appears in the actor's inbox", async () => {
-      const inbox = await (await fetch(actor.inbox.id)).json()
+      const inbox = await (await fetch(actor.inbox)).json()
       const inboxPage = await (await fetch(inbox.first.id)).json()
       assert(inboxPage.orderedItems.some((act) => act.id === obj.id))
     })
 
     it("appears in the actor's outbox", async () => {
-      const outbox = await (await fetch(actor.outbox.id)).json()
+      const outbox = await (await fetch(actor.outbox)).json()
       const outboxPage = await (await fetch(outbox.first.id)).json()
       assert(outboxPage.orderedItems.some((act) => act.id === obj.id))
     })
@@ -866,7 +861,7 @@ describe('onepage.pub', () => {
 
     before(async () => {
       [actor, token] = await registerActor()
-      res = await fetch(actor.outbox.id, {
+      res = await fetch(actor.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -902,13 +897,13 @@ describe('onepage.pub', () => {
     })
 
     it("appears in the actor's inbox", async () => {
-      const inbox = await (await fetch(actor.inbox.id)).json()
+      const inbox = await (await fetch(actor.inbox)).json()
       const inboxPage = await (await fetch(inbox.first.id)).json()
       assert(inboxPage.orderedItems.some((act) => act.id === obj.id))
     })
 
     it("appears in the actor's outbox", async () => {
-      const outbox = await (await fetch(actor.outbox.id)).json()
+      const outbox = await (await fetch(actor.outbox)).json()
       const outboxPage = await (await fetch(outbox.first.id)).json()
       assert(outboxPage.orderedItems.some((act) => act.id === obj.id))
     })
@@ -927,7 +922,7 @@ describe('onepage.pub', () => {
         type: 'IntransitiveActivity',
         to: [actor1.id]
       }
-      const res = await fetch(actor1.outbox.id, {
+      const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -941,7 +936,7 @@ describe('onepage.pub', () => {
 
     it('author can see own private activity', async () => {
       const outbox = await (
-        await fetch(actor1.outbox.id, {
+        await fetch(actor1.outbox, {
           headers: {
             Authorization: `Bearer ${token1}`
           }
@@ -959,7 +954,7 @@ describe('onepage.pub', () => {
 
     it('others cannot see a private activity', async () => {
       const outbox = await (
-        await fetch(actor1.outbox.id, {
+        await fetch(actor1.outbox, {
           headers: {
             Authorization: `Bearer ${token2}`
           }
@@ -993,7 +988,7 @@ describe('onepage.pub', () => {
         type: 'IntransitiveActivity',
         to: actor2.id
       }
-      const res = await fetch(actor1.outbox.id, {
+      const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -1005,7 +1000,7 @@ describe('onepage.pub', () => {
       const obj = JSON.parse(body)
       await settle(MAIN_PORT)
       const inbox = await (
-        await fetch(actor2.inbox.id, {
+        await fetch(actor2.inbox, {
           headers: { Authorization: `Bearer ${token2}` }
         })
       ).json()
@@ -1023,7 +1018,7 @@ describe('onepage.pub', () => {
         type: 'IntransitiveActivity',
         to: actor1.id
       }
-      const res = await fetch(actor2.outbox.id, {
+      const res = await fetch(actor2.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -1036,7 +1031,7 @@ describe('onepage.pub', () => {
       // Wait for delivery!
       await settle(REMOTE_PORT)
       const inbox = await (
-        await fetch(actor1.inbox.id, {
+        await fetch(actor1.inbox, {
           headers: { Authorization: `Bearer ${token1}` }
         })
       ).json()
@@ -1136,7 +1131,7 @@ describe('onepage.pub', () => {
     it('distributes to the actor when the other posts to followers', async () => {
       const createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        to: actor2.followers.id,
+        to: actor2.followers,
         type: 'Note',
         contentMap: {
           en: 'Hello, world!'
@@ -1199,7 +1194,7 @@ describe('onepage.pub', () => {
     it('does not distribute to the actor when the other posts to followers', async () => {
       const createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        to: actor2.followers.id,
+        to: actor2.followers,
         type: 'Note',
         contentMap: {
           en: 'Hello, world!'
@@ -1236,7 +1231,7 @@ describe('onepage.pub', () => {
           content
         }
       }
-      const res = await fetch(actor1.outbox.id, {
+      const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -1289,7 +1284,7 @@ describe('onepage.pub', () => {
           content
         }
       }
-      const res = await fetch(actor1.outbox.id, {
+      const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -1307,7 +1302,7 @@ describe('onepage.pub', () => {
           contentMap
         }
       }
-      const updateRes = await fetch(actor1.outbox.id, {
+      const updateRes = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -1365,7 +1360,7 @@ describe('onepage.pub', () => {
           content: 'My dog has fleas.'
         }
       }
-      const res = await fetch(actor1.outbox.id, {
+      const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -1379,7 +1374,7 @@ describe('onepage.pub', () => {
         type: 'Delete',
         object: created.object.id
       }
-      const deleteRes = await fetch(actor1.outbox.id, {
+      const deleteRes = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -1577,7 +1572,7 @@ describe('onepage.pub', () => {
     })
 
     it("appears in the liking actor's liked stream", async () => {
-      const likedStream = await (await fetch(actor2.liked.id)).json()
+      const likedStream = await (await fetch(actor2.liked)).json()
       const likedPage = await (await fetch(likedStream.first.id)).json()
       assert(
         likedPage.orderedItems.some((obj) => obj.id === createdNote1.object.id)
@@ -1585,7 +1580,7 @@ describe('onepage.pub', () => {
     })
 
     it("actor's liked count is 1", async () => {
-      const likedStream = await (await fetch(actor2.liked.id)).json()
+      const likedStream = await (await fetch(actor2.liked)).json()
       assert.equal(likedStream.totalItems, 1)
     })
   })
@@ -1626,7 +1621,7 @@ describe('onepage.pub', () => {
     })
 
     it("other does not appear in the actor's followers", async () => {
-      const followersStream = await (await fetch(actor1.followers.id)).json()
+      const followersStream = await (await fetch(actor1.followers)).json()
       const followersPage = await (
         await fetch(followersStream.first.id)
       ).json()
@@ -1636,7 +1631,7 @@ describe('onepage.pub', () => {
     })
 
     it("actor does not appear in the other's following", async () => {
-      const followingStream = await (await fetch(actor2.following.id)).json()
+      const followingStream = await (await fetch(actor2.following)).json()
       const followingPage = await (
         await fetch(followingStream.first.id)
       ).json()
@@ -1658,7 +1653,7 @@ describe('onepage.pub', () => {
         }
       })
       const inboxStream = await (
-        await fetch(actor1.inbox.id, {
+        await fetch(actor1.inbox, {
           headers: { Authorization: `Bearer ${token1}` }
         })
       ).json()
@@ -1684,7 +1679,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      const res = await fetch(actor2.outbox.id, {
+      const res = await fetch(actor2.outbox, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token2}`,
@@ -1708,7 +1703,7 @@ describe('onepage.pub', () => {
     })
 
     it("other can't read actor outbox", async () => {
-      const res = await fetch(actor1.outbox.id, {
+      const res = await fetch(actor1.outbox, {
         headers: { Authorization: `Bearer ${token2}` }
       })
       assert.strictEqual(res.status, 403)
@@ -1870,7 +1865,7 @@ describe('onepage.pub', () => {
 
     it("object is not in actor's liked", async () => {
       const likedStream = await (
-        await fetch(actor2.liked.id, {
+        await fetch(actor2.liked, {
           headers: { Authorization: `Bearer ${token2}` }
         })
       ).json()
@@ -2035,7 +2030,7 @@ describe('onepage.pub', () => {
     it('actor does not receive followers-only posts', async () => {
       const createFollowersOnly = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        to: [actor2.followers.id],
+        to: [actor2.followers],
         type: 'Create',
         object: {
           type: 'Note',
@@ -2161,7 +2156,7 @@ describe('onepage.pub', () => {
     it('distributes to the actor when the other posts to followers', async () => {
       const createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        to: actor2.followers.id,
+        to: actor2.followers,
         type: 'Note',
         contentMap: {
           en: 'Hello, world!'
@@ -2229,7 +2224,7 @@ describe('onepage.pub', () => {
     it('does not distribute to the actor when the other posts to followers', async () => {
       const createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        to: actor2.followers.id,
+        to: actor2.followers,
         type: 'Note',
         contentMap: {
           en: 'Hello, world!'
@@ -2307,7 +2302,7 @@ describe('onepage.pub', () => {
       })
       followers = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        to: [actor2.followers.id],
+        to: [actor2.followers],
         type: 'Create',
         object: {
           type: 'Note',
@@ -2390,7 +2385,7 @@ describe('onepage.pub', () => {
       await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        to: [actor2.followers.id],
+        to: [actor2.followers],
         type: 'Create',
         object: {
           type: 'Note',
@@ -2402,7 +2397,7 @@ describe('onepage.pub', () => {
       await settle(REMOTE_PORT)
       createReply = await doActivity(actor1, token1, {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        to: [actor2.id, actor2.followers.id],
+        to: [actor2.id, actor2.followers],
         type: 'Create',
         object: {
           type: 'Note',
@@ -3179,22 +3174,22 @@ describe('onepage.pub', () => {
         console.log(e)
         assert(false)
       }
-      assert.strictEqual(update.object?.inbox?.id, actor1.inbox?.id)
+      assert.strictEqual(update.object?.inbox?.id, actor1.inbox)
     })
 
     it('succeeds on setting duplicate followers', async () => {
       const update = await doActivity(actor1, token1, duplicateUpdate('followers'))
-      assert.strictEqual(update.object?.followers?.id, actor1.followers?.id)
+      assert.strictEqual(update.object?.followers?.id, actor1.followers)
     })
 
     it('succeeds on setting duplicate following', async () => {
       const update = await doActivity(actor1, token1, duplicateUpdate('following'))
-      assert.strictEqual(update.object?.following?.id, actor1.following?.id)
+      assert.strictEqual(update.object?.following?.id, actor1.following)
     })
 
     it('succeeds on setting duplicate liked', async () => {
       const update = await doActivity(actor1, token1, duplicateUpdate('liked'))
-      assert.strictEqual(update.object?.liked?.id, actor1.liked?.id)
+      assert.strictEqual(update.object?.liked?.id, actor1.liked)
     })
 
     it('succeeds on setting duplicate blocked', async () => {
@@ -3214,7 +3209,7 @@ describe('onepage.pub', () => {
 
     it('succeeds on setting duplicate outbox', async () => {
       const update = await doActivity(actor1, token1, duplicateUpdate('outbox'))
-      assert.strictEqual(update.object?.outbox?.id, actor1.outbox?.id)
+      assert.strictEqual(update.object?.outbox?.id, actor1.outbox)
     })
   })
 
@@ -3410,7 +3405,7 @@ describe('onepage.pub', () => {
     })
 
     it('can use the access token to read', async () => {
-      const res = await fetch(actor.inbox.id, {
+      const res = await fetch(actor.inbox, {
         headers: {
           Authorization: `Bearer ${accessToken}`
         }
@@ -3420,7 +3415,7 @@ describe('onepage.pub', () => {
     })
 
     it('can use the access token to write', async () => {
-      const res = await fetch(actor.outbox.id, {
+      const res = await fetch(actor.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -3458,7 +3453,7 @@ describe('onepage.pub', () => {
     })
 
     it('can use the refreshed access token to read', async () => {
-      const res = await fetch(actor.inbox.id, {
+      const res = await fetch(actor.inbox, {
         headers: {
           Authorization: `Bearer ${accessToken2}`
         }
@@ -3468,7 +3463,7 @@ describe('onepage.pub', () => {
     })
 
     it('can use the refreshed access token to write', async () => {
-      const res = await fetch(actor.outbox.id, {
+      const res = await fetch(actor.outbox, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
@@ -3864,32 +3859,38 @@ describe('onepage.pub', () => {
     })
 
     it('cannot change next', async () => {
-      const object = await getObject(actor.followers.first, token)
+      const coll = await getObject(actor.followers, token)
+      const object = await getObject(coll.first.id, token)
       assert(await cantUpdate(actor, token, object, { next: 'https://example.com/object/1' }))
     })
 
     it('cannot change prev', async () => {
-      const object = await getObject(actor.followers.first, token)
+      const coll = await getObject(actor.followers, token)
+      const object = await getObject(coll.first.id, token)
       assert(await cantUpdate(actor, token, object, { prev: 'https://example.com/collection/3' }))
     })
 
     it('cannot change partOf', async () => {
-      const object = await getObject(actor.followers.first, token)
+      const coll = await getObject(actor.followers, token)
+      const object = await getObject(coll.first.id, token)
       assert(await cantUpdate(actor, token, object, { partOf: 'https://example.com/collection/25' }))
     })
 
     it('cannot change items', async () => {
-      const object = await getObject(actor.followers.first, token)
+      const coll = await getObject(actor.followers, token)
+      const object = await getObject(coll.first.id, token)
       assert(await cantUpdate(actor, token, object, { items: ['https://example.com/foo/bar'] }))
     })
 
     it('cannot change orderedItems', async () => {
-      const object = await getObject(actor.followers.first, token)
+      const coll = await getObject(actor.followers, token)
+      const object = await getObject(coll.first.id, token)
       assert(await cantUpdate(actor, token, object, { orderedItems: ['https://example.com/foo/bar'] }))
     })
 
     it('cannot change startIndex', async () => {
-      const object = await getObject(actor.followers.first, token)
+      const coll = await getObject(actor.followers, token)
+      const object = await getObject(coll.first.id, token)
       assert(await cantUpdate(actor, token, object, { startIndex: 50 }))
     })
   })
