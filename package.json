@@ -29,7 +29,7 @@
     "test:only": "node --test --test-only --test-reporter=spec",
     "ver": "echo $npm_package_version"
   },
-  "version": "0.4.0",
+  "version": "0.4.1",
   "engine": {
     "node": ">=20.0.0"
   }
