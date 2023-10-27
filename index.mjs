@@ -222,7 +222,25 @@ class HTTPSignature {
       }
     }
     const data = lines.join('\n')
-    const publicKey = await ActivityObject.fromRemote(this.keyId)
+
+    const url = new URL(this.keyId)
+    const fragment = (url.hash) ? url.hash.slice(1) : null
+    url.hash = ''
+
+    const ao = await ActivityObject.fromRemote(url.toString())
+    let publicKey = null
+
+    // Mastodon uses 'main-key' instead of 'publicKey'
+
+    if (!fragment) {
+      publicKey = ao
+    } else if (fragment in await ao.json()) {
+      publicKey = new ActivityObject(await ao.prop(fragment))
+    } else if (fragment === 'main-key' && 'publicKey' in await ao.json()) {
+      publicKey = new ActivityObject(await ao.prop('publicKey'))
+    } else {
+      return null
+    }
 
     if (!await publicKey.json() || !await publicKey.prop('owner') || !await publicKey.prop('publicKeyPem')) {
       return null
@@ -250,6 +268,8 @@ class HTTPSignature {
       const remote = await signature.validate(req)
       if (remote) {
         req.auth = { subject: await remote.id() }
+      } else {
+        next(new createError.Unauthorized('Invalid HTTP signature'))
       }
     }
     next()

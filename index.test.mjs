@@ -6,6 +6,7 @@ import crypto from 'node:crypto'
 import path from 'node:path'
 import https from 'node:https'
 import fs from 'node:fs'
+import { promisify } from 'node:util'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
@@ -14,10 +15,15 @@ const REMOTE_PORT = 51996 // Cr
 const CLIENT_PORT = 54938 // Mn
 const THIRD_PORT = 55845 // Fe
 const FOURTH_PORT = 58933 // Co
+const FIFTH_PORT = 58693 // Ni
 
 const CLIENT_ID = `https://localhost:${CLIENT_PORT}/client`
 const REDIRECT_URI = `https://localhost:${CLIENT_PORT}/oauth/callback`
 const AS2 = 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
+const AS2_CONTEXT = 'https://www.w3.org/ns/activitystreams'
+const AS2_MEDIA_TYPE = 'application/activity+json; charset=utf-8'
+
+const generateKeyPair = promisify(crypto.generateKeyPair)
 
 const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
@@ -46,7 +52,7 @@ const startServer = (port = MAIN_PORT, props = {}) => {
 
 const defaultClient = {
   '@context': [
-    'https://www.w3.org/ns/activitystreams',
+    AS2_CONTEXT,
     'https://purl.archive.org/socialweb/oauth'
   ],
   type: 'Application',
@@ -305,6 +311,22 @@ const settle = async (port = MAIN_PORT) => {
   } while (count > 0)
 }
 
+async function signRequest (keyId, privateKey, method, url, date) {
+  url = (typeof url === 'string') ? new URL(url) : url
+  const target = (url.search && url.search.length)
+    ? `${url.pathname}?${url.search}`
+    : `${url.pathname}`
+  let data = `(request-target): ${method.toLowerCase()} ${target}\n`
+  data += `host: ${url.host}\n`
+  data += `date: ${date}`
+  const signer = crypto.createSign('sha256')
+  signer.update(data)
+  const signature = signer.sign(privateKey).toString('base64')
+  signer.end()
+  const header = `keyId="${keyId}",headers="(request-target) host date",signature="${signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`
+  return header
+}
+
 describe('onepage.pub', () => {
   let child = null
   let remote = null
@@ -432,7 +454,7 @@ describe('onepage.pub', () => {
       )
       assert.strictEqual(
         actorRes.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
     })
 
@@ -440,7 +462,7 @@ describe('onepage.pub', () => {
       assert(actorObj['@context'])
       assert.notEqual(
         -1,
-        actorObj['@context'].indexOf('https://www.w3.org/ns/activitystreams')
+        actorObj['@context'].indexOf(AS2_CONTEXT)
       )
     })
 
@@ -593,7 +615,7 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.inbox)
@@ -610,7 +632,7 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.outbox)
@@ -627,7 +649,7 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.followers)
@@ -644,7 +666,7 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.following)
@@ -661,7 +683,7 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.liked)
@@ -697,7 +719,7 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.blocked.id)
@@ -733,7 +755,7 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.pendingFollowers.id)
@@ -769,7 +791,7 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.pendingFollowing.id)
@@ -791,7 +813,7 @@ describe('onepage.pub', () => {
     let obj = null
 
     const activity = {
-      '@context': 'https://www.w3.org/ns/activitystreams',
+      '@context': AS2_CONTEXT,
       type: 'IntransitiveActivity',
       to: 'https://www.w3.org/ns/activitystreams#Public'
     }
@@ -801,7 +823,7 @@ describe('onepage.pub', () => {
       res = await fetch(actor.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/activity+json; charset=utf-8',
+          'Content-Type': AS2_MEDIA_TYPE,
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify(activity)
@@ -817,7 +839,7 @@ describe('onepage.pub', () => {
       )
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
     })
 
@@ -854,7 +876,7 @@ describe('onepage.pub', () => {
     let obj = null
 
     const activity = {
-      '@context': 'https://www.w3.org/ns/activitystreams',
+      '@context': AS2_CONTEXT,
       type: 'IntransitiveActivity',
       to: 'https://www.w3.org/ns/activitystreams#Public'
     }
@@ -880,7 +902,7 @@ describe('onepage.pub', () => {
       )
       assert.strictEqual(
         res.headers.get('Content-Type'),
-        'application/activity+json; charset=utf-8'
+        AS2_MEDIA_TYPE
       )
     })
 
@@ -918,7 +940,7 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [, token2] = await registerActor()
       const input = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'IntransitiveActivity',
         to: [actor1.id]
       }
@@ -984,7 +1006,7 @@ describe('onepage.pub', () => {
 
     it('sends to remote addressees', async () => {
       const activity = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'IntransitiveActivity',
         to: actor2.id
       }
@@ -1014,7 +1036,7 @@ describe('onepage.pub', () => {
 
     it('receives from remote senders', async () => {
       const activity = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'IntransitiveActivity',
         to: actor1.id
       }
@@ -1054,7 +1076,7 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
@@ -1100,14 +1122,14 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       const followActivity = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       }
       follow = await doActivity(actor1, token1, followActivity)
       const acceptActivity = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
@@ -1130,7 +1152,7 @@ describe('onepage.pub', () => {
 
     it('distributes to the actor when the other posts to followers', async () => {
       const createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.followers,
         type: 'Note',
         contentMap: {
@@ -1142,7 +1164,7 @@ describe('onepage.pub', () => {
 
     it('distributes to the actor when the other posts to public', async () => {
       const createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: 'https://www.w3.org/ns/activitystreams#Public',
         type: 'Note',
         contentMap: {
@@ -1163,13 +1185,13 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Reject',
         object: follow.id
       })
@@ -1193,7 +1215,7 @@ describe('onepage.pub', () => {
 
     it('does not distribute to the actor when the other posts to followers', async () => {
       const createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.followers,
         type: 'Note',
         contentMap: {
@@ -1205,7 +1227,7 @@ describe('onepage.pub', () => {
 
     it('does not distribute to the actor when the other posts to public', async () => {
       const createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: 'https://www.w3.org/ns/activitystreams#Public',
         type: 'Note',
         contentMap: {
@@ -1224,7 +1246,7 @@ describe('onepage.pub', () => {
     before(async () => {
       [actor1, token1] = await registerActor()
       const source = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Create',
         object: {
           type: 'Note',
@@ -1277,7 +1299,7 @@ describe('onepage.pub', () => {
     before(async () => {
       [actor1, token1] = await registerActor()
       const source = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Create',
         object: {
           type: 'Note',
@@ -1294,7 +1316,7 @@ describe('onepage.pub', () => {
       })
       created = await res.json()
       const updateSource = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Update',
         object: {
           id: created.object.id,
@@ -1353,7 +1375,7 @@ describe('onepage.pub', () => {
     before(async () => {
       [actor1, token1] = await registerActor()
       const source = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Create',
         object: {
           type: 'Note',
@@ -1370,7 +1392,7 @@ describe('onepage.pub', () => {
       })
       created = await res.json()
       const deleteSource = {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Delete',
         object: created.object.id
       }
@@ -1417,7 +1439,7 @@ describe('onepage.pub', () => {
     before(async () => {
       [actor1, token1] = await registerActor()
       createdNote = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Create',
         object: {
           type: 'Note',
@@ -1427,7 +1449,7 @@ describe('onepage.pub', () => {
         }
       })
       createdCollection = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Create',
         object: {
           type: 'Collection',
@@ -1438,7 +1460,7 @@ describe('onepage.pub', () => {
         }
       })
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Add',
         object: createdNote.object.id,
         target: createdCollection.object.id
@@ -1462,7 +1484,7 @@ describe('onepage.pub', () => {
     before(async () => {
       [actor1, token1] = await registerActor()
       createdNote1 = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Create',
         object: {
           type: 'Note',
@@ -1472,7 +1494,7 @@ describe('onepage.pub', () => {
         }
       })
       createdNote2 = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Create',
         object: {
           type: 'Note',
@@ -1482,7 +1504,7 @@ describe('onepage.pub', () => {
         }
       })
       createdCollection = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Create',
         object: {
           type: 'Collection',
@@ -1493,19 +1515,19 @@ describe('onepage.pub', () => {
         }
       })
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Add',
         object: createdNote1.object.id,
         target: createdCollection.object.id
       })
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Add',
         object: createdNote2.object.id,
         target: createdCollection.object.id
       })
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Remove',
         object: createdNote1.object.id,
         target: createdCollection.object.id
@@ -1538,7 +1560,7 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       createdNote1 = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -1549,7 +1571,7 @@ describe('onepage.pub', () => {
         }
       })
       liked = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Like',
         object: createdNote1.object.id
@@ -1594,12 +1616,12 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Follow',
         object: actor1.id
       })
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id],
         type: 'Block',
         object: actor2.id
@@ -1642,7 +1664,7 @@ describe('onepage.pub', () => {
 
     it("other can't send to actor", async () => {
       const created = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor1.id],
         type: 'Create',
         object: {
@@ -1669,7 +1691,7 @@ describe('onepage.pub', () => {
 
     it("other can't like actor note", async () => {
       const created1 = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: 'https://www.w3.org/ns/activitystreams#Public',
         type: 'Create',
         object: {
@@ -1686,7 +1708,7 @@ describe('onepage.pub', () => {
           'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
         },
         body: JSON.stringify({
-          '@context': 'https://www.w3.org/ns/activitystreams',
+          '@context': AS2_CONTEXT,
           to: 'https://www.w3.org/ns/activitystreams#Public',
           type: 'Like',
           object: created1.object.id
@@ -1711,7 +1733,7 @@ describe('onepage.pub', () => {
 
     it("other can't read actor note", async () => {
       const created = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: 'https://www.w3.org/ns/activitystreams#Public',
         type: 'Create',
         object: {
@@ -1740,7 +1762,7 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       createNote = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -1751,7 +1773,7 @@ describe('onepage.pub', () => {
         }
       })
       createReply = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -1795,7 +1817,7 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       createNote = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -1806,7 +1828,7 @@ describe('onepage.pub', () => {
         }
       })
       announce = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Announce',
         object: createNote.object.id
@@ -1839,7 +1861,7 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       createNote = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -1850,13 +1872,13 @@ describe('onepage.pub', () => {
         }
       })
       like = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Like',
         object: createNote.object.id
       })
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Undo',
         object: like.id
@@ -1905,13 +1927,13 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       block = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Block',
         object: actor2.id
       })
       createNote = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -1922,7 +1944,7 @@ describe('onepage.pub', () => {
         }
       })
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Undo',
         object: block.id
@@ -1950,7 +1972,7 @@ describe('onepage.pub', () => {
 
     it('other can follow actor', async () => {
       const follow = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Follow',
         object: actor1.id
       })
@@ -1959,7 +1981,7 @@ describe('onepage.pub', () => {
 
     it('other can reply to actor', async () => {
       const reply = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'Create',
         object: {
           inReplyTo: createNote.object.id,
@@ -1984,19 +2006,19 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Undo',
         object: follow.id
@@ -2013,7 +2035,7 @@ describe('onepage.pub', () => {
 
     it('actor does not receive public posts', async () => {
       const createPublic = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2029,7 +2051,7 @@ describe('onepage.pub', () => {
 
     it('actor does not receive followers-only posts', async () => {
       const createFollowersOnly = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.followers],
         type: 'Create',
         object: {
@@ -2055,13 +2077,13 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Undo',
         object: follow.id
@@ -2087,7 +2109,7 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
@@ -2122,14 +2144,14 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
@@ -2155,7 +2177,7 @@ describe('onepage.pub', () => {
 
     it('distributes to the actor when the other posts to followers', async () => {
       const createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.followers,
         type: 'Note',
         contentMap: {
@@ -2168,7 +2190,7 @@ describe('onepage.pub', () => {
 
     it('distributes to the actor when the other posts to public', async () => {
       const createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: 'https://www.w3.org/ns/activitystreams#Public',
         type: 'Note',
         contentMap: {
@@ -2190,14 +2212,14 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Reject',
         object: follow.id
@@ -2223,7 +2245,7 @@ describe('onepage.pub', () => {
 
     it('does not distribute to the actor when the other posts to followers', async () => {
       const createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.followers,
         type: 'Note',
         contentMap: {
@@ -2236,7 +2258,7 @@ describe('onepage.pub', () => {
 
     it('does not distribute to the actor when the other posts to public', async () => {
       const createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: 'https://www.w3.org/ns/activitystreams#Public',
         type: 'Note',
         contentMap: {
@@ -2265,21 +2287,21 @@ describe('onepage.pub', () => {
       [actor2, token2] = await registerActor(REMOTE_PORT);
       [actor3, token3] = await registerActor()
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
       await settle(REMOTE_PORT)
       pub = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2290,7 +2312,7 @@ describe('onepage.pub', () => {
         }
       })
       priv = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor1.id],
         type: 'Create',
         object: {
@@ -2301,7 +2323,7 @@ describe('onepage.pub', () => {
         }
       })
       followers = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.followers],
         type: 'Create',
         object: {
@@ -2312,7 +2334,7 @@ describe('onepage.pub', () => {
         }
       })
       self = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id],
         type: 'Create',
         object: {
@@ -2370,21 +2392,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
       await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.followers],
         type: 'Create',
         object: {
@@ -2396,7 +2418,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       createReply = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id, actor2.followers],
         type: 'Create',
         object: {
@@ -2435,21 +2457,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
       await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2461,7 +2483,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       updateNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Update',
         object: {
@@ -2502,21 +2524,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
       await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2528,7 +2550,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Delete',
         object: createNote.object.id
@@ -2568,21 +2590,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
       await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2594,7 +2616,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       like = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
         type: 'Like',
         object: createNote.object.id
@@ -2623,21 +2645,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
       await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2649,7 +2671,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       announce = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
         type: 'Announce',
         object: createNote.object.id
@@ -2673,21 +2695,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
       await settle(REMOTE_PORT)
       createAlbum = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2701,7 +2723,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2713,7 +2735,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
         type: 'Add',
         object: createNote.object.id,
@@ -2739,21 +2761,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
       })
       await settle(REMOTE_PORT)
       createAlbum = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2767,7 +2789,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       createNote = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2779,7 +2801,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
         type: 'Add',
         object: createNote.object.id,
@@ -2787,7 +2809,7 @@ describe('onepage.pub', () => {
       })
       await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id, 'https://www.w3.org/ns/activitystreams#Public'],
         type: 'Remove',
         object: createNote.object.id,
@@ -2813,7 +2835,7 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
       createNote = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2825,14 +2847,14 @@ describe('onepage.pub', () => {
       })
       await settle(MAIN_PORT)
       announce = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Announce',
         object: createNote.object.id
       })
       await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Undo',
         object: announce.id
@@ -2861,21 +2883,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor1.id],
         type: 'Follow',
         object: actor1.id
       })
       await settle(REMOTE_PORT)
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id],
         type: 'Accept',
         object: follow.id
       })
       await settle(MAIN_PORT)
       createNote = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2887,14 +2909,14 @@ describe('onepage.pub', () => {
       })
       await settle(MAIN_PORT)
       like = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Like',
         object: createNote.object.id
       })
       await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Undo',
         object: like.id
@@ -2923,21 +2945,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       const follow = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor1.id],
         type: 'Follow',
         object: actor1.id
       })
       await settle(REMOTE_PORT)
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id],
         type: 'Accept',
         object: follow.id
       })
       await settle(MAIN_PORT)
       createNote = await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public'],
         type: 'Create',
         object: {
@@ -2949,14 +2971,14 @@ describe('onepage.pub', () => {
       })
       await settle(MAIN_PORT)
       share = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Announce',
         object: createNote.object.id
       })
       await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Undo',
         object: share.id
@@ -2984,21 +3006,21 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor1.id],
         type: 'Follow',
         object: actor1.id
       })
       await settle(REMOTE_PORT)
       await doActivity(actor1, token1, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor2.id],
         type: 'Accept',
         object: follow.id
       })
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: ['https://www.w3.org/ns/activitystreams#Public', actor1.id],
         type: 'Undo',
         object: follow.id
@@ -3033,14 +3055,14 @@ describe('onepage.pub', () => {
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor(REMOTE_PORT)
       follow = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor1.id],
         type: 'Follow',
         object: actor1.id
       })
       await settle(REMOTE_PORT)
       await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor1.id],
         type: 'Undo',
         object: follow.id
@@ -3422,7 +3444,7 @@ describe('onepage.pub', () => {
           Authorization: `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          '@context': 'https://www.w3.org/ns/activitystreams',
+          '@context': AS2_CONTEXT,
           type: 'IntransitiveActivity'
         })
       })
@@ -3470,7 +3492,7 @@ describe('onepage.pub', () => {
           Authorization: `Bearer ${accessToken2}`
         },
         body: JSON.stringify({
-          '@context': 'https://www.w3.org/ns/activitystreams',
+          '@context': AS2_CONTEXT,
           type: 'IntransitiveActivity'
         })
       })
@@ -3488,7 +3510,7 @@ describe('onepage.pub', () => {
       [actor, , cookie] = await registerActor()
       const [actor2, token2] = await registerActor(REMOTE_PORT)
       const activity = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor.id],
         type: 'Create',
         object: {
@@ -3515,7 +3537,7 @@ describe('onepage.pub', () => {
     })
     it('cannot use the read-only access token to write', async () => {
       const status = await failActivity(actor, token, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'IntransitiveActivity'
       })
       assert.strictEqual(status, 403)
@@ -3531,7 +3553,7 @@ describe('onepage.pub', () => {
       [actor, , cookie] = await registerActor()
       const [actor2, token2] = await registerActor(REMOTE_PORT)
       const activity = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor.id],
         type: 'Create',
         object: {
@@ -3549,7 +3571,7 @@ describe('onepage.pub', () => {
     })
     it('can use the write-only access token to write', async () => {
       const activity = await doActivity(actor, token, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'IntransitiveActivity'
       })
       assert.ok(activity)
@@ -3578,7 +3600,7 @@ describe('onepage.pub', () => {
       code = await getAuthCode(actor, cookie)
       const [actor2, token2] = await registerActor(REMOTE_PORT)
       const activity = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor.id],
         type: 'Create',
         object: {
@@ -3604,7 +3626,7 @@ describe('onepage.pub', () => {
     })
     it('cannot use the authorization code to write', async () => {
       const status = await failActivity(actor, code, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'IntransitiveActivity'
       })
       assert.strictEqual(status, 401)
@@ -3636,7 +3658,7 @@ describe('onepage.pub', () => {
       [, refreshToken] = await getTokens(actor, code, codeVerifier)
       const [actor2, token2] = await registerActor(REMOTE_PORT)
       const activity = await doActivity(actor2, token2, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         to: [actor.id],
         type: 'Create',
         object: {
@@ -3662,7 +3684,7 @@ describe('onepage.pub', () => {
     })
     it('cannot use the authorization code to write', async () => {
       const status = await failActivity(actor, refreshToken, {
-        '@context': 'https://www.w3.org/ns/activitystreams',
+        '@context': AS2_CONTEXT,
         type: 'IntransitiveActivity'
       })
       assert.strictEqual(status, 401)
@@ -3905,7 +3927,7 @@ describe('onepage.pub', () => {
     it('can post an activity with multiple types', async () => {
       activity = await doActivity(actor, token, {
         '@context': [
-          'https://www.w3.org/ns/activitystreams',
+          AS2_CONTEXT,
           {
             Meditate: {
               '@type': '@id'
@@ -3953,7 +3975,7 @@ describe('onepage.pub', () => {
     it('extension type with known object type is wrapped', async () => {
       const activity = await doActivity(actor, token, {
         '@context': [
-          'https://www.w3.org/ns/activitystreams',
+          AS2_CONTEXT,
           {
             test: 'https://evanp.github.io/onepage.pub/test#',
             Salute: {
@@ -3979,7 +4001,7 @@ describe('onepage.pub', () => {
     it('extension type with known activity type is not wrapped', async () => {
       const activity = await doActivity(actor, token, {
         '@context': [
-          'https://www.w3.org/ns/activitystreams',
+          AS2_CONTEXT,
           {
             test: 'https://evanp.github.io/onepage.pub/test#',
             Think: {
@@ -3998,7 +4020,7 @@ describe('onepage.pub', () => {
     it('extension type with ducktype properties is not wrapped', async () => {
       const activity = await doActivity(actor, token, {
         '@context': [
-          'https://www.w3.org/ns/activitystreams',
+          AS2_CONTEXT,
           {
             test: 'https://evanp.github.io/onepage.pub/test#',
             Bake: {
@@ -4027,7 +4049,7 @@ describe('onepage.pub', () => {
     it('extension type without ducktype properties is not wrapped', async () => {
       const activity = await doActivity(actor, token, {
         '@context': [
-          'https://www.w3.org/ns/activitystreams',
+          AS2_CONTEXT,
           {
             test: 'https://evanp.github.io/onepage.pub/test#',
             Cake: {
@@ -4458,6 +4480,118 @@ describe('onepage.pub', () => {
       )
       assert(body5.includes('Authorize'))
       assert(body5.includes(CLIENT_ID))
+    })
+  })
+
+  describe('HTTP Signature with fragment in ID', async () => {
+    let actor = null
+    let peer = null
+    let pair = null
+    const keyId = `https://localhost:${FIFTH_PORT}/actor#main-key`
+    let clientActor = null
+    let clientNote = null
+    let clientActivity = null
+
+    before(async () => {
+      [actor] = await registerActor()
+      pair = await generateKeyPair(
+        'rsa',
+        {
+          modulusLength: 2048,
+          privateKeyEncoding: {
+            type: 'pkcs1',
+            format: 'pem'
+          },
+          publicKeyEncoding: {
+            type: 'pkcs1',
+            format: 'pem'
+          }
+        }
+      )
+      clientActor = {
+        id: `https://localhost:${FIFTH_PORT}/actor`,
+        type: 'Person',
+        preferredUsername: 'peer',
+        publicKey: {
+          id: `https://localhost:${FIFTH_PORT}/actor#main-key`,
+          owner: `https://localhost:${FIFTH_PORT}/actor`,
+          publicKeyPem: pair.publicKey
+        },
+        published: '2023-09-20T00:00:00Z'
+      }
+      clientNote = {
+        id: `https://localhost:${FIFTH_PORT}/note`,
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, World!'
+        },
+        published: '2023-09-20T00:00:00Z'
+      }
+      clientActivity = {
+        id: `https://localhost:${FIFTH_PORT}/activity`,
+        actor: {
+          id: clientActor.id,
+          type: clientActor.type,
+          preferredUsername: clientActor.preferredUsername
+        },
+        type: 'Create',
+        to: [actor.id],
+        object: clientNote
+      }
+      peer = https.createServer({
+        key: fs.readFileSync('localhost.key'),
+        cert: fs.readFileSync('localhost.crt')
+      }, (req, res) => {
+        if (req.url === '/actor') {
+          res.writeHead(200)
+          res.end(JSON.stringify({
+            '@context': AS2_CONTEXT,
+            ...clientActor
+          }))
+        } else if (req.url === '/note') {
+          res.writeHead(200)
+          res.end(JSON.stringify({
+            '@context': AS2_CONTEXT,
+            ...clientNote
+          }))
+        } else if (req.url === '/activity') {
+          res.writeHead(200)
+          res.end(JSON.stringify({
+            '@context': AS2_CONTEXT,
+            ...clientActivity
+          }))
+        } else {
+          res.writeHead(404)
+          res.end('Not found')
+        }
+      })
+      peer.listen(FIFTH_PORT)
+    })
+
+    after(async () => {
+      peer.close()
+    })
+
+    it('Can send a signed request', async () => {
+      const inbox = actor.inbox
+      const date = new Date().toUTCString()
+      const header = await signRequest(keyId, pair.privateKey, 'POST', inbox, date)
+      const body = JSON.stringify({
+        '@context': AS2_CONTEXT,
+        ...clientActivity
+      })
+      const res = await fetch(inbox, {
+        method: 'POST',
+        headers: {
+          'Content-Type': AS2_MEDIA_TYPE,
+          Signature: header,
+          Date: date
+        },
+        body
+      })
+      const resBody = await res.text()
+      assert.ok(res.status >= 200 && res.status < 300,
+        `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`)
     })
   })
 })
