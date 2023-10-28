@@ -2,12 +2,13 @@ import express from 'express'
 import sqlite3 from 'sqlite3'
 import passport from 'passport'
 import LocalStrategy from 'passport-local'
-import fs from 'fs'
+import * as fsp from 'node:fs/promises'
+import fs from 'node:fs'
 import https from 'https'
 import http from 'http'
 import wrap from 'express-async-handler'
 import createError from 'http-errors'
-import { nanoid } from 'nanoid/async'
+import { nanoid } from 'nanoid'
 import bcrypt from 'bcrypt'
 import { expressjwt } from 'express-jwt'
 import jwt from 'jsonwebtoken'
@@ -17,6 +18,10 @@ import winston from 'winston'
 import session from 'express-session'
 import cookieParser from 'cookie-parser'
 import querystring from 'node:querystring'
+import multer from 'multer'
+import mime from 'mime'
+import path from 'path'
+import { tmpdir } from 'os'
 
 // Configuration
 
@@ -31,6 +36,13 @@ const INVITE_CODE = process.env.OPP_INVITE_CODE || null
 const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
 const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || (new URL(ORIGIN)).hostname
+const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
+
+// Ensure the Upload directory exists
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR)
+}
 
 // Calculated constants
 
@@ -101,7 +113,8 @@ function standardEndpoints () {
   return {
     proxyUrl: makeUrl('endpoint/proxyUrl'),
     oauthAuthorizationEndpoint: makeUrl('endpoint/oauth/authorize'),
-    oauthTokenEndpoint: makeUrl('endpoint/oauth/token')
+    oauthTokenEndpoint: makeUrl('endpoint/oauth/token'),
+    uploadMedia: makeUrl('endpoint/upload')
   }
 }
 
@@ -130,6 +143,7 @@ class Database {
     db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255), privateKey TEXT)')
     db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)')
     db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
+    db.run('CREATE TABLE IF NOT EXISTS upload (relative VARCHAR(255), mediaType VARCHAR(255), objectId VARCHAR(255))')
 
     this.run = promisify((...params) => {
       logger.silly('run() SQL: ' + params[0], params.slice(1))
@@ -321,9 +335,9 @@ class ActivityObject {
   static async makeId (type) {
     const best = ActivityObject.bestType(type)
     if (best) {
-      return makeUrl(`${best.toLowerCase()}/${await nanoid()}`)
+      return makeUrl(`${best.toLowerCase()}/${nanoid()}`)
     } else {
-      return makeUrl(`object/${await nanoid()}`)
+      return makeUrl(`object/${nanoid()}`)
     }
   }
 
@@ -1917,6 +1931,59 @@ class User {
   }
 }
 
+class Upload {
+  constructor (buffer, mediaType) {
+    this.buffer = buffer
+    this.mediaType = mediaType
+    const extension = mime.getExtension(mediaType) || 'bin'
+    this.relative = `${nanoid()}.${extension}`
+  }
+
+  static async fromRelative (relative) {
+    logger.debug(`Looking up upload ${relative}`)
+    const row = await db.get('SELECT * FROM upload WHERE relative = ?', [relative])
+    if (!row) {
+      return null
+    } else {
+      logger.debug(`Found upload ${relative}`)
+      const upload = new Upload()
+      upload.relative = row.relative
+      upload.mediaType = row.mediaType
+      upload.objectId = row.objectId
+      logger.debug(`${upload.relative} ${upload.mediaType} ${upload.objectId}`)
+      return upload
+    }
+  }
+
+  setObjectId (objectId) {
+    this.objectId = objectId
+  }
+
+  path () {
+    return path.join(UPLOAD_DIR, this.relative)
+  }
+
+  async readable () {
+    try {
+      await fsp.access(this.path(), fsp.constants.R_OK)
+      return true
+    } catch (err) {
+      return false
+    }
+  }
+
+  async save () {
+    if (!this.objectId) {
+      throw new Error('Cannot save upload without objectId')
+    }
+    logger.debug(`Saving upload ${this.relative} ${this.mediaType} ${this.buffer.length}`)
+    await fsp.writeFile(this.path(), this.buffer)
+    logger.debug(`File readable? ${await this.readable()}`)
+    await db.run('INSERT INTO upload (relative, mediaType, objectId) VALUES (?, ?, ?)', [this.relative, this.mediaType, this.objectId])
+    logger.debug(`Saved upload ${this.relative} ${this.mediaType} ${this.objectId}`)
+  }
+}
+
 // Server
 
 const logger = winston.createLogger({
@@ -1944,6 +2011,9 @@ pq.add(async () => {})
 // Initialize Express
 const app = express()
 
+// Initialize Multer
+const upload = multer({ storage: multer.memoryStorage() })
+
 app.use((req, res, next) => {
   const oldEnd = res.end
   res.end = function (...args) {
@@ -1968,7 +2038,7 @@ app.use(session({
 // CSRF token middleware
 const csrf = wrap(async (req, res, next) => {
   if (!req.session.csrfToken) {
-    req.session.csrfToken = await nanoid()
+    req.session.csrfToken = nanoid()
   }
   next()
 })
@@ -2198,7 +2268,7 @@ app.post('/register', csrf, wrap(async (req, res) => {
   await user.save()
   const token = await jwtsign(
     {
-      jwtid: await nanoid(),
+      jwtid: nanoid(),
       type: 'access',
       subject: user.actorId,
       scope: 'read write',
@@ -2284,7 +2354,7 @@ app.get('/login/success', passport.authenticate('session'), wrap(async (req, res
 
   const token = await jwtsign(
     {
-      jwtid: await nanoid(),
+      jwtid: nanoid(),
       type: 'access',
       subject: user.actorId,
       scope: 'read write',
@@ -2504,7 +2574,7 @@ app.post('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wr
     // We use a JWT for the authorization code
     const code = await jwtsign(
       {
-        jwtid: await nanoid(),
+        jwtid: nanoid(),
         type: 'authz',
         subject: req.user.actorId,
         scope: req.body.scope,
@@ -2572,7 +2642,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
     // TODO: check that jwtid has not be reused
     const token = await jwtsign(
       {
-        jwtid: await nanoid(),
+        jwtid: nanoid(),
         type: 'access',
         subject: fields.subject,
         scope: fields.scope,
@@ -2585,7 +2655,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
     )
     const refreshToken = await jwtsign(
       {
-        jwtid: await nanoid(),
+        jwtid: nanoid(),
         type: 'refresh',
         subject: fields.subject,
         scope: fields.scope,
@@ -2622,7 +2692,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
     }
     const token = await jwtsign(
       {
-        jwtid: await nanoid(),
+        jwtid: nanoid(),
         type: 'access',
         subject: fields.subject,
         scope: fields.scope,
@@ -2635,7 +2705,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
     )
     const newRefreshToken = await jwtsign(
       {
-        jwtid: await nanoid(),
+        jwtid: nanoid(),
         type: 'refresh',
         subject: fields.subject,
         scope: fields.scope,
@@ -2656,6 +2726,123 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
     })
   }
 }))
+
+app.post('/endpoint/upload',
+  expressjwt({ secret: KEY_DATA, credentialsRequired: true, algorithms: ['RS256'] }),
+  tokenTypeCheck,
+  upload.fields([{ name: 'file', maxCount: 1 }, { name: 'object', maxCount: 1 }]),
+  wrap(async (req, res) => {
+    if (!req.files || !req.files.file || !req.files.file[0]) {
+      throw new createError.BadRequest('Missing file')
+    }
+    if (!req.files || !req.files.object || !req.files.object[0]) {
+      throw new createError.BadRequest('Missing object')
+    }
+
+    logger.debug(`upload: ${req.files.file[0].originalname} ${req.files.file[0].mimetype} ${req.files.file[0].size}`)
+
+    const uploaded = new Upload(
+      req.files.file[0].buffer,
+      req.files.file[0].mimetype,
+      req.files.file[0].originalname
+    )
+
+    if (!req.auth?.subject) {
+      throw new createError.Unauthorized('Missing subject')
+    }
+
+    logger.debug(`auth subject: ${req.auth.subject}`)
+
+    const owner = new ActivityObject(req.auth.subject)
+
+    const ownerId = await owner.id()
+    const ownerJson = await owner.json()
+
+    const jsonBuffer = req.files.object[0].buffer
+    let data = JSON.parse(jsonBuffer.toString('utf8'))
+
+    const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
+      .map((prop) => data[prop])
+      .filter((a) => a)
+      .flat()
+      .map(toId))
+    // We do some testing for implicit create
+    const type = data.type
+    if (ActivityObject.isActivityType(type)) {
+      // all good
+    } else if (ActivityObject.isObjectType(type)) {
+      data = { type: 'Create', object: data }
+    } else if (Activity.duckType(data)) {
+      data.type = (Array.isArray(data.type))
+        ? data.type.concat('Activity')
+        : ((data.type) ? [data.type, 'Activity'] : 'Activity')
+    } else {
+      data.type = (Array.isArray(data.type))
+        ? data.type.concat('Object')
+        : ((data.type) ? [data.type, 'Object'] : 'Object')
+      data = { type: 'Create', object: data }
+    }
+
+    data.id = await ActivityObject.makeId(data.type)
+    data.actor = ownerId
+    if (data.object) {
+      data.object.url = makeUrl(`/uploads/${uploaded.relative}`)
+      data.object.mediaType = uploaded.mediaType
+    }
+    const activity = new Activity(data)
+    await activity.apply(ownerJson, addressees)
+    await activity.save(ownerId, addressees)
+
+    uploaded.setObjectId(await toId(await activity.prop('object')))
+    await uploaded.save()
+
+    const outbox = new Collection(await owner.prop('outbox'))
+    await outbox.prepend(activity)
+    const inbox = new Collection(await owner.prop('inbox'))
+    await inbox.prepend(activity)
+    pq.add(activity.distribute(addressees))
+    const output = await activity.expanded()
+    output['@context'] = output['@context'] || CONTEXT
+    res.status(201)
+    res.set('Content-Type', 'application/activity+json')
+    res.set('Location', await activity.id())
+    res.json(output)
+  })
+)
+
+app.get('/uploads/*',
+  expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),
+  tokenTypeCheck,
+  HTTPSignature.authenticate,
+  wrap(async (req, res) => {
+    const relative = req.params[0]
+    const uploaded = await Upload.fromRelative(relative)
+    logger.debug(`uploaded: ${uploaded.relative}`)
+    if (!uploaded || !uploaded.relative) {
+      logger.debug(`not found: ${relative}`)
+      throw new createError.NotFound('Upload record not found')
+    }
+    if (!(await uploaded.readable())) {
+      logger.debug(`not found: ${uploaded.path()}`)
+      throw new createError.NotFound('File not found')
+    }
+    const obj = new ActivityObject(uploaded.objectId)
+    if (!obj) {
+      logger.debug(`not found: ${uploaded.objectId}`)
+      throw new createError.NotFound('Object not found')
+    }
+    if (!(await obj.canRead(req.auth?.subject))) {
+      if (req.auth?.subject) {
+        throw new createError.Forbidden('Not authorized to read this object')
+      } else {
+        throw new createError.Unauthorized(`You must provide credentials to read ${relative}`)
+      }
+    }
+    res.status(200)
+    res.set('Content-Type', await obj.prop('mediaType'))
+    res.sendFile(uploaded.path())
+  })
+)
 
 app.get('/:type/:id',
   expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),

@@ -64,6 +64,7 @@ URLs, and listen on http instead of https. This is what you want
 if you're using Kubernetes or another proxy to terminate SSL.
 - OPP_NAME: a name to show for the server. Defaults to the hostname part
   of the origin.
+- OPP_UPLOAD_DIR: a directory to store uploaded files. Defaults to a temporary dir, which changes every time you run it. You should set this to a permanent directory.
 
 ## API
 

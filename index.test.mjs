@@ -7,6 +7,7 @@ import path from 'node:path'
 import https from 'node:https'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
+import { Blob } from 'node:buffer'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
@@ -4592,6 +4593,146 @@ describe('onepage.pub', () => {
       const resBody = await res.text()
       assert.ok(res.status >= 200 && res.status < 300,
         `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`)
+    })
+  })
+
+  describe('Upload files', () => {
+    let actor = null
+    let token = null
+    let implicitCreate = null
+    let explicitCreate = null
+    let token2 = null
+
+    before(async () => {
+      [actor, token] = await registerActor();
+      [, token2] = await registerActor()
+    })
+
+    it('has an uploadMedia endpoint', async () => {
+      assert.ok(actor.endpoints.uploadMedia)
+    })
+
+    it('can upload a file with implicit Create', async () => {
+      const formData = new FormData()
+
+      const jsonPayload = JSON.stringify({
+        to: [actor.followers],
+        type: 'Image',
+        name: 'test.png',
+        summaryMap: { en: 'An image with the word "test"' }
+      })
+      const jsonBlob = new Blob(
+        [jsonPayload],
+        { type: 'application/activity+json' })
+      formData.append('object', jsonBlob)
+
+      // Add image/png file
+      const imageFile = fs.readFileSync('test.png')
+      const imageBlob = new Blob([imageFile], { type: 'image/png' })
+      formData.append('file', imageBlob, 'test.png')
+
+      // POST request with fetch
+      const res = await fetch(actor.endpoints.uploadMedia, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      })
+      const resBody = await res.text()
+      assert.ok(res.status >= 200 && res.status < 300, `Bad status ${res.status}: ${resBody}`)
+      implicitCreate = res.headers.get('Location')
+      assert.ok(implicitCreate)
+    })
+
+    it('can upload a file with explicit Create', async () => {
+      const formData = new FormData()
+
+      const jsonPayload = JSON.stringify({
+        type: 'Create',
+        to: [actor.followers],
+        object: {
+          type: 'Image',
+          name: 'test.png',
+          summaryMap: { en: 'An image with the word "test"' }
+        }
+      })
+      const jsonBlob = new Blob(
+        [jsonPayload],
+        { type: 'application/activity+json' })
+      formData.append('object', jsonBlob)
+
+      // Add image/png file
+      const imageFile = fs.readFileSync('test.png')
+      const imageBlob = new Blob([imageFile], { type: 'image/png' })
+      formData.append('file', imageBlob, 'test.png')
+
+      // POST request with fetch
+      const res = await fetch(actor.endpoints.uploadMedia, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      })
+      const resBody = await res.text()
+      assert.ok(res.status >= 200 && res.status < 300, `Bad status ${res.status}: ${resBody}`)
+      explicitCreate = res.headers.get('Location')
+      assert.ok(explicitCreate)
+    })
+
+    it('can find the implicit Create in the outbox', async () => {
+      assert.ok(implicitCreate)
+      assert.ok(isInStream(actor.outbox, implicitCreate, token))
+    })
+
+    it('can find the explicit Create in the outbox', async () => {
+      assert.ok(explicitCreate)
+      assert.ok(isInStream(actor.outbox, explicitCreate, token))
+    })
+
+    it('can get the implicitly created file', async () => {
+      assert.ok(implicitCreate)
+      const act = await getObject(implicitCreate, token)
+      const res = await fetch(act.object.url, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      const buffer = await res.arrayBuffer()
+      assert.ok(res.status >= 200 && res.status < 300, `Bad status ${res.status}`)
+      assert.ok(buffer.byteLength > 0)
+    })
+
+    it('can get the explicitly created file', async () => {
+      assert.ok(explicitCreate)
+      const act = await getObject(explicitCreate, token)
+      const res = await fetch(act.object.url, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      const buffer = await res.arrayBuffer()
+      assert.ok(res.status >= 200 && res.status < 300, `Bad status ${res.status}`)
+      assert.ok(buffer.byteLength > 0)
+    })
+
+    it("can't get the file without a token", async () => {
+      assert.ok(implicitCreate)
+      const act = await getObject(implicitCreate, token)
+      const res = await fetch(act.object.url)
+      assert.strictEqual(res.status, 401)
+    })
+
+    it("can't get the file with an unauthorized token", async () => {
+      assert.ok(implicitCreate)
+      const act = await getObject(implicitCreate, token)
+      const res = await fetch(act.object.url, {
+        headers: {
+          Authorization: `Bearer ${token2}`
+        }
+      })
+      assert.strictEqual(res.status, 403)
     })
   })
 })
