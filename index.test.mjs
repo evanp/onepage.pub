@@ -182,16 +182,24 @@ const getMembers = async (collection, token = null) => {
     throw new Error(`Invalid collection ${collection}`)
   }
   const coll = await getObject(url, token)
-  let members = []
-  for (let page = coll.first; page; page = page.next) {
-    const pageObj = await getObject(page.id, token)
-    for (const prop of ['orderedItems', 'items']) {
-      if (pageObj[prop]) {
-        members = members.concat(pageObj[prop])
+  if ('orderedItems' in coll) {
+    return coll.orderedItems
+  } else if ('items' in coll) {
+    return coll.items
+  } else if ('first' in coll) {
+    let members = []
+    for (let page = coll.first; page; page = page.next) {
+      const pageObj = await getObject(page.id, token)
+      for (const prop of ['orderedItems', 'items']) {
+        if (pageObj[prop]) {
+          members = members.concat(pageObj[prop])
+        }
       }
     }
+    return members
+  } else {
+    throw new Error(`Invalid collection ${url}: no items, orderedItems, or first`)
   }
-  return members
 }
 
 const isInStream = async (collection, object, token = null) => {
@@ -328,7 +336,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
   return header
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -3502,7 +3510,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('OAuth 2.0 read-only scope', { only: true }, () => {
+  describe('OAuth 2.0 read-only scope', () => {
     let actor = null
     let cookie = null
     let token = null
@@ -3523,7 +3531,7 @@ describe('onepage.pub', { only: true }, () => {
       })
       note = activity.object
     })
-    it('can get read-only access code', { only: true }, async () => {
+    it('can get read-only access code', async () => {
       token = await getAccessToken(actor, cookie, 'read')
       assert.ok(token)
     })
@@ -3532,7 +3540,7 @@ describe('onepage.pub', { only: true }, () => {
       const pendingFollowers = await getObject(actor.pendingFollowers.id, token)
       assert.strictEqual(pendingFollowers.totalItems, 0)
     })
-    it('can use the read-only access token to read remote', { only: true }, async () => {
+    it('can use the read-only access token to read remote', async () => {
       const remoteNote = await getProxy(note.id, actor, token)
       assert.ok(remoteNote)
       assert.strictEqual(remoteNote.contentMap?.en, 'Hello, world!')
@@ -4734,6 +4742,109 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       assert.strictEqual(res.status, 403)
+    })
+  })
+
+  describe('Create a collection', () => {
+    let actor = null
+    let token = null
+    let note1 = null
+    let note2 = null
+    let withItems = null
+    let noItems = null
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      const createNote = await doActivity(actor, token, {
+        type: 'Create',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, World!'
+          }
+        }
+      })
+      note1 = createNote.object
+      const createNote2 = await doActivity(actor, token, {
+        type: 'Create',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, World, again!'
+          }
+        }
+      })
+      note2 = createNote2.object
+      withItems = (await doActivity(actor, token, {
+        type: 'Create',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        object: {
+          type: 'Collection',
+          items: [note1.id]
+        }
+      })).object
+      noItems = (await doActivity(actor, token, {
+        type: 'Create',
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        object: {
+          type: 'Collection'
+        }
+      })).object
+    })
+
+    it('can get a collection with items', async () => {
+      const collection = await getObject(withItems.id, token)
+      assert.ok(collection.items)
+      assert.strictEqual(collection.items.length, 1)
+      assert.strictEqual(collection.items[0].id, note1.id)
+    })
+
+    it('can get a collection without items', async () => {
+      const collection = await getObject(noItems.id, token)
+      assert.ok(collection)
+      assert.ok(collection.first)
+      const collectionPage = await getObject(collection.first.id, token)
+      assert.ok(collectionPage)
+      assert.ok(collectionPage.items)
+      assert.strictEqual(collectionPage.items.length, 0)
+    })
+
+    it('can add an item to an initialized collection', async () => {
+      await doActivity(actor, token, {
+        type: 'Add',
+        object: note2.id,
+        target: withItems.id
+      })
+      assert.ok(await isInStream(withItems, note2, token))
+    })
+
+    it('can remove an item from an initialized collection', async () => {
+      await doActivity(actor, token, {
+        type: 'Remove',
+        object: note2.id,
+        target: withItems.id
+      })
+      assert.ok(!(await isInStream(withItems, note2, token)))
+    })
+
+    it('can add an item to an uninitialized collection', async () => {
+      await doActivity(actor, token, {
+        type: 'Add',
+        object: note2.id,
+        target: noItems.id
+      })
+      assert.ok(await isInStream(noItems, note2, token))
+    })
+
+    it('can remove an item from an uninitialized collection', async () => {
+      await doActivity(actor, token, {
+        type: 'Remove',
+        object: note2.id,
+        target: noItems.id
+      })
+      assert.ok(!(await isInStream(noItems, note2, token)))
     })
   })
 })

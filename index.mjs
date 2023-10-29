@@ -938,6 +938,21 @@ class Activity extends ActivityObject {
             { summaryMap: { en: `${prop} of ${summaryEn}` } })
           object[prop] = await value.id()
         }
+        // Add paging setup for collections
+        const types = (Array.isArray(object.type)) ? object.type : [object.type]
+        if (types.some(t => ['Collection', 'OrderedCollection'].includes(t)) &&
+          !('items' in object) && !('orderedItems' in object)) {
+          object.id = await ActivityObject.makeId(object.type)
+          const pageProps = ('OrderedCollection' in types)
+            ? { type: 'OrderedCollectionPage', orderedItems: [] }
+            : { type: 'CollectionPage', items: [] }
+          const page = new ActivityObject({
+            partOf: object.id,
+            ...pageProps
+          })
+          await page.save(actor.id, addressees)
+          object.first = object.last = await page.id()
+        }
         const saved = new ActivityObject(object)
         await saved.save(actor.id, addressees)
         activity.object = await saved.id()
@@ -1402,15 +1417,27 @@ class Collection extends ActivityObject {
     } else if (collection.items) {
       await this.patch({ totalItems: collection.totalItems + 1, items: [objectId, ...collection.items] })
     } else if (collection.first) {
-      const first = await new ActivityObject(collection.first)
+      const first = new ActivityObject(collection.first)
       const firstJson = await first.expanded()
-      if (firstJson.orderedItems.length < MAX_PAGE_SIZE) {
-        await first.patch({ orderedItems: [objectId, ...firstJson.orderedItems] })
+      const ip = ['orderedItems', 'items'].find(p => p in firstJson)
+      if (!ip) {
+        throw new Error('No items or orderedItems in first page')
+      }
+      if (firstJson[ip].length < MAX_PAGE_SIZE) {
+        const patch = {}
+        patch[ip] = [objectId, ...firstJson[ip]]
+        await first.patch(patch)
         await this.patch({ totalItems: collection.totalItems + 1 })
       } else {
         const owner = await this.owner()
         const addressees = await this.addressees()
-        const newFirst = new ActivityObject({ type: 'OrderedCollectionPage', partOf: collection.id, orderedItems: [objectId], next: first.id })
+        const props = {
+          type: firstJson.type,
+          partOf: collection.id,
+          next: firstJson.id
+        }
+        props[ip] = [objectId]
+        const newFirst = new ActivityObject(props)
         await newFirst.save(owner, addressees)
         await this.patch({ totalItems: collection.totalItems + 1, first: await newFirst.id() })
         await first.patch({ prev: await newFirst.id() })
