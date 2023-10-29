@@ -144,6 +144,7 @@ class Database {
     db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)')
     db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
     db.run('CREATE TABLE IF NOT EXISTS upload (relative VARCHAR(255), mediaType VARCHAR(255), objectId VARCHAR(255))')
+    db.run('CREATE TABLE IF NOT EXISTS server (origin VARCHAR(255) PRIMARY KEY, privateKey TEXT, publicKey TEXT)')
 
     this.run = promisify((...params) => {
       logger.silly('run() SQL: ' + params[0], params.slice(1))
@@ -2062,6 +2063,49 @@ const tokenTypeCheck = wrap(async (req, res, next) => {
 app.use(passport.initialize()) // Initialize Passport
 app.use(passport.session())
 
+app.use(wrap(async (req, res, next) => {
+  const row = await db.get('SELECT * FROM server WHERE origin = ?', [makeUrl('')])
+  if (row) {
+    req.jwtKeyData = row.privateKey
+  } else {
+    const { publicKey, privateKey } = await generateKeyPair(
+      'rsa',
+      {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      }
+    )
+    await db.run('INSERT INTO server (origin, privateKey, publicKey) VALUES (?, ?, ?)', [makeUrl(''), privateKey, publicKey])
+    req.jwtKeyData = privateKey
+  }
+  return next()
+}))
+
+async function jwtOptional (req, res, next) {
+  const mw = expressjwt({
+    credentialsRequired: false,
+    secret: req.jwtKeyData,
+    algorithms: ['RS256']
+  })
+  return mw(req, res, next)
+}
+
+async function jwtRequired (req, res, next) {
+  const mw = expressjwt({
+    credentialsRequired: true,
+    secret: req.jwtKeyData,
+    algorithms: ['RS256']
+  })
+  return mw(req, res, next)
+}
+
 passport.use(new LocalStrategy(
   function (username, password, done) {
     (async () => {
@@ -2274,7 +2318,7 @@ app.post('/register', csrf, wrap(async (req, res) => {
       scope: 'read write',
       issuer: makeUrl('')
     },
-    KEY_DATA,
+    req.jwtKeyData,
     { algorithm: 'RS256' }
   )
 
@@ -2360,7 +2404,7 @@ app.get('/login/success', passport.authenticate('session'), wrap(async (req, res
       scope: 'read write',
       issuer: makeUrl('')
     },
-    KEY_DATA,
+    req.jwtKeyData,
     { algorithm: 'RS256' }
   )
 
@@ -2436,7 +2480,7 @@ app.get('/.well-known/webfinger', wrap(async (req, res) => {
 }))
 
 app.post('/endpoint/proxyUrl',
-  expressjwt({ secret: KEY_DATA, credentialsRequired: true, algorithms: ['RS256'] }),
+  jwtRequired,
   tokenTypeCheck,
   wrap(async (req, res) => {
     const id = req.body.id
@@ -2584,7 +2628,7 @@ app.post('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wr
         expiresIn: '10m',
         issuer: makeUrl('')
       },
-      KEY_DATA,
+      req.jwtKeyData,
       { algorithm: 'RS256' }
     )
     const state = req.body.state
@@ -2619,7 +2663,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
       throw new createError.BadRequest('Missing code_verifier')
     }
     const code = req.body.code
-    const fields = await jwtverify(code, KEY_DATA, { algorithm: 'RS256' })
+    const fields = await jwtverify(code, req.jwtKeyData, { algorithm: 'RS256' })
     if (fields.type !== 'authz') {
       throw new createError.BadRequest('Invalid code')
     }
@@ -2650,7 +2694,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
         expiresIn: '1d',
         issuer: makeUrl('')
       },
-      KEY_DATA,
+      req.jwtKeyData,
       { algorithm: 'RS256' }
     )
     const refreshToken = await jwtsign(
@@ -2663,7 +2707,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
         expiresIn: '30d',
         issuer: makeUrl('')
       },
-      KEY_DATA,
+      req.jwtKeyData,
       { algorithm: 'RS256' }
     )
     res.set('Content-Type', 'application/json')
@@ -2679,7 +2723,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
       throw new createError.BadRequest('Missing refresh_token')
     }
     const refreshToken = req.body.refresh_token
-    const fields = await jwtverify(refreshToken, KEY_DATA, { algorithm: 'RS256' })
+    const fields = await jwtverify(refreshToken, req.jwtKeyData, { algorithm: 'RS256' })
     if (fields.type !== 'refresh') {
       throw new createError.BadRequest('Invalid code')
     }
@@ -2700,7 +2744,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
         expiresIn: '1d',
         issuer: makeUrl('')
       },
-      KEY_DATA,
+      req.jwtKeyData,
       { algorithm: 'RS256' }
     )
     const newRefreshToken = await jwtsign(
@@ -2713,7 +2757,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
         expiresIn: '30d',
         issuer: makeUrl('')
       },
-      KEY_DATA,
+      req.jwtKeyData,
       { algorithm: 'RS256' }
     )
     res.set('Content-Type', 'application/json')
@@ -2728,7 +2772,7 @@ app.post('/endpoint/oauth/token', wrap(async (req, res) => {
 }))
 
 app.post('/endpoint/upload',
-  expressjwt({ secret: KEY_DATA, credentialsRequired: true, algorithms: ['RS256'] }),
+  jwtRequired,
   tokenTypeCheck,
   upload.fields([{ name: 'file', maxCount: 1 }, { name: 'object', maxCount: 1 }]),
   wrap(async (req, res) => {
@@ -2811,7 +2855,7 @@ app.post('/endpoint/upload',
 )
 
 app.get('/uploads/*',
-  expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),
+  jwtOptional,
   tokenTypeCheck,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
@@ -2845,7 +2889,7 @@ app.get('/uploads/*',
 )
 
 app.get('/:type/:id',
-  expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),
+  jwtOptional,
   tokenTypeCheck,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
@@ -2905,7 +2949,7 @@ app.get('/:type/:id',
   }))
 
 app.post('/:type/:id',
-  expressjwt({ secret: KEY_DATA, credentialsRequired: false, algorithms: ['RS256'] }),
+  jwtOptional,
   tokenTypeCheck,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {

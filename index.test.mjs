@@ -328,7 +328,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
   return header
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
   let client = null
@@ -3502,7 +3502,7 @@ describe('onepage.pub', () => {
     })
   })
 
-  describe('OAuth 2.0 read-only scope', () => {
+  describe('OAuth 2.0 read-only scope', { only: true }, () => {
     let actor = null
     let cookie = null
     let token = null
@@ -3523,7 +3523,7 @@ describe('onepage.pub', () => {
       })
       note = activity.object
     })
-    it('can get read-only access code', async () => {
+    it('can get read-only access code', { only: true }, async () => {
       token = await getAccessToken(actor, cookie, 'read')
       assert.ok(token)
     })
@@ -3532,8 +3532,9 @@ describe('onepage.pub', () => {
       const pendingFollowers = await getObject(actor.pendingFollowers.id, token)
       assert.strictEqual(pendingFollowers.totalItems, 0)
     })
-    it('can use the read-only access token to read remote', async () => {
-      const remoteNote = await getObject(note.id, token)
+    it('can use the read-only access token to read remote', { only: true }, async () => {
+      const remoteNote = await getProxy(note.id, actor, token)
+      assert.ok(remoteNote)
       assert.strictEqual(remoteNote.contentMap?.en, 'Hello, world!')
     })
     it('cannot use the read-only access token to write', async () => {
