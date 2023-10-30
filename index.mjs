@@ -361,6 +361,9 @@ class ActivityObject {
   }
 
   static async get (ref, props = null, subject = null) {
+    if (props && !Array.isArray(props)) {
+      throw new Error(`Invalid props: ${JSON.stringify(props)}`)
+    }
     if (typeof ref === 'string') {
       return await ActivityObject.getById(ref, subject)
     } else if (typeof ref === 'object') {
@@ -381,28 +384,21 @@ class ActivityObject {
     if (id === PUBLIC) {
       return new ActivityObject(PUBLIC_OBJ)
     }
-    logger.debug(`Getting object ${id}`)
     const obj = await ActivityObject.getFromDatabase(id, subject)
     if (obj) {
-      logger.debug(`Found ${id} in database`)
       return obj
     } else if (ActivityObject.isRemoteId(id)) {
-      logger.debug(`${id} is remote; getting from remote`)
       return await ActivityObject.getFromRemote(id, subject)
     } else {
-      logger.debug(`Don't know how to get ${id}`)
       return null
     }
   }
 
   static async getFromDatabase (id, subject = null) {
-    logger.debug(`Getting ${id} from database`)
     const row = await db.get('SELECT data FROM object WHERE id = ?', [id])
     if (!row) {
-      logger.debug(`No ${id} in database`)
       return null
     } else {
-      logger.debug(`Found ${id} in database`)
       const obj = new ActivityObject(JSON.parse(row.data))
       obj.#complete = true
       return obj
@@ -416,7 +412,7 @@ class ActivityObject {
       Accept: ACCEPT_HEADER
     }
     if (subject && await User.isUser(subject)) {
-      const user = await User.fromActorId(subject)
+      const user = await User.fromActorId(await toId(subject))
       const subjectObj = await ActivityObject.get(subject, ['publicKey'], subject)
       const keyId = await toId(await subjectObj.prop('publicKey'))
       const privKey = user.privateKey
@@ -429,9 +425,36 @@ class ActivityObject {
     } else {
       const json = await res.json()
       const obj = new ActivityObject(json)
+      const owner = ActivityObject.guessOwner(json)
+      const addressees = ActivityObject.guessAddressees(json)
       obj.#complete = true
+      await obj.cache(owner, addressees)
       return obj
     }
+  }
+
+  static guessOwner (json) {
+    if ('attributedTo' in json) {
+      return json.attributedTo
+    } else if ('actor' in json) {
+      return json.actor
+    } else {
+      return null
+    }
+  }
+
+  static guessAddressees (json) {
+    let addressees = []
+    for (const prop of ['to', 'cc', 'bto', 'bcc', 'audience']) {
+      if (prop in json) {
+        if (Array.isArray(json[prop])) {
+          addressees = addressees.concat(json[prop])
+        } else {
+          addressees.push(json[prop])
+        }
+      }
+    }
+    return addressees
   }
 
   static async exists (id) {
@@ -575,13 +598,13 @@ class ActivityObject {
   async cache (owner, addressees) {
     const dataId = await this.id()
     const data = await this.json()
-    const ownerId = owner || data.id
+    const ownerId = await toId(owner) || data.id
     const qry = 'INSERT OR REPLACE INTO object (id, owner, data) VALUES (?, ?, ?)'
     await db.run(qry, [dataId, ownerId, JSON.stringify(data)])
-    await Promise.all(addressees.map((addressee) =>
-      db.run(
+    await Promise.all(addressees.map(async (addressee) =>
+      await db.run(
         'INSERT OR IGNORE INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-        [dataId, addressee]
+        [dataId, await toId(addressee)]
       )))
   }
 
@@ -788,10 +811,11 @@ class ActivityObject {
     if (!id) {
       throw new Error('No id for object being expanded')
     }
-    const object = await ActivityObject.getJSON(id)
-    if (!object) {
+    const ao = await ActivityObject.getById(id)
+    if (!ao) {
       throw new Error(`No such object: ${id}`)
     }
+    const object = await ao.json()
     const toBrief = async (value) => {
       if (value) {
         const obj = new ActivityObject(value)
@@ -870,8 +894,6 @@ class ActivityObject {
   }
 
   static isRemoteId (id) {
-    logger.debug(`Checking if ${id} is remote`)
-    logger.debug(`ORIGIN = ${ORIGIN}`)
     return !id.startsWith(ORIGIN)
   }
 }
@@ -896,7 +918,7 @@ class Activity extends ActivityObject {
         }
         const other = await ActivityObject.get(objectProp, null, actorObj)
         if (!other) {
-          throw new createError.BadRequest(`No such object: ${JSON.stringify(objectProp)}`)
+          throw new createError.BadRequest(`No such object to follow: ${JSON.stringify(objectProp)}`)
         }
         await other.expand()
         const otherId = await other.id()
@@ -923,10 +945,8 @@ class Activity extends ActivityObject {
             throw new createError.BadRequest('Already pending follower')
           }
         }
-        logger.debug(`adding ${await this.id()} to ${await pendingFollowing.id()}`)
         await pendingFollowing.prepend(this)
         if (isUser) {
-          logger.debug(`adding ${await this.id()} to ${await pendingFollowers.id()}`)
           await pendingFollowers.prepend(this)
         }
         return activity
@@ -1257,8 +1277,8 @@ class Activity extends ActivityObject {
         }
         const blocked = new Collection(await actorObj.prop('blocked'))
         const other = await ActivityObject.get(
-          (await this.prop('object'),
-          ['id', 'type', 'followers', 'following']),
+          (await this.prop('object')),
+          ['id', 'type', 'followers', 'following'],
           actorObj)
         if (await blocked.hasMember(await other.id())) {
           throw new createError.BadRequest('Already blocked!')
@@ -1477,8 +1497,18 @@ class Activity extends ActivityObject {
 }
 
 class Collection extends ActivityObject {
+  static async get (id, props = null, actor = null) {
+    const ao = await super.get(id, props, actor)
+    if (ao) {
+      return Collection.fromActivityObject(ao)
+    } else {
+      return null
+    }
+  }
+
   static async fromActivityObject (object) {
-    return new Collection(await object.json())
+    const coll = new Collection(await object.json())
+    return coll
   }
 
   async hasMember (object) {
@@ -1688,22 +1718,41 @@ class RemoteActivity extends Activity {
 
   async apply (remote, addressees, ...args) {
     const owner = args[0]
-    const ownerObj = new ActivityObject(owner)
-    const remoteObj = new ActivityObject(remote)
-    const activity = await this.json()
+    const ownerObj = await ActivityObject.get(
+      owner,
+      ['id', 'type', 'followers', 'following', 'pendingFollowers', 'pendingFollowing'],
+      owner
+    )
+    const remoteObj = await ActivityObject.get(
+      remote,
+      ['id'],
+      owner
+    )
     const remoteAppliers = {
       Follow: async () => {
-        const object = new ActivityObject(await this.prop('object'))
+        const object = await ActivityObject.get(
+          await this.prop('object'),
+          ['id', 'type'],
+          ownerObj
+        )
         if (await object.id() === await ownerObj.id()) {
-          const followers = new Collection(await ownerObj.prop('followers'))
+          const followers = await Collection.get(
+            await ownerObj.prop('followers'),
+            ['id', ['orderedItems', 'items', 'first']],
+            ownerObj)
           if (await followers.hasMember(remote)) {
             throw new Error('Already a follower')
           }
-          const pendingFollowers = new Collection(await ownerObj.prop('pendingFollowers'))
+          const pendingFollowers = await Collection.get(
+            await ownerObj.prop('pendingFollowers'),
+            ['id', 'type', ['orderedItems', 'items', 'first']],
+            ownerObj)
           if (await pendingFollowers.hasMember(await this.id())) {
             throw new Error('Already pending')
           }
+          logger.debug(`Adding ${await this.id()} to pendingFollowers`)
           await pendingFollowers.prepend(this)
+          logger.debug(`Pending followers now ${await pendingFollowers.prop('totalItems')}`)
         }
       },
       Create: async () => {
@@ -1976,8 +2025,13 @@ class RemoteActivity extends Activity {
       }
     }
 
-    if (activity.type in remoteAppliers) {
-      await remoteAppliers[activity.type]()
+    const types = (Array.isArray(await this.type())) ? await this.type() : [await this.type()]
+
+    for (const type of types) {
+      if (type in remoteAppliers) {
+        await remoteAppliers[type]()
+        break
+      }
     }
   }
 }
@@ -2086,17 +2140,14 @@ class Upload {
   }
 
   static async fromRelative (relative) {
-    logger.debug(`Looking up upload ${relative}`)
     const row = await db.get('SELECT * FROM upload WHERE relative = ?', [relative])
     if (!row) {
       return null
     } else {
-      logger.debug(`Found upload ${relative}`)
       const upload = new Upload()
       upload.relative = row.relative
       upload.mediaType = row.mediaType
       upload.objectId = row.objectId
-      logger.debug(`${upload.relative} ${upload.mediaType} ${upload.objectId}`)
       return upload
     }
   }
@@ -2122,11 +2173,8 @@ class Upload {
     if (!this.objectId) {
       throw new Error('Cannot save upload without objectId')
     }
-    logger.debug(`Saving upload ${this.relative} ${this.mediaType} ${this.buffer.length}`)
     await fsp.writeFile(this.path(), this.buffer)
-    logger.debug(`File readable? ${await this.readable()}`)
     await db.run('INSERT INTO upload (relative, mediaType, objectId) VALUES (?, ?, ?)', [this.relative, this.mediaType, this.objectId])
-    logger.debug(`Saved upload ${this.relative} ${this.mediaType} ${this.objectId}`)
   }
 }
 
@@ -2928,8 +2976,6 @@ app.post('/endpoint/upload',
       throw new createError.BadRequest('Missing object')
     }
 
-    logger.debug(`upload: ${req.files.file[0].originalname} ${req.files.file[0].mimetype} ${req.files.file[0].size}`)
-
     const uploaded = new Upload(
       req.files.file[0].buffer,
       req.files.file[0].mimetype,
@@ -2939,8 +2985,6 @@ app.post('/endpoint/upload',
     if (!req.auth?.subject) {
       throw new createError.Unauthorized('Missing subject')
     }
-
-    logger.debug(`auth subject: ${req.auth.subject}`)
 
     const owner = new ActivityObject(req.auth.subject)
 
@@ -3006,18 +3050,14 @@ app.get('/uploads/*',
   wrap(async (req, res) => {
     const relative = req.params[0]
     const uploaded = await Upload.fromRelative(relative)
-    logger.debug(`uploaded: ${uploaded.relative}`)
     if (!uploaded || !uploaded.relative) {
-      logger.debug(`not found: ${relative}`)
       throw new createError.NotFound('Upload record not found')
     }
     if (!(await uploaded.readable())) {
-      logger.debug(`not found: ${uploaded.path()}`)
       throw new createError.NotFound('File not found')
     }
     const obj = new ActivityObject(uploaded.objectId)
     if (!obj) {
-      logger.debug(`not found: ${uploaded.objectId}`)
       throw new createError.NotFound('Object not found')
     }
     if (!(await obj.canRead(req.auth?.subject))) {
@@ -3042,7 +3082,6 @@ app.get('/:type/:id',
     if (req.auth && req.auth.scope && !req.auth.scope.split(' ').includes('read')) {
       throw new createError.Forbidden('Missing read scope')
     }
-    logger.debug(`get route: ${full}`)
     const obj = await ActivityObject.getById(full)
     if (!obj) {
       throw new createError.NotFound('Object not found')
@@ -3222,10 +3261,12 @@ app.use((err, req, res, next) => {
 
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled rejection: ', err)
+  logger.silly(err.stack)
 })
 
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught exception: ', err)
+  logger.silly(err.stack)
 })
 
 // Define a function for cleanup tasks

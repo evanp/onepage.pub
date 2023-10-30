@@ -339,7 +339,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
   return header
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -1126,7 +1126,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Accept Follow Activity', { only: true }, () => {
+  describe('Accept Follow Activity', () => {
     let actor1 = null
     let token1 = null
     let actor2 = null
@@ -1154,15 +1154,15 @@ describe('onepage.pub', { only: true }, () => {
       await settle(MAIN_PORT)
     })
 
-    it("puts the actor in the other's followers", { only: true }, async () => {
+    it("puts the actor in the other's followers", async () => {
       assert(await isInStream(actor2.followers, actor1, token2))
     })
 
-    it("puts the other in the actor's following", { only: true }, async () => {
+    it("puts the other in the actor's following", async () => {
       assert(await isInStream(actor1.following, actor2, token1))
     })
 
-    it('distributes to the actor when the other posts to followers', { only: true }, async () => {
+    it('distributes to the actor when the other posts to followers', async () => {
       const createNote = await doActivity(actor2, token2, {
         '@context': AS2_CONTEXT,
         to: actor2.followers,
@@ -1175,7 +1175,7 @@ describe('onepage.pub', { only: true }, () => {
       assert(await isInStream(actor1.inbox, createNote, token1))
     })
 
-    it('distributes to the actor when the other posts to public', { only: true }, async () => {
+    it('distributes to the actor when the other posts to public', async () => {
       const createNote = await doActivity(actor2, token2, {
         '@context': AS2_CONTEXT,
         to: 'https://www.w3.org/ns/activitystreams#Public',
