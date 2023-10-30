@@ -94,11 +94,16 @@ const base64URLEncode = (str) =>
 async function toId (value) {
   if (typeof value === 'undefined') {
     return null
-  } else if (value == null) {
+  } else if (value === null) {
     return null
+  } else if (value instanceof ActivityObject) {
+    return await value.id()
+  } else if (typeof value === 'string') {
+    return value
+  } else if (typeof value === 'object' && 'id' in value) {
+    return value.id
   } else {
-    const obj = new ActivityObject(value)
-    return await obj.id()
+    throw new Error(`Can't convert ${JSON.stringify(value)} to id`)
   }
 }
 
@@ -242,7 +247,7 @@ class HTTPSignature {
     const fragment = (url.hash) ? url.hash.slice(1) : null
     url.hash = ''
 
-    const ao = await ActivityObject.fromRemote(url.toString())
+    const ao = await ActivityObject.get(url.toString())
     let publicKey = null
 
     // Mastodon uses 'main-key' instead of 'publicKey'
@@ -250,9 +255,9 @@ class HTTPSignature {
     if (!fragment) {
       publicKey = ao
     } else if (fragment in await ao.json()) {
-      publicKey = new ActivityObject(await ao.prop(fragment))
+      publicKey = await ActivityObject.get(await ao.prop(fragment), ['publicKeyPem', 'owner'])
     } else if (fragment === 'main-key' && 'publicKey' in await ao.json()) {
-      publicKey = new ActivityObject(await ao.prop('publicKey'))
+      publicKey = await ActivityObject.get(await ao.prop('publicKey'), ['publicKeyPem', 'owner'])
     } else {
       return null
     }
@@ -267,7 +272,7 @@ class HTTPSignature {
 
     if (verifier.verify(await publicKey.prop('publicKeyPem'), Buffer.from(this.signature, 'base64'))) {
       const ownerId = await publicKey.prop('owner')
-      const owner = await ActivityObject.fromRemote(ownerId)
+      const owner = await ActivityObject.get(ownerId)
       await owner.cache(ownerId, [PUBLIC])
       await publicKey.cache(ownerId, [PUBLIC])
       return owner
@@ -322,6 +327,7 @@ class ActivityObject {
   #json
   #owner
   #addressees
+  #complete = false
   constructor (data) {
     if (!data) {
       throw new Error('No data provided')
@@ -354,8 +360,78 @@ class ActivityObject {
     }
   }
 
-  static async get (id) {
-    return new ActivityObject(ActivityObject.getJSON(id))
+  static async get (ref, props = null, subject = null) {
+    if (typeof ref === 'string') {
+      return await ActivityObject.getById(ref, subject)
+    } else if (typeof ref === 'object') {
+      if (ref instanceof ActivityObject) {
+        return ref
+      } else if (props && props.every((prop) =>
+        Array.isArray(prop) ? prop.some(p => p in ref) : prop in ref)) {
+        return new ActivityObject(ref)
+      } else if ('id' in ref) {
+        return await ActivityObject.getById(ref.id, subject)
+      } else {
+        throw new Error(`Can't get object from ${JSON.stringify(ref)}`)
+      }
+    }
+  }
+
+  static async getById (id, subject = null) {
+    if (id === PUBLIC) {
+      return new ActivityObject(PUBLIC_OBJ)
+    }
+    logger.debug(`Getting object ${id}`)
+    const obj = await ActivityObject.getFromDatabase(id, subject)
+    if (obj) {
+      logger.debug(`Found ${id} in database`)
+      return obj
+    } else if (ActivityObject.isRemoteId(id)) {
+      logger.debug(`${id} is remote; getting from remote`)
+      return await ActivityObject.getFromRemote(id, subject)
+    } else {
+      logger.debug(`Don't know how to get ${id}`)
+      return null
+    }
+  }
+
+  static async getFromDatabase (id, subject = null) {
+    logger.debug(`Getting ${id} from database`)
+    const row = await db.get('SELECT data FROM object WHERE id = ?', [id])
+    if (!row) {
+      logger.debug(`No ${id} in database`)
+      return null
+    } else {
+      logger.debug(`Found ${id} in database`)
+      const obj = new ActivityObject(JSON.parse(row.data))
+      obj.#complete = true
+      return obj
+    }
+  }
+
+  static async getFromRemote (id, subject = null) {
+    const date = new Date().toISOString()
+    const headers = {
+      Date: date,
+      Accept: ACCEPT_HEADER
+    }
+    if (subject && await User.isUser(subject)) {
+      const user = await User.fromActorId(subject)
+      const subjectObj = await ActivityObject.get(subject, ['publicKey'], subject)
+      const keyId = await toId(await subjectObj.prop('publicKey'))
+      const privKey = user.privateKey
+      const signature = new HTTPSignature(keyId, privKey, 'GET', id, date)
+      headers.Signature = signature.header
+    }
+    const res = await fetch(id, { headers })
+    if (res.status !== 200) {
+      return null
+    } else {
+      const json = await res.json()
+      const obj = new ActivityObject(json)
+      obj.#complete = true
+      return obj
+    }
   }
 
   static async exists (id) {
@@ -379,6 +455,9 @@ class ActivityObject {
   }
 
   async id () {
+    if (!this.#id) {
+      this.#id = await this.prop('id')
+    }
     return this.#id
   }
 
@@ -416,6 +495,7 @@ class ActivityObject {
   async expand () {
     const json = await this.expanded()
     this.#json = json
+    return this.#json
   }
 
   async isCollection () {
@@ -433,12 +513,13 @@ class ActivityObject {
     data.updated = new Date().toISOString()
     data.published = data.published || data.updated
     // self-ownership
-    const ownerId = owner || data.id
+    const ownerId = (await toId(owner)) || data.id
+    const addresseeIds = await Promise.all(addressees.map((addressee) => toId(addressee)))
     await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [data.id, ownerId, JSON.stringify(data)])
-    await Promise.all(addressees.map((addressee) =>
+    await Promise.all(addresseeIds.map((addresseeId) =>
       db.run(
         'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-        [data.id, addressee]
+        [data.id, addresseeId]
       )))
     this.#id = data.id
     this.#json = data
@@ -533,7 +614,7 @@ class ActivityObject {
       if (!row) {
         this.#owner = null
       } else {
-        this.#owner = new ActivityObject(row.owner)
+        this.#owner = await ActivityObject.get(row.owner)
       }
     }
     return this.#owner
@@ -543,7 +624,7 @@ class ActivityObject {
     if (!this.#addressees) {
       const id = await this.id()
       const rows = await db.all('SELECT addresseeId FROM addressee WHERE objectId = ?', [id])
-      this.#addressees = rows.map((row) => new ActivityObject(row.addresseeId))
+      this.#addressees = await Promise.all(rows.map((row) => ActivityObject.get(row.addresseeId)))
     }
     return this.#addressees
   }
@@ -584,7 +665,7 @@ class ActivityObject {
     }
     // if they're a member of any addressed collection
     for (const addresseeId of addresseeIds) {
-      const obj = new ActivityObject(addresseeId)
+      const obj = await ActivityObject.get(addresseeId)
       if (await obj.isCollection()) {
         const coll = new Collection(obj.json())
         if (await coll.hasMember(subject)) {
@@ -776,34 +857,22 @@ class ActivityObject {
     return 'Object'
   }
 
-  static async fromRemote (value) {
-    const ao = new ActivityObject(value)
-    const obj = await ao.json()
-    if (!obj) {
-      const id = await ao.id()
-      let res = null
-      try {
-        res = await fetch(id, {
-          headers: { Accept: ACCEPT_HEADER }
-        })
-      } catch (err) {
-        logger.error('Error getting remote object:', err)
-        throw err
-      }
-      if (res.status !== 200) {
-        throw new Error(`Error fetching ${id}: ${res.status}`)
-      } else {
-        ao.#json = await res.json()
-      }
-    }
-    return ao
-  }
-
   async needsExpandedObject () {
     const needs = ['Create', 'Update', 'Accept', 'Reject', 'Announce']
     const type = await this.type()
     const types = (Array.isArray(type)) ? type : [type]
     return types.some((t) => needs.includes(t))
+  }
+
+  async hasProp (prop) {
+    const json = await this.json()
+    return prop in json
+  }
+
+  static isRemoteId (id) {
+    logger.debug(`Checking if ${id} is remote`)
+    logger.debug(`ORIGIN = ${ORIGIN}`)
+    return !id.startsWith(ORIGIN)
   }
 }
 
@@ -818,14 +887,18 @@ class Activity extends ActivityObject {
 
   async apply (actor, addressees, ...args) {
     let activity = await this.json()
-    const actorObj = new ActivityObject(actor)
+    const actorObj = await ActivityObject.get(actor, ['followers', 'following', 'pendingFollowers', 'pendingFollowing'], actor)
     const appliers = {
       Follow: async () => {
         const objectProp = await this.prop('object')
         if (!objectProp) {
           throw new createError.BadRequest('No object followed')
         }
-        const other = new ActivityObject(objectProp)
+        const other = await ActivityObject.get(objectProp, null, actorObj)
+        if (!other) {
+          throw new createError.BadRequest(`No such object: ${JSON.stringify(objectProp)}`)
+        }
+        await other.expand()
         const otherId = await other.id()
         const following = new Collection(await actorObj.prop('following'))
         if (await following.hasMember(otherId)) {
@@ -833,7 +906,7 @@ class Activity extends ActivityObject {
         }
         const pendingFollowing = new Collection(await actorObj.prop('pendingFollowing'))
         if (await pendingFollowing.find(async (act) =>
-          await (new ActivityObject(await act.prop('object'))).id() === otherId)) {
+          await toId(await act.prop('object')) === otherId)) {
           throw new createError.BadRequest('Already pending following')
         }
         let pendingFollowers = null
@@ -846,7 +919,7 @@ class Activity extends ActivityObject {
           }
           pendingFollowers = new Collection(await other.prop('pendingFollowers'))
           if (await pendingFollowers.find(async (act) =>
-            await (new ActivityObject(await act.prop('object'))).id() === actorId)) {
+            await toId(await act.prop('object')) === actorId)) {
             throw new createError.BadRequest('Already pending follower')
           }
         }
@@ -861,20 +934,26 @@ class Activity extends ActivityObject {
       Accept: async () => {
         const objectProp = await this.prop('object')
         if (!objectProp) {
-          throw new createError.BadRequest('No object followed')
+          throw new createError.BadRequest('No object accepted')
         }
-        const accepted = new ActivityObject(objectProp)
+        const accepted = await ActivityObject.get(objectProp, [['id', '@id'], 'actor', 'type'], actorObj)
         switch (await accepted.type()) {
           case 'Follow': {
             const pendingFollowers = new Collection(await actorObj.prop('pendingFollowers'))
+            await pendingFollowers.expand()
             if (!await pendingFollowers.hasMember(await accepted.id())) {
               throw new createError.BadRequest('Not awaiting acceptance for follow')
             }
-            const other = new ActivityObject(await accepted.prop('actor'))
+            const other = await ActivityObject.get(
+              await accepted.prop('actor'),
+              [['id', '@id'], 'type', 'pendingFollowing', 'following'],
+              actorObj
+            )
             const isUser = await User.isUser(other)
             let pendingFollowing = null
             if (isUser) {
               pendingFollowing = new Collection(await other.prop('pendingFollowing'))
+              await pendingFollowers.expand()
               if (!await pendingFollowing.hasMember(await accepted.id())) {
                 throw new createError.BadRequest('Not awaiting acceptance for follow')
               }
@@ -896,14 +975,14 @@ class Activity extends ActivityObject {
         if (!objectProp) {
           throw new createError.BadRequest('No object followed')
         }
-        const rejected = new ActivityObject(objectProp)
+        const rejected = await ActivityObject.get(objectProp, ['id', 'type', 'actor'], actorObj)
         switch (await rejected.type()) {
           case 'Follow': {
             const pendingFollowers = new Collection(await actorObj.prop('pendingFollowers'))
             if (!await pendingFollowers.hasMember(await rejected.id())) {
               throw new createError.BadRequest('Not awaiting acceptance for follow')
             }
-            const other = new ActivityObject(await rejected.prop('actor'))
+            const other = await ActivityObject.get(await rejected.prop('actor'), ['pendingFollowing'], actorObj)
             const isUser = await User.isUser(other)
             let pendingFollowing = null
             if (isUser) {
@@ -958,7 +1037,7 @@ class Activity extends ActivityObject {
         activity.object = await saved.id()
         if (await saved.prop('inReplyTo')) {
           const inReplyToProp = await saved.prop('inReplyTo')
-          const parent = new ActivityObject(inReplyToProp)
+          const parent = await ActivityObject.get(inReplyToProp, ['id', 'replies'], actorObj)
           const parentOwner = await parent.owner()
           if (parentOwner && await User.isUser(parentOwner)) {
             const replies = new Collection(await parent.prop('replies'))
@@ -974,7 +1053,7 @@ class Activity extends ActivityObject {
         if (!activity?.object?.id) {
           throw new createError.BadRequest('No id for object to update')
         }
-        const object = new ActivityObject(activity?.object?.id)
+        const object = await ActivityObject.getById(activity.object.id, actorObj)
         const objectOwner = await object.owner()
         if (!objectOwner || await objectOwner.id() !== actor.id) {
           throw new createError.BadRequest("You can't update an object you don't own")
@@ -1057,7 +1136,7 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest('No object to delete')
         }
-        const object = new ActivityObject(activity.object)
+        const object = await ActivityObject.get(activity.object, ['id', 'type'], actorObj)
         if (!await object.id()) {
           throw new createError.BadRequest('No id for object to delete')
         }
@@ -1083,7 +1162,7 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest('No object to add')
         }
-        const object = new ActivityObject(activity.object)
+        const object = await ActivityObject.get(activity.object, ['id', 'type'], actorObj)
         if (!await object.id()) {
           throw new createError.BadRequest('No id for object to add')
         }
@@ -1116,7 +1195,7 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest('No object to remove')
         }
-        const object = new ActivityObject(activity.object)
+        const object = await ActivityObject.get(activity.object, ['id', 'type'], actorObj)
         if (!await object.id()) {
           throw new createError.BadRequest('No id for object to remove')
         }
@@ -1149,7 +1228,7 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest('No object to like')
         }
-        const object = new ActivityObject(activity.object)
+        const object = await ActivityObject.get(activity.object, ['id', 'type', 'likes'], actorObj)
         if (!await object.canRead(actor.id)) {
           throw new createError.BadRequest("Can't like an object you can't read")
         }
@@ -1177,7 +1256,10 @@ class Activity extends ActivityObject {
           throw new createError.BadRequest('No object to block')
         }
         const blocked = new Collection(await actorObj.prop('blocked'))
-        const other = new ActivityObject(await this.prop('object'))
+        const other = await ActivityObject.get(
+          (await this.prop('object'),
+          ['id', 'type', 'followers', 'following']),
+          actorObj)
         if (await blocked.hasMember(await other.id())) {
           throw new createError.BadRequest('Already blocked!')
         }
@@ -1198,7 +1280,11 @@ class Activity extends ActivityObject {
         if (!await this.prop('object')) {
           throw new createError.BadRequest('Nothing to announce')
         }
-        const object = new ActivityObject(await this.prop('object'))
+        const object = await ActivityObject.get(
+          await this.prop('object'),
+          ['id', 'type', 'shares'],
+          actorObj
+        )
         const owner = await object.owner()
         if (await User.isUser(owner)) {
           const shares = new Collection(await object.prop('shares'))
@@ -1210,7 +1296,11 @@ class Activity extends ActivityObject {
         if (!await this.prop('object')) {
           throw new createError.BadRequest('Nothing to undo')
         }
-        const object = new ActivityObject(await this.prop('object'))
+        const object = await ActivityObject.get(
+          await this.prop('object'),
+          ['object', 'type', 'id'],
+          actorObj
+        )
         const owner = await object.owner()
         if (await owner.id() !== await actorObj.id()) {
           throw new createError.BadRequest('Cannot undo an object you do not own')
@@ -1220,7 +1310,10 @@ class Activity extends ActivityObject {
             if (!await object.prop('object')) {
               throw new createError.BadRequest('Nothing liked')
             }
-            const likedObject = new ActivityObject(await object.prop('object'))
+            const likedObject = await ActivityObject.get(
+              await object.prop('object'),
+              ['id', 'type', 'likes'],
+              actorObj)
             const liked = new Collection(await actorObj.prop('liked'))
             await liked.remove(likedObject)
             const likedObjectOwner = await likedObject.owner()
@@ -1232,9 +1325,13 @@ class Activity extends ActivityObject {
           }
           case 'Block': {
             if (!await object.prop('object')) {
-              throw new createError.BadRequest('Nothing liked')
+              throw new createError.BadRequest('Nothing blocked')
             }
-            const blockedObject = new ActivityObject(await object.prop('object'))
+            const blockedObject = await ActivityObject.get(
+              await object.prop('object'),
+              null,
+              actorObj
+            )
             const blocked = new Collection(await actorObj.prop('blocked'))
             await blocked.remove(blockedObject)
             break
@@ -1243,7 +1340,11 @@ class Activity extends ActivityObject {
             if (!await object.prop('object')) {
               throw new createError.BadRequest('Nothing followed')
             }
-            const followedObject = new ActivityObject(await object.prop('object'))
+            const followedObject = await ActivityObject.get(
+              await object.prop('object'),
+              ['id', 'type', 'followers'],
+              actorObj
+            )
             const pendingFollowing = new Collection(await actorObj.prop('pendingFollowing'))
             if (await pendingFollowing.hasMember(await object.id())) {
               await pendingFollowing.remove(object)
@@ -1267,7 +1368,11 @@ class Activity extends ActivityObject {
             if (!await object.prop('object')) {
               throw new createError.BadRequest('Nothing announced')
             }
-            const sharedObject = new ActivityObject(await object.prop('object'))
+            const sharedObject = await ActivityObject.get(
+              await object.prop('object'),
+              ['id', 'type', 'shares'],
+              actorObj
+            )
             const sharedObjectOwner = await sharedObject.owner()
             if (await User.isUser(sharedObjectOwner)) {
               await sharedObject.expand()
@@ -1321,15 +1426,16 @@ class Activity extends ActivityObject {
     const keyId = await toId(await owner.prop('publicKey'))
 
     const sendTo = async (addressee) => {
-      let other = new ActivityObject(addressee)
+      let other = await ActivityObject.get(addressee, null, owner)
       if (await User.isUser(other)) {
         // Local delivery
+        await other.expand()
         logger.debug(`Local delivery for ${activity.id} to ${addressee}`)
         const inbox = new Collection(await other.prop('inbox'))
         await inbox.prependData(activity)
       } else {
         logger.debug(`Remote delivery for ${activity.id} to ${addressee}`)
-        other = await ActivityObject.fromRemote(addressee)
+        other = await ActivityObject.get(addressee)
         const inboxProp = await other.prop('inbox')
         if (!inboxProp) {
           logger.warn(`Cannot deliver to ${addressee}: no 'inbox' property`)
@@ -1376,41 +1482,45 @@ class Collection extends ActivityObject {
   }
 
   async hasMember (object) {
+    await this.expand()
     const objectId = await toId(object)
-    const collection = await this.json()
     const match = (item) => ((isString(item) && item === objectId) || ((typeof item === 'object') && item.id === objectId))
-    switch (collection.type) {
-      case 'Collection':
-      case 'OrderedCollection':
-        if (collection.orderedItems) {
-          return collection.orderedItems.some(match)
-        } else if (collection.items) {
-          return collection.items.some(match)
-        } else if (collection.first) {
-          return await (new Collection(collection.first)).hasMember(objectId)
+    if (await this.hasProp('orderedItems')) {
+      const orderedItems = await this.prop('orderedItems')
+      return orderedItems.some(match)
+    } else if (await this.hasProp('items')) {
+      const items = await this.prop('items')
+      return items.some(match)
+    } else if (await this.hasProp('first')) {
+      let page = null
+      for (let pageId = await this.prop('first');
+        pageId;
+        pageId = await page.prop('next')) {
+        page = new ActivityObject(pageId)
+        await page.expand()
+        if (await page.hasProp('orderedItems')) {
+          const orderedItems = await page.prop('orderedItems')
+          if (orderedItems.some(match)) {
+            return true
+          }
+        } else if (await page.hasProp('items')) {
+          const items = await page.prop('items')
+          if (items.some(match)) {
+            return true
+          }
         }
-        break
-      case 'CollectionPage':
-      case 'OrderedCollectionPage':
-        if (collection.orderedItems) {
-          return collection.orderedItems.some(match)
-        } else if (collection.items) {
-          return collection.items.some(match)
-        } else if (collection.next) {
-          return await (new Collection(collection.next)).hasMember(objectId)
-        }
-        break
-      default:
-        return false
+      }
+      return false
     }
   }
 
   async prependData (data) {
-    return this.prepend(new ActivityObject(data))
+    return await this.prepend(new ActivityObject(data))
   }
 
   async prepend (object) {
-    const collection = await this.expanded()
+    await this.expand()
+    const collection = await this.json()
     const objectId = await object.id()
     if (collection.orderedItems) {
       await this.patch({ totalItems: collection.totalItems + 1, orderedItems: [objectId, ...collection.orderedItems] })
@@ -1418,7 +1528,8 @@ class Collection extends ActivityObject {
       await this.patch({ totalItems: collection.totalItems + 1, items: [objectId, ...collection.items] })
     } else if (collection.first) {
       const first = new ActivityObject(collection.first)
-      const firstJson = await first.expanded()
+      await first.expand()
+      const firstJson = await first.json()
       const ip = ['orderedItems', 'items'].find(p => p in firstJson)
       if (!ip) {
         throw new Error('No items or orderedItems in first page')
@@ -1492,19 +1603,26 @@ class Collection extends ActivityObject {
   }
 
   async members () {
-    const obj = await this.json()
-    let cur = obj.items || obj.orderedItems || []
-    let ref = obj.first
-    while (ref) {
-      const page = new ActivityObject(ref)
-      if (!await page.isCollectionPage()) {
-        break
+    await this.expand()
+    if (await this.hasProp('orderedItems')) {
+      return await this.prop('orderedItems')
+    } else if (await this.hasProp('items')) {
+      return await this.prop('items')
+    } else if (await this.hasProp('first')) {
+      const members = []
+      let ref = await this.prop('first')
+      while (ref) {
+        const page = new ActivityObject(ref)
+        await page.expand()
+        if (await page.hasProp('orderedItems')) {
+          members.push(...(await page.prop('orderedItems')))
+        } else if (await page.hasProp('items')) {
+          members.push(...(await page.prop('items')))
+        }
+        ref = await page.prop('next')
       }
-      const pageJson = await page.json()
-      cur = cur.concat(pageJson.items || pageJson.orderedItems || [])
-      ref = pageJson.next
+      return members
     }
-    return cur
   }
 
   static async empty (owner, addressees, props = {}, pageProps = {}) {
@@ -2924,10 +3042,11 @@ app.get('/:type/:id',
     if (req.auth && req.auth.scope && !req.auth.scope.split(' ').includes('read')) {
       throw new createError.Forbidden('Missing read scope')
     }
-    if (!(await ActivityObject.exists(full))) {
+    logger.debug(`get route: ${full}`)
+    const obj = await ActivityObject.getById(full)
+    if (!obj) {
       throw new createError.NotFound('Object not found')
     }
-    const obj = new ActivityObject(full)
     if (!(await obj.canRead(req.auth?.subject))) {
       if (req.auth?.subject) {
         throw new createError.Forbidden('Not authorized to read this object')
@@ -3075,6 +3194,7 @@ app.post('/:type/:id',
   }))
 
 app.use((err, req, res, next) => {
+  logger.silly(err.stack)
   if (createError.isHttpError(err)) {
     if (err.statusCode > 500) {
       logger.error(`Error status ${err.statusCode}: `, err)

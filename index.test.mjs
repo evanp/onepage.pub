@@ -188,10 +188,12 @@ const getMembers = async (collection, token = null) => {
     return coll.items
   } else if ('first' in coll) {
     let members = []
-    for (let page = coll.first; page; page = page.next) {
-      const pageObj = await getObject(page.id, token)
+    let pageObj = null
+    for (let page = coll.first; page; page = pageObj.next) {
+      const pageId = typeof page === 'string' ? page : page.id
+      pageObj = await getObject(pageId, token)
       for (const prop of ['orderedItems', 'items']) {
-        if (pageObj[prop]) {
+        if (prop in pageObj) {
           members = members.concat(pageObj[prop])
         }
       }
@@ -203,8 +205,9 @@ const getMembers = async (collection, token = null) => {
 }
 
 const isInStream = async (collection, object, token = null) => {
+  const objectId = typeof object === 'string' ? object : object.id
   const members = await getMembers(collection, token)
-  return members.some((item) => item.id === object.id)
+  return members.some((item) => item.id === objectId)
 }
 
 const getProxy = async (id, actor, token) => {
@@ -336,18 +339,20 @@ async function signRequest (keyId, privateKey, method, url, date) {
   return header
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
   let client = null
 
   before(async () => {
+    console.log('Starting servers')
     child = await startServer(MAIN_PORT)
     remote = await startServer(REMOTE_PORT)
     client = await startClientServer(CLIENT_PORT)
   })
 
   after(() => {
+    console.log('Stopping servers')
     child.kill('SIGTERM')
     remote.kill('SIGTERM')
     client.close()
@@ -1121,45 +1126,43 @@ describe('onepage.pub', () => {
     })
   })
 
-  describe('Accept Follow Activity', () => {
+  describe('Accept Follow Activity', { only: true }, () => {
     let actor1 = null
     let token1 = null
     let actor2 = null
     let token2 = null
     let follow = null
     before(async () => {
+      console.log('starting register');
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
-      const followActivity = {
+      console.log('finished registering')
+      follow = await doActivity(actor1, token1, {
         '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
-      }
-      follow = await doActivity(actor1, token1, followActivity)
-      const acceptActivity = {
+      })
+      console.log('finished follow')
+      await settle(MAIN_PORT)
+      await doActivity(actor2, token2, {
         '@context': AS2_CONTEXT,
         to: actor1.id,
         type: 'Accept',
         object: follow.id
-      }
-      try {
-        await doActivity(actor2, token2, acceptActivity)
-      } catch (err) {
-        console.error(err)
-        throw err
-      }
+      })
+      await settle(MAIN_PORT)
     })
 
-    it("puts the actor in the other's followers", async () => {
+    it("puts the actor in the other's followers", { only: true }, async () => {
       assert(await isInStream(actor2.followers, actor1, token2))
     })
 
-    it("puts the other in the actor's following", async () => {
+    it("puts the other in the actor's following", { only: true }, async () => {
       assert(await isInStream(actor1.following, actor2, token1))
     })
 
-    it('distributes to the actor when the other posts to followers', async () => {
+    it('distributes to the actor when the other posts to followers', { only: true }, async () => {
       const createNote = await doActivity(actor2, token2, {
         '@context': AS2_CONTEXT,
         to: actor2.followers,
@@ -1168,10 +1171,11 @@ describe('onepage.pub', () => {
           en: 'Hello, world!'
         }
       })
+      await settle(MAIN_PORT)
       assert(await isInStream(actor1.inbox, createNote, token1))
     })
 
-    it('distributes to the actor when the other posts to public', async () => {
+    it('distributes to the actor when the other posts to public', { only: true }, async () => {
       const createNote = await doActivity(actor2, token2, {
         '@context': AS2_CONTEXT,
         to: 'https://www.w3.org/ns/activitystreams#Public',
@@ -1180,6 +1184,7 @@ describe('onepage.pub', () => {
           en: 'Hello, world!'
         }
       })
+      await settle(MAIN_PORT)
       assert(await isInStream(actor1.inbox, createNote, token1))
     })
   })
@@ -2124,6 +2129,7 @@ describe('onepage.pub', () => {
         object: actor2.id
       })
       await settle(MAIN_PORT)
+      await settle(REMOTE_PORT)
     })
 
     it("appears in the actor's pending following", async () => {
@@ -4845,6 +4851,77 @@ describe('onepage.pub', () => {
         target: noItems.id
       })
       assert.ok(!(await isInStream(noItems, note2, token)))
+    })
+  })
+
+  describe('Inbox overflow', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let firstAct = null
+    let lastAct = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor()
+      firstAct = await doActivity(actor2, token2, {
+        to: [actor1.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: `Hello, ${actor1.name}! first`
+          }
+        }
+      })
+      await settle(MAIN_PORT)
+      for (let i = 0; i < 23; i++) {
+        await doActivity(actor2, token2, {
+          to: [actor1.id],
+          type: 'Create',
+          object: {
+            type: 'Note',
+            contentMap: {
+              en: `Hello, ${actor1.name}! ${i}`
+            }
+          }
+        })
+      }
+      await settle(MAIN_PORT)
+      lastAct = await doActivity(actor2, token2, {
+        to: [actor1.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: `Hello, ${actor1.name}! last`
+          }
+        }
+      })
+      await settle(MAIN_PORT)
+    })
+    it('actor has items in the inbox', async () => {
+      const inbox = await getObject(actor1.inbox, token1)
+      assert.strictEqual(inbox.totalItems, 25)
+    })
+    it('first page in the inbox has members', async () => {
+      const inbox = await getObject(actor1.inbox, token1)
+      const firstPage = await getObject(inbox.first.id, token1)
+      assert.ok(firstPage.orderedItems)
+      assert.strictEqual(firstPage.orderedItems.length, 5)
+    })
+    it('last page in the inbox has members', async () => {
+      const inbox = await getObject(actor1.inbox, token1)
+      const lastPage = await getObject(inbox.last.id, token1)
+      assert.ok(lastPage.orderedItems)
+      assert.strictEqual(lastPage.orderedItems.length, 20)
+      assert.strictEqual(lastPage.orderedItems[19].id, firstAct.id)
+    })
+    it('first activity is in the inbox', async () => {
+      assert.ok(await isInStream(actor1.inbox, firstAct, token1))
+    })
+    it('last activity is in the inbox', async () => {
+      assert.ok(await isInStream(actor1.inbox, lastAct, token1))
     })
   })
 })
