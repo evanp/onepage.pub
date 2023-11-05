@@ -340,7 +340,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
   return header
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -2122,7 +2122,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Remote Follow Activity', { only: true }, () => {
+  describe('Remote Follow Activity', () => {
     let actor1 = null
     let token1 = null
     let actor2 = null
@@ -2141,19 +2141,19 @@ describe('onepage.pub', { only: true }, () => {
       await settle(REMOTE_PORT)
     })
 
-    it("appears in the actor's pending following", { only: true }, async () => {
+    it("appears in the actor's pending following", async () => {
       assert(await isInStream(actor1.pendingFollowing, follow, token1))
     })
 
-    it("appears in the other's pending followers", { only: true }, async () => {
+    it("appears in the other's pending followers", async () => {
       assert(await isInStream(actor2.pendingFollowers, follow, token2))
     })
 
-    it("does not put the actor in the other's followers", { only: true }, async () => {
+    it("does not put the actor in the other's followers", async () => {
       assert(!(await isInStream(actor2.followers, actor1, token2)))
     })
 
-    it("does not put the other in the actor's following", { only: true }, async () => {
+    it("does not put the other in the actor's following", async () => {
       assert(!(await isInStream(actor1.following, actor2, token1)))
     })
   })
@@ -5000,6 +5000,44 @@ describe('onepage.pub', { only: true }, () => {
       assert.ok(retrieved.to)
       assert.strictEqual(retrieved.to.length, 1)
       assert.strictEqual(retrieved.to[0].id, PUBLIC)
+    })
+  })
+
+  describe('Like uncached object', () => {
+    let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
+    let note = null
+    let like = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(REMOTE_PORT)
+      const create = await doActivity(actor1, token1, {
+        to: [PUBLIC],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'Hello, World!'
+          }
+        }
+      })
+      note = create.object
+      await settle(MAIN_PORT)
+      like = await doActivity(actor2, token2, {
+        to: [actor1.id],
+        cc: [PUBLIC],
+        type: 'Like',
+        object: note.id
+      })
+      await settle(REMOTE_PORT)
+    })
+    it('note is in liked collection', async () => {
+      assert.ok(await isInStream(actor2.liked, note, token2))
+    })
+    it('activity is in likes collection', async () => {
+      assert.ok(await isInStream(note.likes, like, token1))
     })
   })
 })
