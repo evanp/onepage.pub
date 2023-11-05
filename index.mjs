@@ -107,6 +107,18 @@ async function toId (value) {
   }
 }
 
+function toArray (value) {
+  if (typeof value === 'undefined') {
+    return []
+  } else if (value === null) {
+    return []
+  } else if (Array.isArray(value)) {
+    return value
+  } else {
+    return [value]
+  }
+}
+
 function makeUrl (relative) {
   if (relative.length > 0 && relative[0] === '/') {
     relative = relative.slice(1)
@@ -434,24 +446,19 @@ class ActivityObject {
   }
 
   static guessOwner (json) {
-    if ('attributedTo' in json) {
-      return json.attributedTo
-    } else if ('actor' in json) {
-      return json.actor
-    } else {
-      return null
+    for (const prop of ['attributedTo', 'actor', 'owner']) {
+      if (prop in json) {
+        return json[prop]
+      }
     }
+    return null
   }
 
   static guessAddressees (json) {
     let addressees = []
     for (const prop of ['to', 'cc', 'bto', 'bcc', 'audience']) {
       if (prop in json) {
-        if (Array.isArray(json[prop])) {
-          addressees = addressees.concat(json[prop])
-        } else {
-          addressees.push(json[prop])
-        }
+        addressees = addressees.concat(toArray(json[prop]))
       }
     }
     return addressees
@@ -515,6 +522,16 @@ class ActivityObject {
     }
   }
 
+  async setProp (name, value) {
+    const json = await this.json()
+    if (json) {
+      json[name] = value
+      this.#json = json
+    } else {
+      this.#json = { [name]: value }
+    }
+  }
+
   async expand () {
     const json = await this.expanded()
     this.#json = json
@@ -529,8 +546,14 @@ class ActivityObject {
     return ['CollectionPage', 'OrderedCollectionPage'].includes(await this.type())
   }
 
-  async save (owner, addressees) {
+  async save (owner = null, addressees = null) {
     const data = await this.compressed()
+    if (!owner) {
+      owner = ActivityObject.guessOwner(data)
+    }
+    if (!addressees) {
+      addressees = ActivityObject.guessAddressees(data)
+    }
     data.type = data.type || this.defaultType()
     data.id = data.id || await ActivityObject.makeId(data.type)
     data.updated = new Date().toISOString()
@@ -595,16 +618,23 @@ class ActivityObject {
     })
   }
 
-  async cache (owner, addressees) {
+  async cache (owner = null, addressees = null) {
     const dataId = await this.id()
     const data = await this.json()
+    if (!owner) {
+      owner = ActivityObject.guessOwner(data)
+    }
+    if (!addressees) {
+      addressees = ActivityObject.guessAddressees(data)
+    }
     const ownerId = await toId(owner) || data.id
+    const addresseeIds = await Promise.all(addressees.map((addressee) => toId(addressee)))
     const qry = 'INSERT OR REPLACE INTO object (id, owner, data) VALUES (?, ?, ?)'
     await db.run(qry, [dataId, ownerId, JSON.stringify(data)])
-    await Promise.all(addressees.map(async (addressee) =>
+    await Promise.all(addresseeIds.map(async (addresseeId) =>
       await db.run(
         'INSERT OR IGNORE INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-        [dataId, await toId(addressee)]
+        [dataId, await toId(addresseeId)]
       )))
   }
 
@@ -896,6 +926,19 @@ class ActivityObject {
   static isRemoteId (id) {
     return !id.startsWith(ORIGIN)
   }
+
+  static async copyAddresseeProps (to, from) {
+    for (const prop of ['to', 'cc', 'bto', 'bcc', 'audience']) {
+      const toValues = toArray(to[prop])
+      const fromValues = toArray(from[prop])
+      const merged = [...toValues, ...fromValues]
+      const ids = await Promise.all(merged.map((addressee) => toId(addressee)))
+      const unique = [...new Set(ids)]
+      if (unique.length > 0) {
+        to[prop] = unique
+      }
+    }
+  }
 }
 
 class Activity extends ActivityObject {
@@ -907,8 +950,10 @@ class Activity extends ActivityObject {
     return 'Activity'
   }
 
-  async apply (actor, addressees, ...args) {
+  async apply () {
     let activity = await this.json()
+    const actor = await ActivityObject.guessOwner(activity)
+    const addressees = ActivityObject.guessAddressees(activity)
     const actorObj = await ActivityObject.get(actor, ['followers', 'following', 'pendingFollowers', 'pendingFollowing'], actor)
     const appliers = {
       Follow: async () => {
@@ -1024,9 +1069,11 @@ class Activity extends ActivityObject {
         if (!object) {
           throw new createError.BadRequest('No object to create')
         }
-        object.attributedTo = actor.id
+        object.attributedTo = await actorObj.id()
+        await ActivityObject.copyAddresseeProps(object, activity)
+        await ActivityObject.copyAddresseeProps(activity, object)
         object.type = object.type || 'Object'
-        const summaryEn = `A(n) ${object.type} by ${actor.name}`
+        const summaryEn = `A(n) ${object.type} by ${await actorObj.name()}`
         if (!['name', 'nameMap', 'summary', 'summaryMap'].some(p => p in object)) {
           object.summaryMap = {
             en: summaryEn
@@ -1047,13 +1094,15 @@ class Activity extends ActivityObject {
             : { type: 'CollectionPage', items: [] }
           const page = new ActivityObject({
             partOf: object.id,
+            attributedTo: await actorObj.id(),
             ...pageProps
           })
-          await page.save(actor.id, addressees)
+          await ActivityObject.copyAddresseeProps(page, object)
+          await page.save()
           object.first = object.last = await page.id()
         }
         const saved = new ActivityObject(object)
-        await saved.save(actor.id, addressees)
+        await saved.save()
         activity.object = await saved.id()
         if (await saved.prop('inReplyTo')) {
           const inReplyToProp = await saved.prop('inReplyTo')
@@ -1075,7 +1124,7 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.getById(activity.object.id, actorObj)
         const objectOwner = await object.owner()
-        if (!objectOwner || await objectOwner.id() !== actor.id) {
+        if (!objectOwner || await objectOwner.id() !== await actorObj.id()) {
           throw new createError.BadRequest("You can't update an object you don't own")
         }
         // prevent updating certain properties directly
@@ -1173,7 +1222,7 @@ class Activity extends ActivityObject {
           updated: timestamp,
           deleted: timestamp,
           summaryMap: {
-            en: `A deleted ${await object.type()} by ${actor.name}`
+            en: `A deleted ${await object.type()} by ${await actorObj.name()}`
           }
         })
         return activity
@@ -1197,7 +1246,7 @@ class Activity extends ActivityObject {
           throw new createError.BadRequest("Can't add to a non-collection")
         }
         const targetOwner = await target.owner()
-        if (!targetOwner || await targetOwner.id() !== actor.id) {
+        if (!targetOwner || await targetOwner.id() !== await actorObj.id()) {
           throw new createError.BadRequest("You can't add to an object you don't own")
         }
         for (const prop of ['inbox', 'outbox', 'followers', 'following', 'liked']) {
@@ -1230,7 +1279,7 @@ class Activity extends ActivityObject {
           throw new createError.BadRequest("Can't remove from a non-collection")
         }
         const targetOwner = await target.owner()
-        if (!targetOwner || await targetOwner.id() !== actor.id) {
+        if (!targetOwner || await targetOwner.id() !== await actorObj.id()) {
           throw new createError.BadRequest("You can't remove from an object you don't own")
         }
         for (const prop of ['inbox', 'outbox', 'followers', 'following', 'liked']) {
@@ -1249,10 +1298,10 @@ class Activity extends ActivityObject {
           throw new createError.BadRequest('No object to like')
         }
         const object = await ActivityObject.get(activity.object, ['id', 'type', 'likes'], actorObj)
-        if (!await object.canRead(actor.id)) {
+        if (!await object.canRead(await actorObj.id())) {
           throw new createError.BadRequest("Can't like an object you can't read")
         }
-        const liked = new Collection(actor.liked)
+        const liked = new Collection(await actorObj.prop('liked'))
         if (await liked.hasMember(await object.id())) {
           throw new createError.BadRequest('Already liked!')
         }
@@ -1415,9 +1464,14 @@ class Activity extends ActivityObject {
     }
   }
 
-  async distribute (addressees) {
+  async distribute (addressees = null) {
     const owner = await this.owner()
     const activity = await this.expanded()
+    if (!addressees) {
+      addressees = ActivityObject.guessAddressees(activity)
+    }
+
+    addressees = await Promise.all(addressees.map(async (addressee) => toId(addressee)))
 
     // Expand public, followers, other lists
 
@@ -1493,6 +1547,10 @@ class Activity extends ActivityObject {
   static duckType (data) {
     const props = ['actor', 'object', 'target', 'result', 'origin', 'instrument']
     return props.some(p => p in data)
+  }
+
+  async setActor (actor) {
+    await this.setProp('actor', await toId(actor))
   }
 }
 
@@ -1571,15 +1629,16 @@ class Collection extends ActivityObject {
         await this.patch({ totalItems: collection.totalItems + 1 })
       } else {
         const owner = await this.owner()
-        const addressees = await this.addressees()
         const props = {
           type: firstJson.type,
           partOf: collection.id,
-          next: firstJson.id
+          next: firstJson.id,
+          attributedTo: owner
         }
+        await ActivityObject.copyAddresseeProps(props, await this.json())
         props[ip] = [objectId]
         const newFirst = new ActivityObject(props)
-        await newFirst.save(owner, addressees)
+        await newFirst.save()
         await this.patch({ totalItems: collection.totalItems + 1, first: await newFirst.id() })
         await first.patch({ prev: await newFirst.id() })
       }
@@ -1661,18 +1720,22 @@ class Collection extends ActivityObject {
       type: 'OrderedCollectionPage',
       orderedItems: [],
       partOf: id,
+      attributedTo: owner,
+      to: addressees,
       ...pageProps
     })
-    await page.save(owner, addressees)
+    await page.save()
     const coll = new ActivityObject({
       id,
       type: 'OrderedCollection',
       totalItems: 0,
       first: await page.id(),
       last: await page.id(),
+      attributedTo: owner,
+      to: addressees,
       ...props
     })
-    await coll.save(owner, addressees)
+    await coll.save()
     return coll
   }
 
@@ -1702,22 +1765,36 @@ class Collection extends ActivityObject {
 }
 
 class RemoteActivity extends Activity {
-  async save (owner, addressees) {
+  async save (owner = null, addressees = null) {
+    const data = await this.json()
+    if (!owner) {
+      owner = ActivityObject.guessOwner(data)
+    }
+    if (!addressees) {
+      addressees = ActivityObject.guessAddressees(data)
+    }
     const dataId = await this.id()
-    const ownerId = await owner.id() || dataId
+    const ownerId = await toId(owner) || dataId
+    const addresseeIds = await Promise.all(addressees.map((addressee) => toId(addressee)))
     await db.run(
       'INSERT INTO object (id, owner, data) VALUES (?, ?, ?)',
-      [await dataId, ownerId, JSON.stringify(await this.json())]
+      [await dataId, ownerId, JSON.stringify(data)]
     )
-    await Promise.all(addressees.map((addressee) =>
+    await Promise.all(addresseeIds.map((addresseeId) =>
       db.run(
         'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-        [dataId, addressee]
+        [dataId, addresseeId]
       )))
   }
 
-  async apply (remote, addressees, ...args) {
+  async apply (remote = null, addressees = null, ...args) {
     const owner = args[0]
+    if (!remote) {
+      remote = await ActivityObject.get(await this.prop('actor'), ['id'], owner)
+    }
+    if (!addressees) {
+      addressees = ActivityObject.guessAddressees(await this.json())
+    }
     const ownerObj = await ActivityObject.get(
       owner,
       ['id', 'type', 'followers', 'following', 'pendingFollowers', 'pendingFollowing'],
@@ -2044,7 +2121,14 @@ class User {
 
   async save () {
     this.actorId = await ActivityObject.makeId('Person')
-    const data = { name: this.username, id: this.actorId, type: 'Person', preferredUsername: this.username }
+    const data = {
+      name: this.username,
+      id: this.actorId,
+      type: 'Person',
+      preferredUsername: this.username,
+      attributedTo: this.actorId,
+      to: [PUBLIC]
+    }
     const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
     for (const prop of props) {
       const coll = await Collection.empty(this.actorId, [PUBLIC], { nameMap: { en: `${this.username}'s ${prop}` } })
@@ -2069,11 +2153,16 @@ class User {
         }
       }
     )
-    const pkey = new ActivityObject({ type: 'Key', owner: this.actorId, publicKeyPem: publicKey })
-    await pkey.save(this.actorId, [PUBLIC])
+    const pkey = new ActivityObject({
+      type: 'Key',
+      owner: this.actorId,
+      to: [PUBLIC],
+      publicKeyPem: publicKey
+    })
+    await pkey.save()
     data.publicKey = await pkey.brief()
     const person = new ActivityObject(data)
-    await person.save(this.actorId, [PUBLIC])
+    await person.save()
     const passwordHash = await bcrypt.hash(this.password, 10)
     await db.run('INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)', [this.username, passwordHash, this.actorId, privateKey])
   }
@@ -2989,16 +3078,10 @@ app.post('/endpoint/upload',
     const owner = new ActivityObject(req.auth.subject)
 
     const ownerId = await owner.id()
-    const ownerJson = await owner.json()
 
     const jsonBuffer = req.files.object[0].buffer
     let data = JSON.parse(jsonBuffer.toString('utf8'))
 
-    const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
-      .map((prop) => data[prop])
-      .filter((a) => a)
-      .flat()
-      .map(toId))
     // We do some testing for implicit create
     const type = data.type
     if (ActivityObject.isActivityType(type)) {
@@ -3022,9 +3105,13 @@ app.post('/endpoint/upload',
       data.object.url = makeUrl(`/uploads/${uploaded.relative}`)
       data.object.mediaType = uploaded.mediaType
     }
+
     const activity = new Activity(data)
-    await activity.apply(ownerJson, addressees)
-    await activity.save(ownerId, addressees)
+
+    activity.setActor(ownerId)
+
+    await activity.apply()
+    await activity.save()
 
     uploaded.setObjectId(await toId(await activity.prop('object')))
     await uploaded.save()
@@ -3033,7 +3120,7 @@ app.post('/endpoint/upload',
     await outbox.prepend(activity)
     const inbox = new Collection(await owner.prop('inbox'))
     await inbox.prepend(activity)
-    pq.add(activity.distribute(addressees))
+    pq.add(activity.distribute())
     const output = await activity.expanded()
     output['@context'] = output['@context'] || CONTEXT
     res.status(201)
@@ -3158,14 +3245,8 @@ app.post('/:type/:id',
         throw new createError.Forbidden('This app does not have permission to write to this outbox')
       }
       const ownerId = await owner.id()
-      const ownerJson = await owner.json()
       const outbox = await Collection.fromActivityObject(obj)
       let data = req.body
-      const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
-        .map((prop) => data[prop])
-        .filter((a) => a)
-        .flat()
-        .map(toId))
       // We do some testing for implicit create
       const type = data.type
       if (ActivityObject.isActivityType(type)) {
@@ -3184,13 +3265,13 @@ app.post('/:type/:id',
       }
       data.id = await ActivityObject.makeId(data.type)
       data.actor = ownerId
-      const activity = new Activity(data)
-      await activity.apply(ownerJson, addressees)
-      await activity.save(ownerId, addressees)
+      const activity = new Activity(data, ownerId)
+      await activity.apply()
+      await activity.save()
       await outbox.prepend(activity)
       const inbox = new Collection(await owner.prop('inbox'))
       await inbox.prepend(activity)
-      pq.add(activity.distribute(addressees))
+      pq.add(activity.distribute())
       const output = await activity.expanded()
       output['@context'] = output['@context'] || CONTEXT
       res.status(201)
@@ -3201,7 +3282,7 @@ app.post('/:type/:id',
       if (!req.auth?.subject) {
         throw new createError.Unauthorized('Invalid HTTP signature')
       }
-      const remote = new ActivityObject(req.auth.subject)
+      const remote = await ActivityObject.getById(req.auth.subject)
       const remoteId = await remote.id()
       if (!(typeof remoteId === 'string')) {
         throw new createError.InternalServerError(`Invalid remote id ${JSON.stringify(remoteId)}`)
@@ -3212,16 +3293,10 @@ app.post('/:type/:id',
       if (await User.isUser(remote)) {
         throw new createError.Forbidden('Remote delivery only')
       }
-      const addressees = await Promise.all(['to', 'cc', 'bto', 'bcc']
-        .map((prop) => req.body[prop])
-        .filter((a) => a)
-        .flat()
-        .map(toId))
-      // always include the recipient
-      addressees.push(await owner.id())
       const activity = new RemoteActivity(req.body)
-      await activity.apply(await remote.json(), addressees, await owner.json())
-      await activity.save(remote, addressees)
+      activity.setActor(remote)
+      await activity.apply(null, null, await owner.json())
+      await activity.save(remote)
       const inbox = new Collection(await owner.prop('inbox'))
       await inbox.prepend(activity)
       res.status(202)
