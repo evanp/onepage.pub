@@ -1,5 +1,4 @@
 import 'dotenv/config'
-console.log(process.env)
 import express from 'express'
 import sqlite3 from 'sqlite3'
 import passport from 'passport'
