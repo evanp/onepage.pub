@@ -1,3 +1,5 @@
+import 'dotenv/config'
+console.log(process.env)
 import express from 'express'
 import sqlite3 from 'sqlite3'
 import passport from 'passport'
@@ -25,14 +27,14 @@ import { tmpdir } from 'os'
 
 // Configuration
 
-const DATABASE = process.env.OPP_DATABASE || ':memory:'
-const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
-const PORT = process.env.OPP_PORT || 65380
-const KEY = process.env.OPP_KEY || 'localhost.key'
-const CERT = process.env.OPP_CERT || 'localhost.crt'
-const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
-const SESSION_SECRET = process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
-const INVITE_CODE = process.env.OPP_INVITE_CODE || null
+const DATABASE = process.env.OPP_DATABASE
+const HOSTNAME = process.env.OPP_HOSTNAME
+const PORT = process.env.OPP_PORT
+const KEY = process.env.OPP_KEY
+const CERT = process.env.OPP_CERT
+const LOG_LEVEL = process.env.OPP_LOG_LEVEL
+const SESSION_SECRET = process.env.OPP_SESSION_SECRET
+const INVITE_CODE = process.env.OPP_INVITE_CODE
 const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
 const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || (new URL(ORIGIN)).hostname
