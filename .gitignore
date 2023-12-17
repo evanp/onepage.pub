@@ -2,3 +2,4 @@ node_modules
 values-*.yaml
 .DS_Store
 .env
+.deepsource.toml
