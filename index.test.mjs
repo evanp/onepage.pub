@@ -9,6 +9,15 @@ import fs from 'node:fs'
 import { promisify } from 'node:util'
 import { Blob } from 'node:buffer'
 
+// remove temporary database on startup
+fs.unlink('temp.sqlite', (err) => {
+  if (err) {
+    console.log(err)
+  } else {
+    console.log('Old database deleted successfully')
+  }
+})
+
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
 const MAIN_PORT = 50941 // V
@@ -345,6 +354,9 @@ describe('onepage.pub', () => {
   let remote = null
   let client = null
 
+  // use temporary database for testing 
+  process.env.OPP_DATABASE = "temp.sqlite"
+
   before(async () => {
     console.log('Starting servers')
     child = await startServer(MAIN_PORT)
@@ -357,6 +369,7 @@ describe('onepage.pub', () => {
     child.kill('SIGTERM')
     remote.kill('SIGTERM')
     client.close()
+    console.log('finished running tests')
   })
 
   describe('Root object', () => {
