@@ -118,3 +118,5 @@ Small note: If editing the README, please conform to the [standard-readme](https
 ## License
 
 Apache-2.0 © 2023 Evan Prodromou
+
+As required by the Apache-2.0 license: Please note that all files dated 12/15/2023 & newer have been modified from the original...
