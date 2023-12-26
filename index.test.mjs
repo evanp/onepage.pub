@@ -357,7 +357,7 @@ describe('onepage.pub', () => {
   // use temporary database for testing 
   process.env.OPP_DATABASE = "temp.sqlite"
   // increase rate limit for testing
-  process.env.OPP_RATE_LIMIT = 100000
+  process.env.OPP_RATE_LIMIT = "100000"
 
   before(async () => {
     console.log('Starting servers')
