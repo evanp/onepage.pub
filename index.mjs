@@ -26,7 +26,6 @@ import path from 'path'
 import { tmpdir } from 'os'
 
 // Configuration
-
 const DATABASE = process.env.OPP_DATABASE
 const HOSTNAME = process.env.OPP_HOSTNAME
 const PORT = process.env.OPP_PORT
@@ -39,7 +38,7 @@ const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
 const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || (new URL(ORIGIN)).hostname
 const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
-const RATE_LIMIT = process.env.OPP_RATE_LIMIT || 100
+const RATE_LIMIT = process.env.OPP_RATE_LIMIT
 
 // Ensure the Upload directory exists
 
