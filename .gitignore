@@ -5,3 +5,4 @@ values-*.yaml
 .deepsource.toml
 test.db
 temp.sqlite
+*.db
