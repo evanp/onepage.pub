@@ -6,25 +6,6 @@ import 'dotenv/config'
 
 const MAIN_PORT = process.env.OPP_PORT
 console.log(`\nRate Limit: ${process.env.OPP_RATE_LIMIT}\n`)
-/*
-const server = https.createServer((req, res) => {
-  try {
-    // server logic here
-  } catch (err) {
-    console.error(err);
-    res.statusCode = 500;
-    res.end('Internal Server Error'); 
-  }
-});
-
-server.listen(MAIN_PORT, () => {
-  console.log(`Server listening on port: ${MAIN_PORT}`);
-});
-
-server.on('error', (err) => {
-  console.error('Server error:', err);
-});
-*/
 
 describe('request rate limits', () => {
 
