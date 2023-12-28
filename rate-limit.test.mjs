@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import 'dotenv/config'
 
 const MAIN_PORT = process.env.OPP_PORT
-console.log(`\nRate Limit: ${process.env.OPP_RATE_LIMIT}\n`)
+console.log(`\nRate Limit: ${process.env.OPP_RATE_LIMIT}\n\nstarting rate limit tests\n`)
 
 describe('request rate limits', () => {
 
@@ -17,8 +17,7 @@ describe('request rate limits', () => {
     };
   
   beforeEach( () => {
-    console.log(`starting rate limit tests\n`)
-
+    
     const options = {
       key: readFileSync(process.env.OPP_KEY),
       cert: readFileSync(process.env.OPP_CERT)
@@ -44,8 +43,7 @@ describe('request rate limits', () => {
 
   afterEach(() => {
     https.close
-    console.log(`finished rate limit tests\n`)
-  })
+    })
 
     it('should limit requests per IP', async () => {
       let nextCallCount = 0;
@@ -93,13 +91,37 @@ describe('request rate limits', () => {
           req.on('error', (e) => {
             console.error(`problem with request: ${e.message}`);
           });
-                    
+           
           req.end();
       }
       return nextCallCount;
   
-      // Assert next() was called for all requests 
+      // Assert all 50 requests were processed 
       assert.strictEqual(nextCallCount, 50);
+    });
+    
+    it('uses standard headers', async () => {
+
+      const req = https.request(options, (res) => {
+
+        if (res.statusCode === 200) {
+            // success
+            assert(res.headers['RateLimit-Limit']);
+            assert(res.headers['RateLimit-Remaining']); 
+            assert(res.headers['RateLimit-Reset']);
+    
+            assert(!res.headers['X-RateLimit-Limit']);
+            assert(!res.headers['X-RateLimit-Remaining']);
+            assert(!res.headers['X-RateLimit-Reset']);
+          }
+               
+      });
+        req.on('error', (e) => {
+          console.error(`problem with request: ${e.message}`);
+        });
+         
+        req.end();
     });
   
   });
+  
