@@ -67,7 +67,6 @@ describe('request rate limits', () => {
   })
 
     it('should limit requests per IP', async () => {
-      // Mock request and response objects
       let nextCallCount = 0;
        
       // Call limiter middleware multiple times from same IP
@@ -90,26 +89,36 @@ describe('request rate limits', () => {
           req.end();
       }
       return nextCallCount;
-      console.log(`Next call count: ${nextCallCount}`);
+      
       // Assert request was blocked after exceeding limit
       assert.strictEqual(nextCallCount, 100);
     });
-  
-    /*
+      
     it('should allow requests below limit', async () => {
-      // Mock request and response objects
-      const req = {};
-      const res = {};
-      const next = () => {};
-  
+      let nextCallCount = 0;
+        
       // Call limiter middleware below limit
       for(let i = 0; i < 50; i++) {
-        limiter(req, res, next);
+        const req = https.request(options, (res) => {
+
+          if (res.statusCode === 200) {
+              // success
+              nextCallCount++;
+            } else {
+              // handle error
+            }
+                     
+        });
+          req.on('error', (e) => {
+            console.error(`problem with request: ${e.message}`);
+          });
+                    
+          req.end();
       }
+      return nextCallCount;
   
       // Assert next() was called for all requests 
-      assert.strictEqual(next.callCount, 50);
+      assert.strictEqual(nextCallCount, 50);
     });
-    */
-
+  
   });
