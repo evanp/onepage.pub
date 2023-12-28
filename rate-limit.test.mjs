@@ -1,13 +1,12 @@
-import { describe, before, after, it } from 'node:test'
+import { describe, beforeEach, afterEach, it } from 'node:test'
 import assert from 'node:assert'
 import https from 'node:https'
+import { readFileSync } from 'node:fs'
 import 'dotenv/config'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
-
 const MAIN_PORT = process.env.OPP_PORT
-console.log(`Rate Limit: ${process.env.OPP_RATE_LIMIT}`)
-
+console.log(`\nRate Limit: ${process.env.OPP_RATE_LIMIT}\n`)
+/*
 const server = https.createServer((req, res) => {
   try {
     // server logic here
@@ -25,7 +24,7 @@ server.listen(MAIN_PORT, () => {
 server.on('error', (err) => {
   console.error('Server error:', err);
 });
-
+*/
 
 describe('request rate limits', () => {
 
@@ -36,14 +35,35 @@ describe('request rate limits', () => {
         method: 'GET'  
     };
   
-  before(async () => {
+  beforeEach( () => {
+    console.log(`starting rate limit tests\n`)
+
+    const options = {
+      key: readFileSync(process.env.OPP_KEY),
+      cert: readFileSync(process.env.OPP_CERT)
+    };
     
+    try {
+      https.createServer(options, (req, res) => {
+        try {
+          res.writeHead(200);
+          res.end('hello world\n hello');
+        } catch (err) {
+          console.error(err);
+          res.statusCode = 500;
+          res.end('Internal Server Error'); 
+        }
+      }).listen(process.env.OPP_PORT);
+    } catch (err) {
+      console.error('Error starting HTTPS server:', err);
+      process.exit(1);
+    }
+    console.log(`Server listening on port: ${process.env.OPP_PORT}`);
   })
 
-  after(() => {
-    console.log('Stopping server')
-    server.close()
-    console.log('finished rate limit tests')
+  afterEach(() => {
+    https.close
+    console.log(`finished rate limit tests\n`)
   })
 
     it('should limit requests per IP', async () => {
