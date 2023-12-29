@@ -65,6 +65,7 @@ if you're using Kubernetes or another proxy to terminate SSL.
 - OPP_NAME: a name to show for the server. Defaults to the hostname part
   of the origin.
 - OPP_UPLOAD_DIR: a directory to store uploaded files. Defaults to a temporary dir, which changes every time you run it. You should set this to a permanent directory.
+- OPP_RATE_LIMIT: Limits each IP to 100 requests per `window` (here, per 15 minutes). Can be changed in the .env file
 
 ## API
 

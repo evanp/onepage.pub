@@ -26,7 +26,6 @@ import path from 'path'
 import { tmpdir } from 'os'
 
 // Configuration
-
 const DATABASE = process.env.OPP_DATABASE
 const HOSTNAME = process.env.OPP_HOSTNAME
 const PORT = process.env.OPP_PORT
@@ -39,6 +38,7 @@ const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
 const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || (new URL(ORIGIN)).hostname
 const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
+const RATE_LIMIT = process.env.OPP_RATE_LIMIT
 
 // Ensure the Upload directory exists
 
@@ -2322,7 +2322,7 @@ app.use(session({
 
 const limiter = rateLimit({
 	windowMs: 15 * 60 * 1000, // 15 minutes
-	limit: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
+	limit: RATE_LIMIT, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
 	standardHeaders: 'draft-7', // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
 	legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
 	// store: ... , // Use an external store for consistency across multiple server instances.
