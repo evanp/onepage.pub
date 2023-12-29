@@ -46,8 +46,10 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR)
 }
 
-// Calculated constants
-
+/**
+ * Reads key and certificate data from files. 
+ * Parses a block list file into an array of blocked domains.
+ */
 const KEY_DATA = fs.readFileSync(KEY)
 const CERT_DATA = fs.readFileSync(CERT)
 const BLOCKED_DOMAINS = (() => {
