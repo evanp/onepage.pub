@@ -38,7 +38,6 @@ describe('request rate limits', () => {
       console.error('Error starting HTTPS server:', err);
       process.exit(1);
     }
-    console.log(`Server listening on port: ${process.env.OPP_PORT}`);
   })
 
   afterEach(() => {
