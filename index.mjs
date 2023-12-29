@@ -3387,9 +3387,12 @@ process.on('exit', (code) => {
   console.log(`About to exit with code: ${code}`)
 })
 
-// If we're public, run with ORIGIN. Otherwise,
-// run with HTTPS
-
+/**
+ * Create HTTP or HTTPS server based on environment variable.
+ * Use HTTP server if OPP_ORIGIN is set, otherwise use HTTPS 
+ * with provided certificate.
+ * Listen on the given PORT and log when listening.
+*/
 const server = (process.env.OPP_ORIGIN)
   ? http.createServer(app)
   : https.createServer({
