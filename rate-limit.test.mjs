@@ -62,7 +62,9 @@ describe('request rate limits', () => {
                      
         });
           req.on('error', (e) => {
-            console.error(`problem with request: ${e.message}`);
+            if (e.message != 'self-signed certificate') {
+              console.error(`problem with request: ${e.message}`);
+            }
           });
                     
           req.end();
@@ -89,7 +91,9 @@ describe('request rate limits', () => {
                      
         });
           req.on('error', (e) => {
-            console.error(`problem with request: ${e.message}`);
+            if (e.message != 'self-signed certificate') {
+              console.error(`problem with request: ${e.message}`);
+            }
           });
            
           req.end();
@@ -117,7 +121,9 @@ describe('request rate limits', () => {
                
       });
         req.on('error', (e) => {
-          console.error(`problem with request: ${e.message}`);
+          if (e.message != 'self-signed certificate') {
+            console.error(`problem with request: ${e.message}`);
+          }
         });
          
         req.end();
