@@ -9,14 +9,16 @@ import fs from 'node:fs'
 import { promisify } from 'node:util'
 import { Blob } from 'node:buffer'
 
-// remove temporary database on startup
-fs.unlink('temp.sqlite', (err) => {
-  if (err) {
-    console.log(err)
-  } else {
-    console.log('Old database deleted successfully')
-  }
-})
+// remove temporary database on startup if it exists
+if (fs.existsSync('temp.sqlite')) {
+  fs.unlink('temp.sqlite', (err) => {
+    if (err) {
+      console.log(err)
+    } else {
+      console.log('Old database deleted successfully')
+    }
+  })
+}
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
