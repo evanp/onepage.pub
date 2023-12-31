@@ -48,7 +48,7 @@ describe('request rate limits', () => {
       let nextCallCount = 0;
        
       // Call limiter middleware multiple times from same IP
-      for(let i = 0; i < 150; i++) {
+      for(let i = 0; i < +process.env.OPP_RATE_LIMIT + 50; i++) {
         
         const req = https.request(options, (res) => {
 
@@ -78,7 +78,7 @@ describe('request rate limits', () => {
       let nextCallCount = 0;
         
       // Call limiter middleware below limit
-      for(let i = 0; i < 50; i++) {
+      for(let i = 0; i < +process.env.OPP_RATE_LIMIT - 50; i++) {
         const req = https.request(options, (res) => {
 
           if (res.statusCode === 200) {
