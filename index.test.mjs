@@ -138,6 +138,14 @@ const registerActor = async (port = MAIN_PORT) => {
   return [actor, token, cookie]
 }
 
+/**
+ * Posts an activity to the given actor's outbox.
+ * 
+ * @param {Object} actor - The actor object
+ * @param {string} token - The authentication token
+ * @param {Object} activity - The activity object to post
+ * @returns {Promise<Object>} - Promise resolving to the posted activity response
+ */
 const doActivity = async (actor, token, activity) => {
   const res = await fetch(actor.outbox, {
     method: 'POST',
@@ -236,6 +244,14 @@ const getProxy = async (id, actor, token) => {
   }
 }
 
+/**
+ * Checks if a proxy can be retrieved for the given ID using the provided actor and token.
+ * 
+ * @param {string} id - The ID to attempt to get a proxy for
+ * @param {object} actor - The actor object with API endpoints
+ * @param {string} token - The access token to use for the API request
+ * @returns {boolean} True if a proxy object could be retrieved, false otherwise
+ */
 const canGetProxy = async (id, actor, token) => {
   const result = await getProxy(id, actor, token)
   return !!result
