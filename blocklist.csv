@@ -1,3 +1,3 @@
 #domain,#severity,#reject_media,#reject_reports,#public_comment,#obfuscate
 localhost:51998,suspend,false,false,,false
-localhost:52998,suspend,false,false,,false
+localhost:52998,suspend,false,false,"keep for testing",false
