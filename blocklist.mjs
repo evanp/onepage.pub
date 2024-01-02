@@ -24,7 +24,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
 const MAIN_PORT = 50941 // V
 const REMOTE_PORT = 52998 // Cr
-const BLOCKED_REMOTE_PORT = 51998 // Cr
+const BLOCKED_DOMAIN = 52998 // use for blocklist test
 const CLIENT_PORT = 54938 // Mn
 const THIRD_PORT = 55845 // Fe
 const FOURTH_PORT = 58933 // Co
@@ -400,17 +400,10 @@ describe('onepage.pub', () => {
     let server = null
     let created = null
     before(async () => {
-      // TODO: figure out how to set the path for the blocklist better
-      /*
-      server = await startServer(FOURTH_PORT,
-        { OPP_BLOCK_LIST: path.join('.', 'blocklist.csv') }
-      );
-      */
-     
       server = await startServer(FOURTH_PORT, {});
       
       [actor1, token1] = await registerActor(MAIN_PORT);
-      [actor2, token2] = await registerActor(REMOTE_PORT);
+      [actor2, token2] = await registerActor(BLOCKED_DOMAIN);
       [actor3, token3] = await registerActor(FOURTH_PORT)
       created = await doActivity(actor3, token3, {
         to: [PUBLIC],
@@ -426,7 +419,7 @@ describe('onepage.pub', () => {
     })
     after(async () => {
       await settle(MAIN_PORT)
-      await settle(REMOTE_PORT)
+      await settle(BLOCKED_DOMAIN)
       await settle(FOURTH_PORT)
       server.kill()
     })
@@ -457,7 +450,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await settle(REMOTE_PORT)
+      await settle(BLOCKED_DOMAIN)
       assert.ok(!await isInStream(actor3.inbox, activity, token3))
     })
     
