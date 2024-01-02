@@ -460,8 +460,9 @@ describe('onepage.pub', () => {
       await settle(REMOTE_PORT)
       assert.ok(!await isInStream(actor3.inbox, activity, token3))
     })
+    
 
-    /*
+    
     it('will accept read from unblocked', async () => {
       assert.ok(await canGetProxy(created.object.id, actor1, token1))
     })
@@ -469,6 +470,6 @@ describe('onepage.pub', () => {
     it('will not accept read from blocked', async () => {
       assert.ok(!await canGetProxy(created.object.id, actor2, token2))
     })
-    */
+    
   })
 })

@@ -62,7 +62,6 @@ const BLOCKED_DOMAINS = (() => {
       domains.push(fields[0])
     }
   }
-  console.log(`Blocked domains: ${domains}`)
   return domains
 })()
 
@@ -152,7 +151,8 @@ function domainIsBlocked (url) {
     logger.warn(`Invalid URL: ${url}`)
     return false
   }
-  const hostname = u.host
+  const hostname = u.host? u.host : u.href
+  console.log(u)
   return BLOCKED_DOMAINS.includes(hostname)
 }
 
@@ -224,7 +224,6 @@ class HTTPSignature {
       this.privateKey = privateKey
       this.method = method
       this.url = (isString(url)) ? new URL(url) : url
-      console.log(this.url)
       this.date = date
       this.signature = this.sign(this.signableData())
       this.header = `keyId="${this.keyId}",headers="(request-target) host date",signature="${this.signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`
@@ -2304,12 +2303,12 @@ const app = express()
 const upload = multer({ storage: multer.memoryStorage() })
 
 app.use((req, res, next) => {
-  const requester = req.headers.referer || req.headers.origin || req.headers.host
-  console.log(`Request by: ${requester}`)
+  const requester = req.headers.host
+
   if (domainIsBlocked(requester)) {
-    //throw new createError.Forbidden('Remote delivery blocked')
-    console.log('Remote delivery blocked')
-    res.status(403).send('Remote delivery blocked')
+    console.log(`Blocklist match: ${requester}`)
+  //  res.status(403).send('Remote delivery blocked')
+    return next()
     //res.end 
    }
   const oldEnd = res.end
