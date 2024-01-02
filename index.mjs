@@ -34,7 +34,7 @@ const CERT = process.env.OPP_CERT
 const LOG_LEVEL = process.env.OPP_LOG_LEVEL
 const SESSION_SECRET = process.env.OPP_SESSION_SECRET
 const INVITE_CODE = process.env.OPP_INVITE_CODE
-const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
+const BLOCK_LIST = process.env.OPP_BLOCK_LIST || "blockList.csv"
 const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || (new URL(ORIGIN)).hostname
 const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
@@ -62,6 +62,7 @@ const BLOCKED_DOMAINS = (() => {
       domains.push(fields[0])
     }
   }
+  console.log(`Blocked domains: ${domains}`)
   return domains
 })()
 
@@ -223,6 +224,7 @@ class HTTPSignature {
       this.privateKey = privateKey
       this.method = method
       this.url = (isString(url)) ? new URL(url) : url
+      console.log(this.url)
       this.date = date
       this.signature = this.sign(this.signableData())
       this.header = `keyId="${this.keyId}",headers="(request-target) host date",signature="${this.signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`
@@ -2302,6 +2304,14 @@ const app = express()
 const upload = multer({ storage: multer.memoryStorage() })
 
 app.use((req, res, next) => {
+  const requester = req.headers.referer || req.headers.origin || req.headers.host
+  console.log(`Request by: ${requester}`)
+  if (domainIsBlocked(requester)) {
+    //throw new createError.Forbidden('Remote delivery blocked')
+    console.log('Remote delivery blocked')
+    res.status(403).send('Remote delivery blocked')
+    //res.end 
+   }
   const oldEnd = res.end
   res.end = function (...args) {
     const subject = req.auth?.subject || '-'
@@ -2617,7 +2627,7 @@ app.post('/register', csrf, wrap(async (req, res) => {
     req.jwtKeyData,
     { algorithm: 'RS256' }
   )
-
+  
   req.login(user, (err) => {
     if (err) {
       throw new createError.InternalServerError('Failed to login')
