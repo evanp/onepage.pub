@@ -151,8 +151,7 @@ function domainIsBlocked (url) {
     logger.warn(`Invalid URL: ${url}`)
     return false
   }
-  const hostname = u.host? u.host : u.href
-  //console.log(u)
+  const hostname = u.host
   return BLOCKED_DOMAINS.includes(hostname)
 }
 
@@ -2308,9 +2307,7 @@ app.use((req, res, next) => {
   if (domainIsBlocked(requester)) {
     console.log(`Blocklist match: ${requester}`)
     res.status(403).send('Remote delivery blocked')
-    return next()
-    //res.end 
-   }
+  }
   const oldEnd = res.end
   res.end = function (...args) {
     const subject = req.auth?.subject || '-'

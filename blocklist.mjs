@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { describe, before, after, it } from 'node:test'
 import { spawn } from 'node:child_process'
 import assert from 'node:assert'
@@ -400,10 +401,10 @@ describe('onepage.pub', () => {
     let server = null
     let created = null
     before(async () => {
-      server = await startServer(FOURTH_PORT, {});
+      server = await startServer(process.env.OPP_PORT, {});
       
       [actor1, token1] = await registerActor(MAIN_PORT);
-      [actor2, token2] = await registerActor(BLOCKED_DOMAIN);
+      [actor2, token2] = await registerActor(REMOTE_PORT);
       [actor3, token3] = await registerActor(FOURTH_PORT)
       created = await doActivity(actor3, token3, {
         to: [PUBLIC],
@@ -419,7 +420,7 @@ describe('onepage.pub', () => {
     })
     after(async () => {
       await settle(MAIN_PORT)
-      await settle(BLOCKED_DOMAIN)
+      await settle(REMOTE_PORT)
       await settle(FOURTH_PORT)
       server.kill()
     })
@@ -450,7 +451,7 @@ describe('onepage.pub', () => {
           }
         }
       })
-      await settle(BLOCKED_DOMAIN)
+      await settle(REMOTE_PORT)
       assert.ok(!await isInStream(actor3.inbox, activity, token3))
     })
     
