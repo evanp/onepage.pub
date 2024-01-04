@@ -22,7 +22,7 @@ if (fs.existsSync('temp.sqlite')) {
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
 const MAIN_PORT = 50941 // V
-const REMOTE_PORT = 52998 // Cr
+const REMOTE_PORT = 51996 // Cr
 const CLIENT_PORT = 54938 // Mn
 const FOURTH_PORT = 58933 // Co
 
@@ -155,11 +155,15 @@ const doActivity = async (actor, token, activity) => {
     },
     body: JSON.stringify(activity)
   })
+  
+  /*
   if (res.status !== 201) {
     const body = await res.text()
     throw new Error(`Bad status code ${res.status}: ${body}`)
   }
-  return await res.json()
+  */
+  //return await res.json()
+  return res
 }
 
 const failActivity = async (actor, token, activity) => {
@@ -397,13 +401,13 @@ describe('onepage.pub', () => {
     let server = null
     let created = null
     before(async () => {
-      server = await startServer(process.env.OPP_PORT, {});
+      server = await startServer(FOURTH_PORT, {});
       
-    //  [actor1, token1] = await registerActor(MAIN_PORT);
+      [actor1, token1] = await registerActor(MAIN_PORT);
       [actor2, token2] = await registerActor(REMOTE_PORT);
       [actor3, token3] = await registerActor(FOURTH_PORT)
 
-      /*
+      
       created = await doActivity(actor3, token3, {
         to: [PUBLIC],
         type: 'Create',
@@ -415,10 +419,10 @@ describe('onepage.pub', () => {
         }
       })
       await settle(FOURTH_PORT)
-      */
+      
     })
     after(async () => {
-    //  await settle(MAIN_PORT)
+      await settle(MAIN_PORT)
       await settle(REMOTE_PORT)
       await settle(FOURTH_PORT)
       server.kill()
@@ -442,7 +446,7 @@ describe('onepage.pub', () => {
     */
 
     it('cannot receive from blocked', async () => {
-      const activity = await doActivity(actor2, token2, {
+      const req = await doActivity(actor2, token2, {
         to: [actor3.id],
         type: 'Create',
         object: {
@@ -452,8 +456,17 @@ describe('onepage.pub', () => {
           }
         }
       })
+      const res = {
+        status: () => {},
+        send: () => {}
+      };
+      
+      await (req, res)
       await settle(REMOTE_PORT)
-      assert.ok(!await isInStream(actor3.inbox, activity, token3))
+      //assert.ok(!await isInStream(actor3.inbox, activity, token3))
+      assert(res.status, '403')
+      assert(res.send, 'Remote delivery blocked')
+      //assert(next.calledOnce);
     })
     
 

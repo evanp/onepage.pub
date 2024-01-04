@@ -2307,7 +2307,7 @@ app.use((req, res, next) => {
 
   if (domainIsBlocked(requester)) {
     console.log(`Blocklist match: ${requester}`)
-    res.status(403).send('Remote delivery blocked')
+    return res.status(403).send('Remote delivery blocked')
   }
   const oldEnd = res.end
   res.end = function (...args) {

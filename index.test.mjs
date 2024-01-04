@@ -24,7 +24,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
 const MAIN_PORT = 50941 // V
 const REMOTE_PORT = 51996 // Cr
-const BLOCKED_REMOTE_PORT = 51998 // Cr
 const CLIENT_PORT = 54938 // Mn
 const THIRD_PORT = 55845 // Fe
 const FOURTH_PORT = 58933 // Co
@@ -4243,13 +4242,6 @@ describe('onepage.pub', () => {
     let server = null
     let created = null
     before(async () => {
-      // TODO: figure out how to set the path for the blocklist better
-      /*
-      server = await startServer(FOURTH_PORT,
-        { OPP_BLOCK_LIST: path.join('.', 'blocklist.csv') }
-      );
-      */
-     let REMOTE_PORT = 51998;
       server = await startServer(FOURTH_PORT, {});
       
       [actor1, token1] = await registerActor(MAIN_PORT);
