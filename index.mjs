@@ -62,7 +62,6 @@ const BLOCKED_DOMAINS = (() => {
       domains.push(fields[0])
     }
   }
-  console.log(domains)
   return domains
 })()
 
@@ -140,6 +139,12 @@ function standardEndpoints () {
   }
 }
 
+/**
+ * Checks if a given URL's domain is blocked.
+ * 
+ * @param {string} url - The URL to check
+ * @returns {boolean} True if the URL's domain is blocked, false otherwise
+ */
 function domainIsBlocked (url) {
   if (typeof url !== 'string') {
     logger.warn(`Invalid URL: ${JSON.stringify(url)}`)
@@ -152,7 +157,7 @@ function domainIsBlocked (url) {
     logger.warn(`Invalid URL: ${url}`)
     return false
   }
-  const hostname = u.host
+  const hostname = u.host? u.host : u.href
   return BLOCKED_DOMAINS.includes(hostname)
 }
 
@@ -2302,8 +2307,11 @@ const app = express()
 // Initialize Multer
 const upload = multer({ storage: multer.memoryStorage() })
 
+/**
+ * Middleware to check if requester is blocked, log requests, and preserve previous response end handler.
+*/
 app.use((req, res, next) => {
-  const requester = req.headers.host
+  const requester = req.headers.host? req.headers.host : req.headers.href
 
   if (domainIsBlocked(requester)) {
     console.log(`Blocklist match: ${requester}`)

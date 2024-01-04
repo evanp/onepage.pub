@@ -150,8 +150,7 @@ const doActivity = async (actor, token, activity) => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
-      Authorization: `Bearer ${token}`,
-      host: 'blocked.com'
+      Authorization: `Bearer ${token}`
     },
     body: JSON.stringify(activity)
   })
@@ -163,6 +162,7 @@ const doActivity = async (actor, token, activity) => {
   }
   */
   //return await res.json()
+
   return res
 }
 
@@ -226,11 +226,19 @@ const getMembers = async (collection, token = null) => {
   }
 }
 
-const isInStream = async (collection, object, token = null) => {
-  const objectId = typeof object === 'string' ? object : object.id
-  const members = await getMembers(collection, token)
-  return members.some((item) => item.id === objectId)
-}
+/**
+ * Checks if the given object is present in the provided collection's stream.
+ *
+ * @param {Object|string} collection - The collection to check
+ * @param {Object|string} object - The object to look for
+ * @param {string} [token] - An optional access token
+ * @returns {boolean} True if the object is in the collection stream
+ */
+  const isInStream = async (collection, object, token = null) => {
+  const objectId = typeof object === "string" ? object : object.id;
+  const members = await getMembers(collection, token);
+  return members.some((item) => item.id === objectId);
+  }
 
 const getProxy = async (id, actor, token) => {
   const res = await fetch(actor.endpoints.proxyUrl, {
@@ -428,25 +436,8 @@ describe('onepage.pub', () => {
       server.kill()
     })
 
-    /*
     it('can receive from unblocked', async () => {
       const activity = await doActivity(actor1, token1, {
-        to: [actor3.id],
-        type: 'Create',
-        object: {
-          type: 'Note',
-          contentMap: {
-            en: `Hello, ${actor3.name}!`
-          }
-        }
-      })
-      await settle(MAIN_PORT)
-      assert.ok(isInStream(actor3.inbox, activity, token3))
-    })
-    */
-
-    it('cannot receive from blocked', async () => {
-      const req = await doActivity(actor2, token2, {
         to: [actor3.id],
         type: 'Create',
         object: {
@@ -459,17 +450,35 @@ describe('onepage.pub', () => {
       const res = {
         status: () => {},
         send: () => {}
-      };
-      
-      await (req, res)
-      await settle(REMOTE_PORT)
-      //assert.ok(!await isInStream(actor3.inbox, activity, token3))
-      assert(res.status, '403')
-      assert(res.send, 'Remote delivery blocked')
-      //assert(next.calledOnce);
+      }
+      await settle(MAIN_PORT)
+      assert.ok(isInStream(actor3.inbox, activity, token3))
+      assert(res.status, '201')
     })
     
 
+    it('cannot receive from blocked', async () => {
+      const activity = await doActivity(actor2, token2, {
+        to: [actor3.id],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: `Hello, ${actor3.name}!`
+          }
+        }
+      })
+      const res = {
+        status: () => {},
+        send: () => {},
+        body: () => {}
+      }
+      await settle(REMOTE_PORT)
+      assert(!await isInStream(actor3.inbox, res.body, token3))
+      assert(res.status, '403')
+      assert(res.send, 'Remote delivery blocked')
+    })
+    
     /*
     it('will accept read from unblocked', async () => {
       assert.ok(await canGetProxy(created.object.id, actor1, token1))
