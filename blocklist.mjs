@@ -4,11 +4,9 @@ import { spawn } from 'node:child_process'
 import assert from 'node:assert'
 import querystring from 'node:querystring'
 import crypto from 'node:crypto'
-import path from 'node:path'
 import https from 'node:https'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
-import { Blob } from 'node:buffer'
 
 // remove temporary database on startup if it exists
 if (fs.existsSync('temp.sqlite')) {
@@ -25,11 +23,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
 const MAIN_PORT = 50941 // V
 const REMOTE_PORT = 52998 // Cr
-const BLOCKED_DOMAIN = 52998 // use for blocklist test
 const CLIENT_PORT = 54938 // Mn
-const THIRD_PORT = 55845 // Fe
 const FOURTH_PORT = 58933 // Co
-const FIFTH_PORT = 58693 // Ni
 
 const CLIENT_ID = `https://localhost:${CLIENT_PORT}/client`
 const REDIRECT_URI = `https://localhost:${CLIENT_PORT}/oauth/callback`
