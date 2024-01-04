@@ -62,6 +62,7 @@ const BLOCKED_DOMAINS = (() => {
       domains.push(fields[0])
     }
   }
+  console.log(domains)
   return domains
 })()
 

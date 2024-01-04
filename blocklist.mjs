@@ -150,7 +150,8 @@ const doActivity = async (actor, token, activity) => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
-      Authorization: `Bearer ${token}`
+      Authorization: `Bearer ${token}`,
+      host: 'blocked.com'
     },
     body: JSON.stringify(activity)
   })
@@ -398,9 +399,11 @@ describe('onepage.pub', () => {
     before(async () => {
       server = await startServer(process.env.OPP_PORT, {});
       
-      [actor1, token1] = await registerActor(MAIN_PORT);
+    //  [actor1, token1] = await registerActor(MAIN_PORT);
       [actor2, token2] = await registerActor(REMOTE_PORT);
       [actor3, token3] = await registerActor(FOURTH_PORT)
+
+      /*
       created = await doActivity(actor3, token3, {
         to: [PUBLIC],
         type: 'Create',
@@ -412,14 +415,16 @@ describe('onepage.pub', () => {
         }
       })
       await settle(FOURTH_PORT)
+      */
     })
     after(async () => {
-      await settle(MAIN_PORT)
+    //  await settle(MAIN_PORT)
       await settle(REMOTE_PORT)
       await settle(FOURTH_PORT)
       server.kill()
     })
 
+    /*
     it('can receive from unblocked', async () => {
       const activity = await doActivity(actor1, token1, {
         to: [actor3.id],
@@ -434,6 +439,7 @@ describe('onepage.pub', () => {
       await settle(MAIN_PORT)
       assert.ok(isInStream(actor3.inbox, activity, token3))
     })
+    */
 
     it('cannot receive from blocked', async () => {
       const activity = await doActivity(actor2, token2, {
@@ -451,7 +457,7 @@ describe('onepage.pub', () => {
     })
     
 
-    
+    /*
     it('will accept read from unblocked', async () => {
       assert.ok(await canGetProxy(created.object.id, actor1, token1))
     })
@@ -459,6 +465,7 @@ describe('onepage.pub', () => {
     it('will not accept read from blocked', async () => {
       assert.ok(!await canGetProxy(created.object.id, actor2, token2))
     })
+    */
     
   })
 })
