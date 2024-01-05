@@ -24,6 +24,7 @@ import multer from 'multer'
 import mime from 'mime'
 import path from 'path'
 import { tmpdir } from 'os'
+import chalk from 'chalk';
 
 // Configuration
 const DATABASE = process.env.OPP_DATABASE
@@ -2314,7 +2315,7 @@ app.use((req, res, next) => {
   const requester = req.headers.host? req.headers.host : req.headers.href
 
   if (domainIsBlocked(requester)) {
-    console.log(`Blocklist match: ${requester}`)
+    logger.warn(chalk.yellow(`403 ${req.method} ${req.url} Blocklist match: ${requester}`))
     return res.status(403).send('Remote delivery blocked')
   }
   const oldEnd = res.end
