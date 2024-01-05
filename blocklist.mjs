@@ -189,10 +189,7 @@ const doActivity = async (actor, token, activity) => {
     const body = await res.text()
     throw new Error(`Bad status code ${res.status}: ${body}`)
   }
-  
   return await res.json()
-   
-  //return res
 }
 
 const failActivity = async (actor, token, activity) => {
