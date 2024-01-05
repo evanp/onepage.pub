@@ -1,3 +1,2 @@
 #domain,#severity,#reject_media,#reject_reports,#public_comment,#obfuscate
-blocked.com,suspend,false,false,"keep for testing",false
-localhost:51996,suspend,false,false,"keep for testing",false
+localhost:51996,suspend,false,false,keep for testing,false
