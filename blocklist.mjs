@@ -19,6 +19,37 @@ if (fs.existsSync('temp.sqlite')) {
   })
 }
 
+/**
+ * Removes a domain from the blocklist file.
+ *
+ * @param {string} domain - The domain to remove from the blocklist.
+ * @param {string} blocklistFile - Path to the blocklist file.
+ */
+function removeFromBlocklist(domain, blocklistFile) {
+  let blocklist = fs.readFileSync(blocklistFile, "utf8");
+  let lines = blocklist.split("\n");
+  lines = lines.filter((line) => !line.includes(domain));
+  blocklist = lines.join("\n");
+  fs.writeFileSync(blocklistFile, blocklist);
+}
+// Example usage:  
+//removeFromBlocklist('localhost:51996', 'blocklist.csv');
+
+/**
+ * Adds a domain to the blocklist file.
+ *
+ * @param {string} domain - The domain to add to the blocklist.
+ * @param {string} blocklistFile - Path to the blocklist file.
+ */
+function addToBlocklist(domain, blocklistFile) {
+  let blocklist = fs.readFileSync(blocklistFile, "utf8");
+  blocklist += `${domain}\n`;
+  fs.writeFileSync(blocklistFile, blocklist);
+}
+// Example usage
+//const badDomain = 'localhost:51996,suspend,false,false,keep for testing,false';
+//addToBlocklist(badDomain, 'blocklist.csv');
+
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
 const MAIN_PORT = 50941 // V
@@ -92,7 +123,6 @@ const startClientServer = (port = CLIENT_PORT, client = JSON.stringify(defaultCl
     })
 
     server.on('error', reject)
-
     server.listen(port, 'localhost', () => {
       resolve(server)
     })
@@ -155,15 +185,14 @@ const doActivity = async (actor, token, activity) => {
     body: JSON.stringify(activity)
   })
   
-  /*
   if (res.status !== 201) {
     const body = await res.text()
     throw new Error(`Bad status code ${res.status}: ${body}`)
   }
-  */
-  //return await res.json()
-
-  return res
+  
+  return await res.json()
+   
+  //return res
 }
 
 const failActivity = async (actor, token, activity) => {
@@ -412,10 +441,9 @@ describe('onepage.pub', () => {
       server = await startServer(FOURTH_PORT, {});
       
       [actor1, token1] = await registerActor(MAIN_PORT);
-      [actor2, token2] = await registerActor(REMOTE_PORT);
+      [actor2, token2] = await registerActor(REMOTE_PORT); // have to let them register before we can block them
       [actor3, token3] = await registerActor(FOURTH_PORT)
-
-      
+            
       created = await doActivity(actor3, token3, {
         to: [PUBLIC],
         type: 'Create',
@@ -427,7 +455,6 @@ describe('onepage.pub', () => {
         }
       })
       await settle(FOURTH_PORT)
-      
     })
     after(async () => {
       await settle(MAIN_PORT)
@@ -456,8 +483,10 @@ describe('onepage.pub', () => {
       assert(res.status, '201')
     })
     
-
     it('cannot receive from blocked', async () => {
+      //const badDomain = 'localhost:51996,suspend,false,false,keep for testing,false';
+      //addToBlocklist(badDomain, 'blocklist.csv');
+            
       const activity = await doActivity(actor2, token2, {
         to: [actor3.id],
         type: 'Create',
@@ -468,6 +497,7 @@ describe('onepage.pub', () => {
           }
         }
       })
+      
       const res = {
         status: () => {},
         send: () => {},
@@ -481,7 +511,7 @@ describe('onepage.pub', () => {
     
     /*
     it('will accept read from unblocked', async () => {
-      assert.ok(await canGetProxy(created.object.id, actor1, token1))
+      assert(await canGetProxy(created.object.id, actor1, token1))
     })
 
     it('will not accept read from blocked', async () => {
