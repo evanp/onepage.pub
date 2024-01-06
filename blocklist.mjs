@@ -58,11 +58,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
 const MAIN_PORT = 50941 // V
 const REMOTE_PORT = 51996 // Cr
-const CLIENT_PORT = 54938 // Mn
 const FOURTH_PORT = 58933 // Co
 
-const CLIENT_ID = `https://localhost:${CLIENT_PORT}/client`
-const REDIRECT_URI = `https://localhost:${CLIENT_PORT}/oauth/callback`
 const AS2 = 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
 const AS2_CONTEXT = 'https://www.w3.org/ns/activitystreams'
 const AS2_MEDIA_TYPE = 'application/activity+json; charset=utf-8'
@@ -91,44 +88,6 @@ const startServer = (port = MAIN_PORT, props = {}) => {
     })
     server.stderr.on('data', (data) => {
       console.log(`SERVER ${port} ERROR: ${data.toString()}`)
-    })
-  })
-}
-
-const defaultClient = {
-  '@context': [
-    AS2_CONTEXT,
-    'https://purl.archive.org/socialweb/oauth'
-  ],
-  type: 'Application',
-  id: CLIENT_ID,
-  redirectURI: REDIRECT_URI,
-  nameMap: {
-    en: 'Test scripts for onepage.pub'
-  }
-}
-
-const startClientServer = (port = CLIENT_PORT, client = JSON.stringify(defaultClient), contentType = AS2) => {
-  return new Promise((resolve, reject) => {
-    const options = {
-      key: fs.readFileSync('localhost.key'),
-      cert: fs.readFileSync('localhost.crt')
-    }
-    const server = https.createServer(options, (req, res) => {
-      if (req.url.startsWith('/client')) {
-        res.writeHead(200, {
-          'Content-Type': contentType
-        })
-        res.end(client)
-      } else {
-        res.writeHead(404)
-        res.end()
-      }
-    })
-
-    server.on('error', reject)
-    server.listen(port, 'localhost', () => {
-      resolve(server)
     })
   })
 }
@@ -432,14 +391,12 @@ describe('onepage.pub', () => {
     console.log('Starting servers')
     child = await startServer(MAIN_PORT)
     remote = await startServer(REMOTE_PORT)
-    client = await startClientServer(CLIENT_PORT)
   })
 
   after(() => {
     console.log('Stopping servers')
     child.kill('SIGTERM')
     remote.kill('SIGTERM')
-    client.close()
     console.log('finished running tests')
   })
 
@@ -495,7 +452,7 @@ describe('onepage.pub', () => {
       assert(res.status, '201')
     })
     
-    it('attempt to register from a blocked domain', async () => {
+    it('attempt to register from a blocked domain should fail', async () => {
       [actor2, token2] = await registerActor(REMOTE_PORT)       
       const activity = await doActivity(actor2, token2, {
         to: [actor3.id],
