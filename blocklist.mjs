@@ -33,7 +33,7 @@ function removeFromBlocklist(domain, blocklistFile) {
   fs.writeFileSync(blocklistFile, blocklist);
 }
 // Example usage:  
-//removeFromBlocklist('localhost:51998', 'blocklist.csv');
+removeFromBlocklist('localhost:51998', 'blocklist.csv');
 
 /**
  * Adds a domain to the blocklist file.
@@ -57,7 +57,7 @@ function addToBlocklist(domain, blocklistFile) {
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
 const MAIN_PORT = 50941 // V
-const REMOTE_PORT = 51996 // Cr
+const BLOCKED_PORT = 51998 // Cr
 const FOURTH_PORT = 58933 // Co
 
 const AS2 = 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
@@ -376,7 +376,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
 
 describe('onepage.pub', () => {
   let child = null
-  let remote = null
+  let blocked = null
   
   // use temporary database for testing 
   process.env.OPP_DATABASE = "temp.sqlite"
@@ -386,13 +386,13 @@ describe('onepage.pub', () => {
   before(async () => {
     console.log('Starting servers')
     child = await startServer(MAIN_PORT)
-    remote = await startServer(REMOTE_PORT)
+    blocked = await startServer(BLOCKED_PORT)
   })
 
   after(() => {
     console.log('Stopping servers')
     child.kill('SIGTERM')
-    remote.kill('SIGTERM')
+    blocked.kill('SIGTERM')
     console.log('finished running tests')
   })
 
@@ -406,7 +406,7 @@ describe('onepage.pub', () => {
       server = await startServer(FOURTH_PORT, {});
       
       [actor1, token1] = await registerActor(MAIN_PORT);
-      //[actor2, token2] = await registerActor(REMOTE_PORT);
+      [actor2, token2] = await registerActor(BLOCKED_PORT);
       [actor3, token3] = await registerActor(FOURTH_PORT)
             
       created = await doActivity(actor3, token3, {
@@ -423,7 +423,7 @@ describe('onepage.pub', () => {
     })
     after(async () => {
       await settle(MAIN_PORT)
-      await settle(REMOTE_PORT)
+      await settle(BLOCKED_PORT)
       await settle(FOURTH_PORT)
       server.kill()
     })
@@ -449,7 +449,6 @@ describe('onepage.pub', () => {
     })
     
     it('attempt to register from a blocked domain should fail', async () => {
-      [actor2, token2] = await registerActor(REMOTE_PORT)       
       const activity = await doActivity(actor2, token2, {
         to: [actor3.id],
         type: 'Create',
@@ -466,7 +465,7 @@ describe('onepage.pub', () => {
         send: () => {},
         body: () => {}
       }
-      await settle(REMOTE_PORT)
+      await settle(BLOCKED_PORT)
       assert(!await isInStream(actor3.inbox, res.body, token3))
       assert(res.status, '403')
       assert(res.send, 'Remote delivery blocked')
