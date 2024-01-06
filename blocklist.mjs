@@ -33,7 +33,7 @@ function removeFromBlocklist(domain, blocklistFile) {
   fs.writeFileSync(blocklistFile, blocklist);
 }
 // Example usage:  
-//removeFromBlocklist('localhost:51996', 'blocklist.csv');
+//removeFromBlocklist('localhost:51998', 'blocklist.csv');
 
 /**
  * Adds a domain to the blocklist file.
@@ -47,7 +47,7 @@ function addToBlocklist(domain, blocklistFile) {
   fs.writeFileSync(blocklistFile, blocklist);
 }
 // Example usage
-//const badDomain = 'localhost:51996,suspend,false,false,keep for testing,false';
+//const badDomain = 'localhost:51998,suspend,false,false,keep for testing,false';
 //addToBlocklist(badDomain, 'blocklist.csv');
 
 /**
