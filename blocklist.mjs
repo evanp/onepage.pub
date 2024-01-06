@@ -196,21 +196,32 @@ const doActivity = async (actor, token, activity) => {
   return await res.json()
 }
 
+/**
+ * Posts an activity to the given actor's outbox expecting a failure response.
+ *
+ * @param {Object} actor - The actor object
+ * @param {string} token - The authentication token
+ * @param {Object} activity - The activity object to post
+ * @returns {Promise<number>} - Promise resolving to the failed response status code
+ */
 const failActivity = async (actor, token, activity) => {
   const res = await fetch(actor.outbox, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
-      Authorization: `Bearer ${token}`
+      "Content-Type":
+        'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+      Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(activity)
-  })
-  const body = await res.text()
+    body: JSON.stringify(activity),
+  });
+  const body = await res.text();
   if (res.status >= 200 && res.status <= 299) {
-    throw new Error(`Good status code ${res.status} for activity that should fail: ${body}`)
+    throw new Error(
+      `Good status code ${res.status} for activity that should fail: ${body}`
+    );
   }
-  return res.status
-}
+  return res.status;
+};
 
 const getObject = async (id, token = null) => {
   const headers = {
