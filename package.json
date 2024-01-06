@@ -31,6 +31,7 @@
   "scripts": {
     "start": "node index.mjs",
     "test": "node --test --test-reporter=spec ./index.test.mjs",
+    "blocklist": "node --test --test-reporter=spec ./blocklist.mjs",
     "test:only": "node --test --test-only --test-reporter=spec",
     "ver": "echo $npm_package_version"
   },
