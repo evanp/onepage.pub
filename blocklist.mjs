@@ -50,7 +50,11 @@ function addToBlocklist(domain, blocklistFile) {
 //const badDomain = 'localhost:51996,suspend,false,false,keep for testing,false';
 //addToBlocklist(badDomain, 'blocklist.csv');
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
+/**
+ * Disables TLS certificate validation. This allows insecure HTTPS connections.
+ * Use only in development/testing environments.
+ */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0;
 
 const MAIN_PORT = 50941 // V
 const REMOTE_PORT = 51996 // Cr
@@ -438,7 +442,7 @@ describe('onepage.pub', () => {
       server = await startServer(FOURTH_PORT, {});
       
       [actor1, token1] = await registerActor(MAIN_PORT);
-      [actor2, token2] = await registerActor(REMOTE_PORT);
+      //[actor2, token2] = await registerActor(REMOTE_PORT);
       [actor3, token3] = await registerActor(FOURTH_PORT)
             
       created = await doActivity(actor3, token3, {
@@ -480,8 +484,8 @@ describe('onepage.pub', () => {
       assert(res.status, '201')
     })
     
-    it('cannot receive from blocked', async () => {
-             
+    it('attempt to register from a blocked domain', async () => {
+      [actor2, token2] = await registerActor(REMOTE_PORT)       
       const activity = await doActivity(actor2, token2, {
         to: [actor3.id],
         type: 'Create',
