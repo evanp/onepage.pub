@@ -1,0 +1,69 @@
+{
+    name: "testuser102",
+    id: "https://localhost:58933/person/Y7GhT4I_pbMSn6E4l4t9y",
+    type: "Person",
+    preferredUsername: "testuser102",
+    attributedTo: {
+      id: "https://localhost:58933/person/Y7GhT4I_pbMSn6E4l4t9y",
+      type: "Person",
+      name: "testuser102",
+    },
+    to: [
+      {
+        id: "https://www.w3.org/ns/activitystreams#Public",
+        type: "Collection",
+        nameMap: {
+          en: "Public",
+        },
+      },
+    ],
+    inbox: "https://localhost:58933/orderedcollection/WLay0LNgv71sQXckxfCoa",
+    outbox: "https://localhost:58933/orderedcollection/Tly3iTxmnj3VJVPsQgcp2",
+    followers: "https://localhost:58933/orderedcollection/gDW-1h5ORKMuXhHSm5fK0",
+    following: "https://localhost:58933/orderedcollection/fKY7DkDH6f0t5ZH2jISSo",
+    liked: "https://localhost:58933/orderedcollection/lxIBH4lhCi4AgjDVZwu3p",
+    blocked: {
+      id: "https://localhost:58933/orderedcollection/H8TNIujmvgefixpLo07PM",
+      type: "OrderedCollection",
+      nameMap: {
+        en: "testuser102's blocked",
+      },
+      first: "https://localhost:58933/orderedcollectionpage/VV1zYckuEBTGLVLW284r6",
+    },
+    pendingFollowers: {
+      id: "https://localhost:58933/orderedcollection/jbiAHv0x4m87OpscFawj-",
+      type: "OrderedCollection",
+      nameMap: {
+        en: "testuser102's pendingFollowers",
+      },
+      first: "https://localhost:58933/orderedcollectionpage/a5RGmAyN-2zXN2wajKbTr",
+    },
+    pendingFollowing: {
+      id: "https://localhost:58933/orderedcollection/QJ2f9pImD6A9EQ7pVNFfJ",
+      type: "OrderedCollection",
+      nameMap: {
+        en: "testuser102's pendingFollowing",
+      },
+      first: "https://localhost:58933/orderedcollectionpage/bCA1s2dtsBGHg6PmSTiIl",
+    },
+    publicKey: {
+      id: "https://localhost:58933/key/VRxHo7GNxvr_ylhC6Xctb",
+      type: "Key",
+      owner: "https://localhost:58933/person/Y7GhT4I_pbMSn6E4l4t9y",
+      publicKeyPem: "-----BEGIN RSA PUBLIC KEY-----\nMIIBCgKCAQEAk51TmQ+lvcqNI+pIeVWSk0mo87x9NzmC7P/doneRCStEx7Lh1jhy\nkAyXShxu1LyOQ/t/rCpTBGSLKT6b1vpGbnUyUZuo/vPo3a7kUYCdhOIZXhv2kTUH\n/S7uiPbsZdOoygI/JM7T8UzJfgjMIhUcnH39JYxeVTJIo5hNW7sDyUjjgwzFWE0S\npcJV5gCek0iVMlASpUZOcfoI2rLzq128EYc06Q7GOXXseE0nZzjUN54Rc6FoPDCz\nr1UW1+/FLiS792GKpFmRu9r4paa5y3cjEDuCFNUV5DmPV32HuZAS6eNeWqyIz+Vu\n4iFAWSyKhP+/4AdBPPu4hWf0DzqoSiwLWwIDAQAB\n-----END RSA PUBLIC KEY-----\n",
+    },
+    updated: "2024-01-06T20:51:00.790Z",
+    published: "2024-01-06T20:51:00.790Z",
+    endpoints: {
+      proxyUrl: "https://localhost:58933/endpoint/proxyUrl",
+      oauthAuthorizationEndpoint: "https://localhost:58933/endpoint/oauth/authorize",
+      oauthTokenEndpoint: "https://localhost:58933/endpoint/oauth/token",
+      uploadMedia: "https://localhost:58933/endpoint/upload",
+    },
+    "@context": [
+      "https://www.w3.org/ns/activitystreams",
+      "https://w3id.org/security",
+      "https://purl.archive.org/socialweb/blocked",
+      "https://purl.archive.org/socialweb/pending",
+    ],
+  }
