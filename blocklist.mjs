@@ -277,7 +277,6 @@ const getAuthCode = async (actor, cookie, scope = 'read write') => {
   const codeChallenge = base64URLEncode(crypto.createHash('sha256').update(codeVerifier).digest())
   const qs = querystring.stringify({
     response_type: responseType,
-    client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     scope,
     state,
@@ -297,7 +296,6 @@ const getAuthCode = async (actor, cookie, scope = 'read write') => {
     },
     body: querystring.stringify({
       csrf_token: csrfToken,
-      client_id: CLIENT_ID,
       redirect_uri: REDIRECT_URI,
       scope,
       state,
@@ -323,7 +321,6 @@ const getTokens = async (actor, code, codeVerifier) => {
       code,
       redirect_uri: REDIRECT_URI,
       code_verifier: codeVerifier,
-      client_id: CLIENT_ID
     })
   })
   const body3 = await res3.json()
@@ -380,8 +377,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
 describe('onepage.pub', () => {
   let child = null
   let remote = null
-  let client = null
-
+  
   // use temporary database for testing 
   process.env.OPP_DATABASE = "temp.sqlite"
   // increase rate limit for testing
