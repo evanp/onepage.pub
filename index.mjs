@@ -1123,6 +1123,9 @@ class Activity extends ActivityObject {
           throw new createError.BadRequest('No id for object to update')
         }
         const object = await ActivityObject.getById(activity.object.id, actorObj)
+        if (!object) {
+          throw new createError.BadRequest(`Unable to get object ${activity.object.id}`)
+        }
         const objectOwner = await object.owner()
         if (!objectOwner || await objectOwner.id() !== await actorObj.id()) {
           throw new createError.BadRequest("You can't update an object you don't own")
@@ -3313,10 +3316,10 @@ app.post('/:type/:id',
   }))
 
 app.use((err, req, res, next) => {
-  logger.silly(err.stack)
   if (createError.isHttpError(err)) {
     if (err.statusCode > 500) {
       logger.error(`Error status ${err.statusCode}: `, err)
+      logger.debug(err.stack)
     }
     res.status(err.statusCode)
     if (res.expose) {
@@ -3334,6 +3337,7 @@ app.use((err, req, res, next) => {
     res.json({ error_description: err.message, error: 'invalid_token' })
   } else {
     logger.error('Error status 500: ', err)
+    logger.debug(err.stack)
     res.status(500)
     res.json({ message: err.message })
   }
@@ -3341,12 +3345,12 @@ app.use((err, req, res, next) => {
 
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled rejection: ', err)
-  logger.silly(err.stack)
+  logger.debug(err.stack)
 })
 
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught exception: ', err)
-  logger.silly(err.stack)
+  logger.debug(err.stack)
 })
 
 // Define a function for cleanup tasks
