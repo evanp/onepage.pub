@@ -2168,6 +2168,9 @@ class User {
   }
 
   static async isUser (object) {
+    if (!object) {
+      return false
+    }
     const id = await object.id()
     const row = await db.get('SELECT actorId FROM user WHERE actorId = ?', [id])
     return !!row
