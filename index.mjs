@@ -151,6 +151,14 @@ function domainIsBlocked (url) {
   return BLOCKED_DOMAINS.includes(hostname)
 }
 
+function toSpki (pem) {
+  if (pem.startsWith('-----BEGIN RSA PUBLIC KEY-----')) {
+    const key = crypto.createPublicKey(pem)
+    pem = key.export({ type: 'spki', format: 'pem' })
+  }
+  return pem
+}
+
 // Classes
 
 class Database {
@@ -865,6 +873,11 @@ class ActivityObject {
           object[prop] = await toBrief(object[prop])
         }
       }
+    }
+
+    // Fix for PKCS1 format public keys
+    if ('publicKeyPem' in object) {
+      object.publicKeyPem = toSpki(object.publicKeyPem)
     }
 
     return object
@@ -2142,20 +2155,7 @@ class User {
       const coll = await Collection.empty(this.actorId, [], { nameMap: { en: `${this.username}'s ${prop}` } })
       data[prop] = await coll.id()
     }
-    const { publicKey, privateKey } = await generateKeyPair(
-      'rsa',
-      {
-        modulusLength: 2048,
-        privateKeyEncoding: {
-          type: 'pkcs1',
-          format: 'pem'
-        },
-        publicKeyEncoding: {
-          type: 'pkcs1',
-          format: 'pem'
-        }
-      }
-    )
+    const { publicKey, privateKey } = await newKeyPair()
     const pkey = new ActivityObject({
       type: 'Key',
       owner: this.actorId,
@@ -2348,6 +2348,23 @@ const tokenTypeCheck = wrap(async (req, res, next) => {
   }
 })
 
+const newKeyPair = async () => {
+  return await generateKeyPair(
+    'rsa',
+    {
+      modulusLength: 2048,
+      privateKeyEncoding: {
+        type: 'pkcs8',
+        format: 'pem'
+      },
+      publicKeyEncoding: {
+        type: 'spki',
+        format: 'pem'
+      }
+    }
+  )
+}
+
 app.use(passport.initialize()) // Initialize Passport
 app.use(passport.session())
 
@@ -2356,20 +2373,7 @@ app.use(wrap(async (req, res, next) => {
   if (row) {
     req.jwtKeyData = row.privateKey
   } else {
-    const { publicKey, privateKey } = await generateKeyPair(
-      'rsa',
-      {
-        modulusLength: 2048,
-        privateKeyEncoding: {
-          type: 'pkcs1',
-          format: 'pem'
-        },
-        publicKeyEncoding: {
-          type: 'pkcs1',
-          format: 'pem'
-        }
-      }
-    )
+    const { publicKey, privateKey } = await newKeyPair()
     await db.run('INSERT INTO server (origin, privateKey, publicKey) VALUES (?, ?, ?)', [makeUrl(''), privateKey, publicKey])
     req.jwtKeyData = privateKey
   }
