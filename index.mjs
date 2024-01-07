@@ -1533,7 +1533,7 @@ class Activity extends ActivityObject {
             throw new Error(`Bad status ${res.statusCode} for delivery to ${inbox}: ${resBody}`)
           }
         } catch (err) {
-          logger.warning(`Failed delivery to ${inbox}: ${err.message}`)
+          logger.warn(`Failed delivery to ${inbox}: ${err.message}`)
           throw err
         }
       }
@@ -2788,10 +2788,12 @@ app.post('/endpoint/proxyUrl',
       }
     })
     if (![200, 410].includes(fetchRes.status)) {
+      logger.warn(`Error fetching ${id}: ${fetchRes.status}`)
       throw new createError.InternalServerError('Error fetching object')
     }
     const fetchJson = await fetchRes.json()
     if (fetchRes.status === 410 && fetchJson.type !== 'Tombstone') {
+      logger.warn(`Error fetching ${id}: status = 410 but type is '${fetchJson.type}', not Tombstone`)
       throw new createError.InternalServerError('Error fetching object')
     }
     res.status(fetchRes.status)
