@@ -47,8 +47,8 @@ function addToBlocklist(domain, blocklistFile) {
   fs.writeFileSync(blocklistFile, blocklist);
 }
 // Example usage
-//const badDomain = 'localhost:51998,suspend,false,false,keep for testing,false';
-//addToBlocklist(badDomain, 'blocklist.csv');
+const badDomain = 'localhost:51998,suspend,false,false,keep for testing,false';
+addToBlocklist(badDomain, 'blocklist.csv');
 
 /**
  * Disables TLS certificate validation. This allows insecure HTTPS connections.
@@ -449,6 +449,7 @@ describe('onepage.pub', () => {
     })
     
     it('attempt to register from a blocked domain should fail', async () => {
+      [actor2, token2] = await registerActor(BLOCKED_PORT)
       const activity = await doActivity(actor2, token2, {
         to: [actor3.id],
         type: 'Create',
