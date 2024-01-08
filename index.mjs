@@ -176,29 +176,67 @@ function digestBody (body) {
 // Classes
 
 class Database {
+  #path = null
+  #db = null
   constructor (path) {
-    const db = new sqlite3.Database(path)
+    this.#path = path
+    this.#db = new sqlite3.Database(this.#path)
+  }
 
-    db.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255), privateKey TEXT)')
-    db.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)')
-    db.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
-    db.run('CREATE TABLE IF NOT EXISTS upload (relative VARCHAR(255), mediaType VARCHAR(255), objectId VARCHAR(255))')
-    db.run('CREATE TABLE IF NOT EXISTS server (origin VARCHAR(255) PRIMARY KEY, privateKey TEXT, publicKey TEXT)')
+  async init () {
+    await this.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255), privateKey TEXT)')
+    await this.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)')
+    await this.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
+    await this.run('CREATE TABLE IF NOT EXISTS upload (relative VARCHAR(255), mediaType VARCHAR(255), objectId VARCHAR(255))')
+    await this.run('CREATE TABLE IF NOT EXISTS server (origin VARCHAR(255) PRIMARY KEY, privateKey TEXT, publicKey TEXT)')
 
-    this.run = promisify((...params) => {
-      logger.silly('run() SQL: ' + params[0], params.slice(1))
-      db.run(...params)
+    // Create the public key for this server if it doesn't exist
+
+    await this.ensureServerKey()
+  }
+
+  async run (...params) {
+    logger.silly('run() SQL: ' + params[0], params.slice(1))
+    return new Promise((resolve, reject) => {
+      this.#db.run(...params, (err, results) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve(results)
+        }
+      })
     })
-    this.get = promisify((...params) => {
-      logger.silly('get() SQL: ' + params[0], params.slice(1))
-      db.get(...params)
+  }
+
+  async get (...params) {
+    logger.silly('get() SQL: ' + params[0], params.slice(1))
+    return new Promise((resolve, reject) => {
+      this.#db.get(...params, (err, results) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve(results)
+        }
+      })
     })
-    this.all = promisify((...params) => {
-      logger.silly('all() SQL: ' + params[0], params.slice(1))
-      db.all(...params)
+  }
+
+  async all (...params) {
+    logger.silly('all() SQL: ' + params[0], params.slice(1))
+    return new Promise((resolve, reject) => {
+      this.#db.all(...params, (err, results) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve(results)
+        }
+      })
     })
-    this.close = () => new Promise((resolve, reject) => {
-      db.close((err) => {
+  }
+
+  async close () {
+    return new Promise((resolve, reject) => {
+      this.#db.close((err) => {
         if (err) {
           reject(err)
         } else {
@@ -208,12 +246,28 @@ class Database {
     })
   }
 
-  ready () {
+  async ready () {
     try {
-      const value = this.get('SELECT 1')
+      const value = await this.get('SELECT 1')
       return !!value
     } catch (err) {
       return false
+    }
+  }
+
+  async ensureServerKey () {
+    const server = await this.get('SELECT * FROM server WHERE origin = ?', [makeUrl('')])
+    if (server && server.privateKey) {
+      return server.privateKey
+    } else {
+      const { publicKey, privateKey } = await newKeyPair()
+      await db.run(
+        'INSERT INTO server (origin, privateKey, publicKey) ' +
+        ' VALUES (?, ?, ?) ' +
+        ' ON CONFLICT DO NOTHING',
+        [makeUrl(''), privateKey, publicKey]
+      )
+      return privateKey
     }
   }
 }
@@ -2403,14 +2457,7 @@ app.use(passport.initialize()) // Initialize Passport
 app.use(passport.session())
 
 app.use(wrap(async (req, res, next) => {
-  const row = await db.get('SELECT * FROM server WHERE origin = ?', [makeUrl('')])
-  if (row) {
-    req.jwtKeyData = row.privateKey
-  } else {
-    const { publicKey, privateKey } = await newKeyPair()
-    await db.run('INSERT INTO server (origin, privateKey, publicKey) VALUES (?, ?, ?)', [makeUrl(''), privateKey, publicKey])
-    req.jwtKeyData = privateKey
-  }
+  req.jwtKeyData = await db.ensureServerKey()
   return next()
 }))
 
@@ -3432,10 +3479,13 @@ const server = (process.env.OPP_ORIGIN)
     cert: CERT_DATA
   }, app)
 
-server.listen(PORT, () => {
-  console.log(`Listening on ${PORT}`)
-  // Database fixes go here
-  User.updateAllKeys().then(() => {
-    logger.info('Updated all keys')
+db.init().then(() => {
+  logger.info('Database initialized')
+  server.listen(PORT, () => {
+    console.log(`Listening on ${PORT}`)
+    // Database fixes go here
+    User.updateAllKeys().then(() => {
+      logger.info('Updated all keys')
+    })
   })
 })
