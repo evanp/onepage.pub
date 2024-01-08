@@ -258,7 +258,14 @@ class Database {
   async ensureServerKey () {
     const server = await this.get('SELECT * FROM server WHERE origin = ?', [makeUrl('')])
     if (server && server.privateKey) {
-      return server.privateKey
+      if (server.privateKey.match(/^-----BEGIN RSA PRIVATE KEY-----/)) {
+        const privateKey = toPkcs8(server.privateKey)
+        const publicKey = toSpki(server.publicKey)
+        await this.run('UPDATE server SET privateKey = ?, publicKey = ? WHERE origin = ?', [privateKey, publicKey, makeUrl('')])
+        return privateKey
+      } else {
+        return server.privateKey
+      }
     } else {
       const { publicKey, privateKey } = await newKeyPair()
       await db.run(
