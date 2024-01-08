@@ -18,7 +18,7 @@
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "passport-oauth2": "^1.7.0",
-    "sqlite3": "^5.1.6",
+    "sqlite3": "^5.1.7",
     "supertest": "^6.3.3",
     "winston": "^3.11.0"
   },
