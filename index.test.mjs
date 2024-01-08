@@ -340,7 +340,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
   return header
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -5030,8 +5030,8 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Root object public key', { only: true }, () => {
-    it('Root object has a valid key', { only: true }, async () => {
+  describe('Root object public key', () => {
+    it('Root object has a valid key', async () => {
       const id = `https://localhost:${MAIN_PORT}/`
       const res = await fetch(`https://localhost:${MAIN_PORT}/`, {
         headers: {
@@ -5050,7 +5050,7 @@ describe('onepage.pub', { only: true }, () => {
       assert.strictEqual(typeof obj.publicKey.publicKeyPem, 'string')
       assert.match(obj.publicKey.publicKeyPem, /^-----BEGIN PUBLIC KEY-----/)
     })
-    it('Root object key can be retrieved', { only: true }, async () => {
+    it('Root object key can be retrieved', async () => {
       const id = `https://localhost:${MAIN_PORT}/`
       const res = await fetch(id, {
         headers: {
