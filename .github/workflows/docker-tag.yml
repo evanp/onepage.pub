@@ -1,4 +1,4 @@
-name: Push tags to ECR stable
+name: Push tags to GHCR stable
 
 on:
   workflow_dispatch:
