@@ -192,7 +192,7 @@ class Database {
 
     // Create the public key for this server if it doesn't exist
 
-    await this.ensureServerKey()
+    await Server.ensureKey()
   }
 
   async run (...params) {
@@ -252,29 +252,6 @@ class Database {
       return !!value
     } catch (err) {
       return false
-    }
-  }
-
-  async ensureServerKey () {
-    const server = await this.get('SELECT * FROM server WHERE origin = ?', [makeUrl('')])
-    if (server && server.privateKey) {
-      if (server.privateKey.match(/^-----BEGIN RSA PRIVATE KEY-----/)) {
-        const privateKey = toPkcs8(server.privateKey)
-        const publicKey = toSpki(server.publicKey)
-        await this.run('UPDATE server SET privateKey = ?, publicKey = ? WHERE origin = ?', [privateKey, publicKey, makeUrl('')])
-        return privateKey
-      } else {
-        return server.privateKey
-      }
-    } else {
-      const { publicKey, privateKey } = await newKeyPair()
-      await db.run(
-        'INSERT INTO server (origin, privateKey, publicKey) ' +
-        ' VALUES (?, ?, ?) ' +
-        ' ON CONFLICT DO NOTHING',
-        [makeUrl(''), privateKey, publicKey]
-      )
-      return privateKey
     }
   }
 }
@@ -2434,6 +2411,86 @@ class JWTTypeError extends Error {
   }
 }
 
+class Server {
+  #origin
+  #publicKey
+  #privateKey
+  static #singleton
+  constructor (origin, publicKey, privateKey) {
+    this.#origin = origin
+    this.#publicKey = publicKey
+    this.#privateKey = privateKey
+  }
+
+  static async get () {
+    if (!Server.#singleton) {
+      const origin = makeUrl('')
+      const row = await db.get('SELECT * FROM server where origin = ?', [origin])
+      if (!row) {
+        Server.#singleton = null
+      } else {
+        Server.#singleton = new Server(row.origin, row.publicKey, row.privateKey)
+      }
+    }
+    return Server.#singleton
+  }
+
+  toJSON () {
+    return {
+      '@context': CONTEXT,
+      id: this.#origin,
+      type: 'Service',
+      name: process.OPP_NAME || 'One Page Pub',
+      publicKey: {
+        type: 'Key',
+        id: makeUrl('/key'),
+        owner: this.#origin,
+        publicKeyPem: this.#publicKey
+      }
+    }
+  }
+
+  getKeyJSON () {
+    return {
+      '@context': CONTEXT,
+      type: 'Key',
+      id: makeUrl('/key'),
+      owner: this.#origin,
+      publicKeyPem: this.#publicKey
+    }
+  }
+
+  privateKey () {
+    return this.#privateKey
+  }
+
+  publicKey () {
+    return this.#publicKey
+  }
+
+  static async ensureKey () {
+    const row = await this.get('SELECT * FROM server WHERE origin = ?', [makeUrl('')])
+    if (!row) {
+      const { publicKey, privateKey } = await newKeyPair()
+      await db.run(
+        'INSERT INTO server (origin, privateKey, publicKey) ' +
+        ' VALUES (?, ?, ?) ' +
+        ' ON CONFLICT DO NOTHING',
+        [makeUrl(''), privateKey, publicKey]
+      )
+    } else if (row.privateKey.match(/^-----BEGIN RSA PRIVATE KEY-----/)) {
+      const privateKey = toPkcs8(server.privateKey)
+      const publicKey = toSpki(server.publicKey)
+      await this.run(
+        'UPDATE server ' +
+        ' SET privateKey = ?, publicKey = ? ' +
+        ' WHERE origin = ?',
+        [privateKey, publicKey, makeUrl('')]
+      )
+    }
+  }
+}
+
 // Check token type
 const tokenTypeCheck = wrap(async (req, res, next) => {
   if (req.auth && req.auth.type && req.auth.type !== 'access') {
@@ -2464,7 +2521,8 @@ app.use(passport.initialize()) // Initialize Passport
 app.use(passport.session())
 
 app.use(wrap(async (req, res, next) => {
-  req.jwtKeyData = await db.ensureServerKey()
+  const server = await Server.get()
+  req.jwtKeyData = server.privateKey()
   return next()
 }))
 
@@ -2525,39 +2583,18 @@ app.get('/', wrap(async (req, res) => {
     <p>It is currently in development.</p>
 `, req.user))
   } else if (req.accepts('json') || req.accepts('application/activity+json') || req.accepts('application/ld+json')) {
-    const url = makeUrl('')
-    const keyId = makeUrl('/key')
-    const server = await db.get('SELECT * FROM server where origin = ?', [url])
+    const server = await Server.get()
     res.set('Content-Type', 'application/activity+json')
-    res.json({
-      '@context': CONTEXT,
-      id: url,
-      name: process.OPP_NAME || 'One Page Pub',
-      type: 'Service',
-      publicKey: {
-        type: 'Key',
-        id: keyId,
-        owner: url,
-        publicKeyPem: server.publicKey
-      }
-    })
+    res.json(await server.toJSON())
   } else {
     res.status(406).send('Not Acceptable')
   }
 }))
 
 app.get('/key', wrap(async (req, res) => {
-  const url = makeUrl('')
-  const keyId = makeUrl('/key')
-  const server = await db.get('SELECT * FROM server where origin = ?', [url])
+  const server = await Server.get()
   res.set('Content-Type', 'application/activity+json')
-  res.json({
-    '@context': CONTEXT,
-    type: 'Key',
-    id: keyId,
-    owner: url,
-    publicKeyPem: server.publicKey
-  })
+  res.json(await server.getKeyJSON())
 }))
 
 const page = (title, body, user = null) => {
