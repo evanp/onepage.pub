@@ -486,14 +486,20 @@ class ActivityObject {
       Date: date,
       Accept: ACCEPT_HEADER
     }
+    let keyId = null
+    let privKey = null
     if (subject && await User.isUser(subject)) {
       const user = await User.fromActorId(await toId(subject))
       const subjectObj = await ActivityObject.get(subject, ['publicKey'], subject)
-      const keyId = await toId(await subjectObj.prop('publicKey'))
-      const privKey = user.privateKey
-      const signature = new HTTPSignature(keyId, privKey, 'GET', id, date)
-      headers.Signature = signature.header
+      keyId = await toId(await subjectObj.prop('publicKey'))
+      privKey = user.privateKey
+    } else {
+      const server = await Server.get()
+      keyId = server.keyId()
+      privKey = server.privateKey()
     }
+    const signature = new HTTPSignature(keyId, privKey, 'GET', id, date)
+    headers.Signature = signature.header
     const res = await fetch(id, { headers })
     if (res.status !== 200) {
       return null
@@ -2435,6 +2441,10 @@ class Server {
     return Server.#singleton
   }
 
+  keyId () {
+    return makeUrl('key')
+  }
+
   toJSON () {
     return {
       '@context': CONTEXT,
@@ -2443,7 +2453,7 @@ class Server {
       name: process.OPP_NAME || 'One Page Pub',
       publicKey: {
         type: 'Key',
-        id: makeUrl('/key'),
+        id: this.keyId(),
         owner: this.#origin,
         publicKeyPem: this.#publicKey
       }
@@ -2454,7 +2464,7 @@ class Server {
     return {
       '@context': CONTEXT,
       type: 'Key',
-      id: makeUrl('/key'),
+      id: this.keyId(),
       owner: this.#origin,
       publicKeyPem: this.#publicKey
     }
