@@ -167,6 +167,12 @@ function toPkcs8 (pem) {
   return pem
 }
 
+function digestBody (body) {
+  const hash = crypto.createHash('sha256')
+  hash.update(body)
+  return `sha-256=${hash.digest('base64')}`
+}
+
 // Classes
 
 class Database {
@@ -213,7 +219,7 @@ class Database {
 }
 
 class HTTPSignature {
-  constructor (keyId, privateKey = null, method = null, url = null, date = null) {
+  constructor (keyId, privateKey = null, method = null, url = null, date = null, digest = null) {
     if (!privateKey) {
       const sigHeader = keyId
       const parts = Object.fromEntries(sigHeader.split(',').map((clause) => {
@@ -236,8 +242,9 @@ class HTTPSignature {
       this.method = method
       this.url = (isString(url)) ? new URL(url) : url
       this.date = date
+      this.digest = digest
       this.signature = this.sign(this.signableData())
-      this.header = `keyId="${this.keyId}",headers="(request-target) host date",signature="${this.signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`
+      this.header = `keyId="${this.keyId}",headers="(request-target) host date${(this.digest) ? ' digest' : ''}",signature="${this.signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`
     }
   }
 
@@ -248,6 +255,9 @@ class HTTPSignature {
     let data = `(request-target): ${this.method.toLowerCase()} ${target}\n`
     data += `host: ${this.url.host}\n`
     data += `date: ${this.date}`
+    if (this.digest) {
+      data += `\ndigest: ${this.digest}`
+    }
     return data
   }
 
@@ -270,7 +280,6 @@ class HTTPSignature {
       }
     }
     const data = lines.join('\n')
-
     const url = new URL(this.keyId)
     const fragment = (url.hash) ? url.hash.slice(1) : null
     url.hash = ''
@@ -1541,14 +1550,16 @@ class Activity extends ActivityObject {
         }
         const inbox = await toId(inboxProp)
         const date = new Date().toUTCString()
-        const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date)
+        const digest = digestBody(body)
+        const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date, digest)
         try {
           const res = await fetch(inbox, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/activity+json; charset=utf-8',
               Signature: signature.header,
-              Date: date
+              Date: date,
+              Digest: digest
             },
             body
           })
