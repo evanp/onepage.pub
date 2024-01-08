@@ -2479,7 +2479,7 @@ class Server {
   }
 
   static async ensureKey () {
-    const row = await this.get('SELECT * FROM server WHERE origin = ?', [makeUrl('')])
+    const row = await db.get('SELECT * FROM server WHERE origin = ?', [makeUrl('')])
     if (!row) {
       const { publicKey, privateKey } = await newKeyPair()
       await db.run(
@@ -2488,9 +2488,17 @@ class Server {
         ' ON CONFLICT DO NOTHING',
         [makeUrl(''), privateKey, publicKey]
       )
+    } else if (!row.privateKey) {
+      const { publicKey, privateKey } = await newKeyPair()
+      await db.run(
+        'UPDATE server ' +
+        ' SET privateKey = ?, publicKey = ? ' +
+        ' WHERE origin = ?',
+        [privateKey, publicKey, makeUrl('')]
+      )
     } else if (row.privateKey.match(/^-----BEGIN RSA PRIVATE KEY-----/)) {
-      const privateKey = toPkcs8(server.privateKey)
-      const publicKey = toSpki(server.publicKey)
+      const privateKey = toPkcs8(row.privateKey)
+      const publicKey = toSpki(row.publicKey)
       await this.run(
         'UPDATE server ' +
         ' SET privateKey = ?, publicKey = ? ' +
