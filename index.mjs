@@ -2526,16 +2526,38 @@ app.get('/', wrap(async (req, res) => {
 `, req.user))
   } else if (req.accepts('json') || req.accepts('application/activity+json') || req.accepts('application/ld+json')) {
     const url = makeUrl('')
+    const keyId = makeUrl('/key')
+    const server = await db.get('SELECT * FROM server where origin = ?', [url])
     res.set('Content-Type', 'application/activity+json')
     res.json({
       '@context': CONTEXT,
       id: url,
       name: process.OPP_NAME || 'One Page Pub',
-      type: 'Service'
+      type: 'Service',
+      publicKey: {
+        type: 'Key',
+        id: keyId,
+        owner: url,
+        publicKeyPem: server.publicKey
+      }
     })
   } else {
     res.status(406).send('Not Acceptable')
   }
+}))
+
+app.get('/key', wrap(async (req, res) => {
+  const url = makeUrl('')
+  const keyId = makeUrl('/key')
+  const server = await db.get('SELECT * FROM server where origin = ?', [url])
+  res.set('Content-Type', 'application/activity+json')
+  res.json({
+    '@context': CONTEXT,
+    type: 'Key',
+    id: keyId,
+    owner: url,
+    publicKeyPem: server.publicKey
+  })
 }))
 
 const page = (title, body, user = null) => {

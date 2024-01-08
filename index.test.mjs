@@ -340,7 +340,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
   return header
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
   let client = null
@@ -5027,6 +5027,57 @@ describe('onepage.pub', () => {
     })
     it('activity is in likes collection', async () => {
       assert.ok(await isInStream(note.likes, like, token1))
+    })
+  })
+
+  describe('Root object public key', { only: true }, () => {
+    it('Root object has a valid key', { only: true }, async () => {
+      const id = `https://localhost:${MAIN_PORT}/`
+      const res = await fetch(`https://localhost:${MAIN_PORT}/`, {
+        headers: {
+          Accept: 'application/activity+json,application/ld+json,application/json'
+        }
+      })
+      const obj = await res.json()
+      assert(res.ok)
+      assert(obj.publicKey)
+      assert.strictEqual(typeof obj.publicKey, 'object')
+      assert.strictEqual(typeof obj.publicKey.id, 'string')
+      assert.strictEqual(typeof obj.publicKey.type, 'string')
+      assert.strictEqual(obj.publicKey.type, 'Key')
+      assert.strictEqual(typeof obj.publicKey.owner, 'string')
+      assert.strictEqual(obj.publicKey.owner, id)
+      assert.strictEqual(typeof obj.publicKey.publicKeyPem, 'string')
+      assert.match(obj.publicKey.publicKeyPem, /^-----BEGIN PUBLIC KEY-----/)
+    })
+    it('Root object key can be retrieved', { only: true }, async () => {
+      const id = `https://localhost:${MAIN_PORT}/`
+      const res = await fetch(id, {
+        headers: {
+          Accept: 'application/activity+json,application/ld+json,application/json'
+        }
+      })
+      assert(res.ok)
+      const obj = await res.json()
+      assert(obj.publicKey)
+      assert(obj.publicKey.id)
+      const keyId = obj.publicKey.id
+      const keyRes = await fetch(keyId, {
+        headers: {
+          Accept: 'application/activity+json,application/ld+json,application/json'
+        }
+      })
+      assert(keyRes.ok)
+      const keyObj = await keyRes.json()
+      assert.strictEqual(typeof keyObj, 'object')
+      assert.strictEqual(typeof keyObj.id, 'string')
+      assert.strictEqual(keyObj.id, keyId)
+      assert.strictEqual(typeof keyObj.type, 'string')
+      assert.strictEqual(keyObj.type, 'Key')
+      assert.strictEqual(typeof keyObj.owner, 'string')
+      assert.strictEqual(keyObj.owner, id)
+      assert.strictEqual(typeof keyObj.publicKeyPem, 'string')
+      assert.match(keyObj.publicKeyPem, /^-----BEGIN PUBLIC KEY-----/)
     })
   })
 })
