@@ -346,14 +346,12 @@ describe('onepage.pub', () => {
   let client = null
 
   before(async () => {
-    console.log('Starting servers')
     child = await startServer(MAIN_PORT)
     remote = await startServer(REMOTE_PORT)
     client = await startClientServer(CLIENT_PORT)
   })
 
   after(() => {
-    console.log('Stopping servers')
     child.kill('SIGTERM')
     remote.kill('SIGTERM')
     client.close()
@@ -425,10 +423,6 @@ describe('onepage.pub', () => {
       const res = await fetch(
         `https://localhost:${MAIN_PORT}/.well-known/webfinger?resource=acct:${username}@localhost:${MAIN_PORT}`
       )
-      if (res.status !== 200) {
-        const body = await res.text()
-        console.log(body)
-      }
       assert.strictEqual(res.status, 200)
       assert.strictEqual(
         res.headers.get('Content-Type'),
@@ -1134,17 +1128,14 @@ describe('onepage.pub', () => {
     let token2 = null
     let follow = null
     before(async () => {
-      console.log('starting register');
       [actor1, token1] = await registerActor();
       [actor2, token2] = await registerActor()
-      console.log('finished registering')
       follow = await doActivity(actor1, token1, {
         '@context': AS2_CONTEXT,
         to: actor2.id,
         type: 'Follow',
         object: actor2.id
       })
-      console.log('finished follow')
       await settle(MAIN_PORT)
       await doActivity(actor2, token2, {
         '@context': AS2_CONTEXT,
@@ -1330,7 +1321,6 @@ describe('onepage.pub', () => {
         body: JSON.stringify(source)
       })
       created = await res.json()
-      console.log(JSON.stringify(created, null, 2))
     })
     it('can update the note', async () => {
       const updateSource = {
@@ -3217,7 +3207,6 @@ describe('onepage.pub', () => {
       try {
         update = await doActivity(actor1, token1, duplicateUpdate('inbox'))
       } catch (e) {
-        console.log(e)
         assert(false)
       }
       assert.strictEqual(update.object?.inbox?.id, actor1.inbox)
