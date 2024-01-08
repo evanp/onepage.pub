@@ -2499,7 +2499,7 @@ class Server {
     } else if (row.privateKey.match(/^-----BEGIN RSA PRIVATE KEY-----/)) {
       const privateKey = toPkcs8(row.privateKey)
       const publicKey = toSpki(row.publicKey)
-      await this.run(
+      await db.run(
         'UPDATE server ' +
         ' SET privateKey = ?, publicKey = ? ' +
         ' WHERE origin = ?',
