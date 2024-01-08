@@ -159,6 +159,14 @@ function toSpki (pem) {
   return pem
 }
 
+function toPkcs8 (pem) {
+  if (pem.startsWith('-----BEGIN RSA PRIVATE KEY-----')) {
+    const key = crypto.createPrivateKey(pem)
+    pem = key.export({ type: 'pkcs8', format: 'pem' })
+  }
+  return pem
+}
+
 // Classes
 
 class Database {
@@ -2163,7 +2171,7 @@ class User {
       publicKeyPem: publicKey
     })
     await pkey.save()
-    data.publicKey = await pkey.brief()
+    data.publicKey = await pkey.id()
     const person = new ActivityObject(data)
     await person.save()
     const passwordHash = await bcrypt.hash(this.password, 10)
@@ -2223,6 +2231,21 @@ class User {
       return null
     }
     return User.fromRow(row)
+  }
+
+  static async updateAllKeys () {
+    // TODO: change this to use a cursor
+    const rows = await db.all('SELECT * FROM user where privateKey LIKE \'-----BEGIN RSA PRIVATE KEY-----%\'')
+    for (const row of rows) {
+      const actor = new ActivityObject(row.actorId)
+      const publicKey = new ActivityObject(await actor.prop('publicKey'))
+      const newPublicKeyPem = toSpki(await publicKey.prop('publicKeyPem'))
+      const newPrivateKeyPem = toPkcs8(row.privateKey)
+      logger.info(`Updating keys for ${row.actorId}`)
+      await publicKey.patch({ publicKeyPem: newPublicKeyPem })
+      await actor.patch({ publicKey: await publicKey.id() })
+      await db.run('UPDATE user SET privateKey = ? WHERE actorId = ?', [newPrivateKeyPem, row.actorId])
+    }
   }
 }
 
@@ -3400,4 +3423,8 @@ const server = (process.env.OPP_ORIGIN)
 
 server.listen(PORT, () => {
   console.log(`Listening on ${PORT}`)
+  // Database fixes go here
+  User.updateAllKeys().then(() => {
+    logger.info('Updated all keys')
+  })
 })
