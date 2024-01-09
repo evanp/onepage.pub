@@ -67,7 +67,8 @@ const AS_CONTEXT = 'https://www.w3.org/ns/activitystreams'
 const SEC_CONTEXT = 'https://w3id.org/security'
 const BLOCKED_CONTEXT = 'https://purl.archive.org/socialweb/blocked'
 const PENDING_CONTEXT = 'https://purl.archive.org/socialweb/pending'
-const CONTEXT = [AS_CONTEXT, SEC_CONTEXT, BLOCKED_CONTEXT, PENDING_CONTEXT]
+const WEBFINGER_CONTEXT = 'https://purl.archive.org/socialweb/webfinger'
+const CONTEXT = [AS_CONTEXT, SEC_CONTEXT, BLOCKED_CONTEXT, PENDING_CONTEXT, WEBFINGER_CONTEXT]
 
 const LD_MEDIA_TYPE = 'application/ld+json'
 const ACTIVITY_MEDIA_TYPE = 'application/activity+json'
@@ -3387,6 +3388,13 @@ app.get('/:type/:id',
         if (output[prop]) {
           output[prop] = await toId(output[prop])
         }
+      }
+
+      // Add a webfinger for users
+      const username = await obj.prop('preferredUsername')
+      if (username) {
+        const hostPart = (new URL(ORIGIN)).host
+        output.webfinger = `${username}@${hostPart}`
       }
     }
     if (output.type === 'Tombstone') {

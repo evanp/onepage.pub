@@ -340,7 +340,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
   return header
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
   let client = null
@@ -5078,6 +5078,23 @@ describe('onepage.pub', () => {
       assert.strictEqual(keyObj.owner, id)
       assert.strictEqual(typeof keyObj.publicKeyPem, 'string')
       assert.match(keyObj.publicKeyPem, /^-----BEGIN PUBLIC KEY-----/)
+    })
+  })
+
+  describe('Actor has webfinger property', { only: true }, () => {
+    let actor1 = null
+    before(async () => {
+      [actor1] = await registerActor()
+    })
+    it('Actor has webfinger property', { only: true }, async () => {
+      const obj = await getObject(actor1.id)
+      assert.strictEqual(typeof obj, 'object')
+      assert('@context' in obj)
+      assert(Array.isArray(obj['@context']))
+      assert(obj['@context'].includes('https://purl.archive.org/socialweb/webfinger'))
+      assert('webfinger' in obj)
+      assert.strictEqual(typeof obj.webfinger, 'string')
+      assert.strictEqual(obj.webfinger, `${actor1.preferredUsername}@localhost:${MAIN_PORT}`)
     })
   })
 })
