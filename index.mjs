@@ -1868,21 +1868,21 @@ class RemoteActivity extends Activity {
 
   async apply (remote = null, addressees = null, ...args) {
     const owner = args[0]
+    const ownerObj = await ActivityObject.get(
+      owner,
+      ['id', 'type', 'followers', 'following', 'pendingFollowers', 'pendingFollowing']
+    )
     if (!remote) {
-      remote = await ActivityObject.get(await this.prop('actor'), ['id'], owner)
+      remote = await ActivityObject.get(await this.prop('actor'), ['id'], ownerObj)
     }
     if (!addressees) {
       addressees = ActivityObject.guessAddressees(await this.json())
     }
-    const ownerObj = await ActivityObject.get(
-      owner,
-      ['id', 'type', 'followers', 'following', 'pendingFollowers', 'pendingFollowing'],
-      owner
-    )
+
     const remoteObj = await ActivityObject.get(
       remote,
       ['id'],
-      owner
+      ownerObj
     )
     const remoteAppliers = {
       Follow: async () => {
@@ -2237,7 +2237,7 @@ class User {
     if (!object) {
       return false
     }
-    const id = await object.id()
+    const id = await toId(object)
     const row = await db.get('SELECT actorId FROM user WHERE actorId = ?', [id])
     return !!row
   }
