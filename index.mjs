@@ -1014,6 +1014,17 @@ class ActivityObject {
       }
     }
   }
+
+  async ensureAddressee (addressee) {
+    const id = await toId(addressee)
+    const addressees = await this.addressees()
+    for (const a of addressees) {
+      if (await a.id() === id) {
+        return
+      }
+    }
+    await db.run('INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)', [await this.id(), id])
+  }
 }
 
 class Activity extends ActivityObject {
@@ -3492,6 +3503,8 @@ app.post('/:type/:id',
       }
       await activity.apply(null, null, await owner.json())
       await activity.save(remote)
+      // Since it was delivered here, owner is an implicit addressee
+      await activity.ensureAddressee(owner)
       const inbox = new Collection(await owner.prop('inbox'))
       await inbox.prepend(activity)
       res.status(202)
