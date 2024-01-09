@@ -3459,7 +3459,7 @@ app.post('/:type/:id',
       if (!req.auth?.subject) {
         throw new createError.Unauthorized('Invalid HTTP signature')
       }
-      const remote = await ActivityObject.getById(req.auth.subject)
+      const remote = await ActivityObject.getById(req.auth.subject, owner)
       const remoteId = await remote.id()
       if (!(typeof remoteId === 'string')) {
         throw new createError.InternalServerError(`Invalid remote id ${JSON.stringify(remoteId)}`)
@@ -3471,7 +3471,17 @@ app.post('/:type/:id',
         throw new createError.Forbidden('Remote delivery only')
       }
       const activity = new RemoteActivity(req.body)
-      activity.setActor(remote)
+      const actor = await activity.prop('actor') || await activity.prop('attributedTo')
+      if (actor) {
+        const actorId = await toId(actor)
+        logger.debug(`New remote activity from ${actor}`)
+        if (actorId !== remoteId) {
+          logger.debug(`Actor ${actorId} does not match remote ${remoteId}`)
+          throw new createError.Forbidden(`Actor ${actorId} does not match remote ${remoteId}`)
+        }
+      } else {
+        activity.setActor(remote)
+      }
       await activity.apply(null, null, await owner.json())
       await activity.save(remote)
       const inbox = new Collection(await owner.prop('inbox'))
