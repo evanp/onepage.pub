@@ -33,7 +33,7 @@ const CERT = process.env.OPP_CERT || 'localhost.crt'
 const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
 const SESSION_SECRET = process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
 const INVITE_CODE = process.env.OPP_INVITE_CODE || null
-const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
+const BLOCK_LIST = process.env.OPP_BLOCK_LIST || 'blocklist.csv'
 const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || (new URL(ORIGIN)).hostname
 const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
