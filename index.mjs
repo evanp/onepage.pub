@@ -25,7 +25,7 @@ import { tmpdir } from 'os'
 
 // Configuration
 
-const DATABASE = process.env.OPP_DATABASE || ':memory:'
+const DATABASE = process.env.OPP_DATABASE || 'onepage.pub.db'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
 const PORT = process.env.OPP_PORT || 65380
 const KEY = process.env.OPP_KEY || 'localhost.key'
