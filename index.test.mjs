@@ -9,7 +9,13 @@ import fs from 'node:fs'
 import { promisify } from 'node:util'
 import { Blob } from 'node:buffer'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
+/**
+ * Disables TLS certificate validation if not in production.
+ * This allows connecting to servers with self-signed certificates during development/testing.
+ */
+if (process.env.NODE_ENV != 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
+}
 
 const MAIN_PORT = 50941 // V
 const REMOTE_PORT = 51996 // Cr
