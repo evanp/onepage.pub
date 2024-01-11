@@ -24,6 +24,7 @@ import path from 'path'
 import { tmpdir } from 'os'
 
 // Configuration
+process.env.OPP_INVITE_CODE = 'test-invite-code'
 
 const DATABASE = process.env.OPP_DATABASE || ':memory:'
 const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
@@ -32,7 +33,7 @@ const KEY = process.env.OPP_KEY || 'localhost.key'
 const CERT = process.env.OPP_CERT || 'localhost.crt'
 const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
 const SESSION_SECRET = process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
-const INVITE_CODE = process.env.OPP_INVITE_CODE || null
+const INVITE_CODE = process.env.OPP_INVITE_CODE || ""
 const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
 const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || (new URL(ORIGIN)).hostname
