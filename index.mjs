@@ -503,6 +503,7 @@ class ActivityObject {
     headers.Signature = signature.header
     const res = await fetch(id, { headers })
     if (res.status !== 200) {
+      logger.warn(`Error fetching ${id}: ${res.status} ${res.statusText}`)
       return null
     } else {
       const json = await res.json()
@@ -3045,13 +3046,24 @@ app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wra
       throw new createError.BadRequest('Unsupported code challenge value')
     }
 
+    const name = clientData.name
+    const url = clientData.url
+    const icon = (clientData.icon) ? clientData.icon.href || clientData.icon.url : null
+    const description = clientData.summary || clientData.summaryMap?.en
+    const author = clientData.attributedTo?.name
+    const authorUrl = clientData.attributedTo?.url
+
     res.type('html')
     res.status(200)
     res.end(page('Authorize', `
       <p>
         This app is asking to authorize access to your account.
         <ul>
-          <li>Client: ${req.query.client_id}</li>
+          <li>Client ID: ${req.query.client_id}</li>
+          <li>Name: ${(name) ? ((url) ? `<a target="_blank" href="${url}">${name}</a>` : name) : 'N/A'}</li>
+          <li>Icon: ${(icon) ? `<img src="${icon}" >` : 'N/A'}</li>
+          <li>Description: ${description || 'N/A'}</li>
+          <li>Author: ${(author) ? ((authorUrl) ? `<a target="_blank" href="${authorUrl}">${author}</a>` : author) : 'N/A'}</li>
           <li>Scope: ${req.query.scope}</li>
         </ul>
       </p>
