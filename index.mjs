@@ -2998,7 +2998,7 @@ app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wra
       throw new createError.BadRequest('Missing client_id')
     }
     let clientIdUrl = null
-    let clientData = null
+    let client = null
     try {
       clientIdUrl = new URL(req.query.client_id)
     } catch {
@@ -3008,29 +3008,14 @@ app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wra
       throw new createError.BadRequest('Invalid client_id')
     }
     try {
-      const clientRes = await fetch(req.query.client_id, {
-        headers: {
-          Accept: ACCEPT_HEADER
-        }
-      })
-      if (clientRes.status !== 200) {
-        throw new createError.BadRequest('Invalid client_id')
-      }
-      const mediaType = clientRes.headers.get('Content-Type').split(';')[0].trim()
-      if (![LD_MEDIA_TYPE, ACTIVITY_MEDIA_TYPE, JSON_MEDIA_TYPE].includes(mediaType)) {
-        throw new createError.BadRequest('Invalid client_id')
-      }
-      clientData = await clientRes.json()
-      if (!clientData.redirectURI) {
-        throw new createError.BadRequest('Invalid client_id')
-      }
+      client = await ActivityObject.getFromRemote(req.query.client_id)
     } catch (err) {
       throw new createError.BadRequest('Invalid client_id')
     }
     if (!req.query.redirect_uri) {
       throw new createError.BadRequest('Missing redirect_uri')
     }
-    if (req.query.redirect_uri !== clientData.redirectURI) {
+    if (req.query.redirect_uri !== await client.prop('redirectURI')) {
       throw new createError.BadRequest('Invalid redirect_uri')
     }
     if (!req.query.response_type || req.query.response_type !== 'code') {
@@ -3046,12 +3031,12 @@ app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wra
       throw new createError.BadRequest('Unsupported code challenge value')
     }
 
-    const name = clientData.name
-    const url = clientData.url
-    const icon = (clientData.icon) ? clientData.icon.href || clientData.icon.url : null
-    const description = clientData.summary || clientData.summaryMap?.en
-    const author = clientData.attributedTo?.name
-    const authorUrl = clientData.attributedTo?.url
+    const name = await client.prop('name')
+    const url = await client.prop('url')
+    const icon = (await client.prop('icon')) ? await client.prop('icon').href || await client.prop('icon').url : null
+    const description = await client.prop('summary') || await client.prop('summaryMap')?.en
+    const author = await client.prop('attributedTo')?.name
+    const authorUrl = await client.prop('attributedTo')?.url
 
     res.type('html')
     res.status(200)
