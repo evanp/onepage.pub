@@ -5081,7 +5081,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Actor has webfinger property', { only: true }, () => {
+  describe('Actor has webfinger property', () => {
     let actor1 = null
     before(async () => {
       [actor1] = await registerActor()
@@ -5095,6 +5095,20 @@ describe('onepage.pub', { only: true }, () => {
       assert('webfinger' in obj)
       assert.strictEqual(typeof obj.webfinger, 'string')
       assert.strictEqual(obj.webfinger, `${actor1.preferredUsername}@localhost:${MAIN_PORT}`)
+    })
+  })
+
+  describe('Actor has miscellany context', { only: true }, () => {
+    let actor1 = null
+    before(async () => {
+      [actor1] = await registerActor()
+    })
+    it('Actor has miscellany context', { only: true }, async () => {
+      const obj = await getObject(actor1.id)
+      assert.strictEqual(typeof obj, 'object')
+      assert('@context' in obj)
+      assert(Array.isArray(obj['@context']))
+      assert(obj['@context'].includes('https://purl.archive.org/socialweb/miscellany'))
     })
   })
 })
