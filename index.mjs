@@ -4129,8 +4129,10 @@ app.post(
       const inbox = new Collection(await owner.prop('inbox'))
       await inbox.prepend(activity)
       pq.add(activity.distribute())
-      const output = await activity.expanded()
-      output['@context'] = output['@context'] || CONTEXT
+      const output = {
+        '@context': CONTEXT,
+        ...(await activity.expanded())
+      }
       res.status(201)
       res.set('Content-Type', 'application/activity+json')
       res.set('Location', await activity.id())
