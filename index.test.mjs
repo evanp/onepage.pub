@@ -20,7 +20,8 @@ const FIFTH_PORT = 58693 // Ni
 
 const CLIENT_ID = `https://localhost:${CLIENT_PORT}/client`
 const REDIRECT_URI = `https://localhost:${CLIENT_PORT}/oauth/callback`
-const AS2 = 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
+const AS2 =
+  'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
 const AS2_CONTEXT = 'https://www.w3.org/ns/activitystreams'
 const AS2_MEDIA_TYPE = 'application/activity+json; charset=utf-8'
 const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public'
@@ -53,10 +54,7 @@ const startServer = (port = MAIN_PORT, props = {}) => {
 }
 
 const defaultClient = {
-  '@context': [
-    AS2_CONTEXT,
-    'https://purl.archive.org/socialweb/oauth'
-  ],
+  '@context': [AS2_CONTEXT, 'https://purl.archive.org/socialweb/oauth'],
   type: 'Application',
   id: CLIENT_ID,
   redirectURI: REDIRECT_URI,
@@ -65,7 +63,11 @@ const defaultClient = {
   }
 }
 
-const startClientServer = (port = CLIENT_PORT, client = JSON.stringify(defaultClient), contentType = AS2) => {
+const startClientServer = (
+  port = CLIENT_PORT,
+  client = JSON.stringify(defaultClient),
+  contentType = AS2
+) => {
   return new Promise((resolve, reject) => {
     const options = {
       key: fs.readFileSync('localhost.key'),
@@ -133,7 +135,8 @@ const doActivity = async (actor, token, activity) => {
   const res = await fetch(actor.outbox, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+      'Content-Type':
+        'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
       Authorization: `Bearer ${token}`
     },
     body: JSON.stringify(activity)
@@ -149,21 +152,25 @@ const failActivity = async (actor, token, activity) => {
   const res = await fetch(actor.outbox, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+      'Content-Type':
+        'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
       Authorization: `Bearer ${token}`
     },
     body: JSON.stringify(activity)
   })
   const body = await res.text()
   if (res.status >= 200 && res.status <= 299) {
-    throw new Error(`Good status code ${res.status} for activity that should fail: ${body}`)
+    throw new Error(
+      `Good status code ${res.status} for activity that should fail: ${body}`
+    )
   }
   return res.status
 }
 
 const getObject = async (id, token = null) => {
   const headers = {
-    Accept: 'application/ld+json; profile="https://www.w3.org/ns/activitystreams",application/activity+json,application/json'
+    Accept:
+      'application/ld+json; profile="https://www.w3.org/ns/activitystreams",application/activity+json,application/json'
   }
   if (token) {
     headers.Authorization = `Bearer ${token}`
@@ -201,7 +208,9 @@ const getMembers = async (collection, token = null) => {
     }
     return members
   } else {
-    throw new Error(`Invalid collection ${url}: no items, orderedItems, or first`)
+    throw new Error(
+      `Invalid collection ${url}: no items, orderedItems, or first`
+    )
   }
 }
 
@@ -237,7 +246,9 @@ const getAuthCode = async (actor, cookie, scope = 'read write') => {
   const authz = actor.endpoints.oauthAuthorizationEndpoint
   const responseType = 'code'
   const codeVerifier = crypto.randomBytes(32).toString('hex')
-  const codeChallenge = base64URLEncode(crypto.createHash('sha256').update(codeVerifier).digest())
+  const codeChallenge = base64URLEncode(
+    crypto.createHash('sha256').update(codeVerifier).digest()
+  )
   const qs = querystring.stringify({
     response_type: responseType,
     client_id: CLIENT_ID,
@@ -300,7 +311,8 @@ const getAccessToken = async (actor, cookie, scope = 'read write') => {
 }
 
 const base64URLEncode = (str) =>
-  str.toString('base64')
+  str
+    .toString('base64')
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '')
@@ -325,10 +337,11 @@ const settle = async (port = MAIN_PORT) => {
 }
 
 async function signRequest (keyId, privateKey, method, url, date) {
-  url = (typeof url === 'string') ? new URL(url) : url
-  const target = (url.search && url.search.length)
-    ? `${url.pathname}?${url.search}`
-    : `${url.pathname}`
+  url = typeof url === 'string' ? new URL(url) : url
+  const target =
+    url.search && url.search.length
+      ? `${url.pathname}?${url.search}`
+      : `${url.pathname}`
   let data = `(request-target): ${method.toLowerCase()} ${target}\n`
   data += `host: ${url.host}\n`
   data += `date: ${date}`
@@ -340,7 +353,7 @@ async function signRequest (keyId, privateKey, method, url, date) {
   return header
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -361,7 +374,8 @@ describe('onepage.pub', { only: true }, () => {
     it('can get the root object', async () => {
       const res = await fetch(`https://localhost:${MAIN_PORT}/`, {
         headers: {
-          Accept: 'application/activity+json,application/ld+json,application/json'
+          Accept:
+            'application/activity+json,application/ld+json,application/json'
         }
       })
       const obj = await res.json()
@@ -429,10 +443,15 @@ describe('onepage.pub', { only: true }, () => {
         'application/jrd+json; charset=utf-8'
       )
       const obj = await res.json()
-      assert.strictEqual(obj.subject, `acct:${username}@localhost:${MAIN_PORT}`)
+      assert.strictEqual(
+        obj.subject,
+        `acct:${username}@localhost:${MAIN_PORT}`
+      )
       assert.strictEqual(obj.links[0].rel, 'self')
       assert.strictEqual(obj.links[0].type, 'application/activity+json')
-      assert(obj.links[0].href.startsWith(`https://localhost:${MAIN_PORT}/person/`))
+      assert(
+        obj.links[0].href.startsWith(`https://localhost:${MAIN_PORT}/person/`)
+      )
     })
   })
 
@@ -461,18 +480,12 @@ describe('onepage.pub', { only: true }, () => {
         200,
         `Bad status code ${actorRes.status}: ${actorBody}`
       )
-      assert.strictEqual(
-        actorRes.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(actorRes.headers.get('Content-Type'), AS2_MEDIA_TYPE)
     })
 
     it('has the as2 @context', () => {
       assert(actorObj['@context'])
-      assert.notEqual(
-        -1,
-        actorObj['@context'].indexOf(AS2_CONTEXT)
-      )
+      assert.notEqual(-1, actorObj['@context'].indexOf(AS2_CONTEXT))
     })
 
     it('has the security @context', () => {
@@ -592,7 +605,9 @@ describe('onepage.pub', { only: true }, () => {
       assert(actorObj.publicKey)
       assert.equal('object', typeof actorObj.publicKey)
       assert.equal('string', typeof actorObj.publicKey.id)
-      assert(actorObj.publicKey.id.startsWith(`https://localhost:${MAIN_PORT}/key/`))
+      assert(
+        actorObj.publicKey.id.startsWith(`https://localhost:${MAIN_PORT}/key/`)
+      )
       assert.equal('string', typeof actorObj.publicKey.type)
       assert.equal('Key', actorObj.publicKey.type)
       assert.equal('string', typeof actorObj.publicKey.owner)
@@ -622,10 +637,7 @@ describe('onepage.pub', { only: true }, () => {
     it('can get actor inbox', async () => {
       const res = await fetch(actor.inbox)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.inbox)
       assert.strictEqual(obj.type, 'OrderedCollection')
@@ -633,16 +645,15 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
+        obj.first.id.startsWith(
+          `https://localhost:${MAIN_PORT}/orderedcollectionpage/`
+        )
       )
     })
     it('can get actor outbox', async () => {
       const res = await fetch(actor.outbox)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.outbox)
       assert.strictEqual(obj.type, 'OrderedCollection')
@@ -650,16 +661,15 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
+        obj.first.id.startsWith(
+          `https://localhost:${MAIN_PORT}/orderedcollectionpage/`
+        )
       )
     })
     it('can get actor followers', async () => {
       const res = await fetch(actor.followers)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.followers)
       assert.strictEqual(obj.type, 'OrderedCollection')
@@ -667,16 +677,15 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
+        obj.first.id.startsWith(
+          `https://localhost:${MAIN_PORT}/orderedcollectionpage/`
+        )
       )
     })
     it('can get actor following', async () => {
       const res = await fetch(actor.following)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.following)
       assert.strictEqual(obj.type, 'OrderedCollection')
@@ -684,16 +693,15 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
+        obj.first.id.startsWith(
+          `https://localhost:${MAIN_PORT}/orderedcollectionpage/`
+        )
       )
     })
     it('can get actor liked', async () => {
       const res = await fetch(actor.liked)
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.liked)
       assert.strictEqual(obj.type, 'OrderedCollection')
@@ -701,7 +709,9 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
+        obj.first.id.startsWith(
+          `https://localhost:${MAIN_PORT}/orderedcollectionpage/`
+        )
       )
     })
 
@@ -726,10 +736,7 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.blocked.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
@@ -737,7 +744,9 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
+        obj.first.id.startsWith(
+          `https://localhost:${MAIN_PORT}/orderedcollectionpage/`
+        )
       )
     })
 
@@ -762,10 +771,7 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.pendingFollowers.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
@@ -773,7 +779,9 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
+        obj.first.id.startsWith(
+          `https://localhost:${MAIN_PORT}/orderedcollectionpage/`
+        )
       )
     })
 
@@ -798,10 +806,7 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       assert.strictEqual(res.status, 200)
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
       const obj = await res.json()
       assert.strictEqual(obj.id, actor.pendingFollowing.id)
       assert.strictEqual(obj.type, 'OrderedCollection')
@@ -809,7 +814,9 @@ describe('onepage.pub', { only: true }, () => {
       assert(obj.nameMap?.en)
       assert(obj.first)
       assert(
-        obj.first.id.startsWith(`https://localhost:${MAIN_PORT}/orderedcollectionpage/`)
+        obj.first.id.startsWith(
+          `https://localhost:${MAIN_PORT}/orderedcollectionpage/`
+        )
       )
     })
   })
@@ -846,10 +853,7 @@ describe('onepage.pub', { only: true }, () => {
         201,
         `Bad status code ${res.status}: ${body}`
       )
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
     })
 
     it('has an object id', async () => {
@@ -895,7 +899,8 @@ describe('onepage.pub', { only: true }, () => {
       res = await fetch(actor.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify(activity)
@@ -909,10 +914,7 @@ describe('onepage.pub', { only: true }, () => {
         201,
         `Bad status code ${res.status}: ${body}`
       )
-      assert.strictEqual(
-        res.headers.get('Content-Type'),
-        AS2_MEDIA_TYPE
-      )
+      assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
     })
 
     it('has an object id', async () => {
@@ -956,7 +958,8 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(input)
@@ -1022,7 +1025,8 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(activity)
@@ -1052,7 +1056,8 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(actor2.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token2}`
         },
         body: JSON.stringify(activity)
@@ -1204,11 +1209,11 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it("does not appear in the actor's pending following", async () => {
-      assert(!await isInStream(actor1.pendingFollowing, follow, token1))
+      assert(!(await isInStream(actor1.pendingFollowing, follow, token1)))
     })
 
     it("does not appear in the other's pending followers", async () => {
-      assert(!await isInStream(actor2.pendingFollowers, follow, token2))
+      assert(!(await isInStream(actor2.pendingFollowers, follow, token2)))
     })
 
     it("does not put the actor in the other's followers", async () => {
@@ -1262,7 +1267,8 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(source)
@@ -1315,7 +1321,8 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(source)
@@ -1335,13 +1342,18 @@ describe('onepage.pub', { only: true }, () => {
       const updateRes = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(updateSource)
       })
       const updateBody = await updateRes.text()
-      assert.equal(201, updateRes.status, `Bad status code ${updateRes.status} ${updateBody}`)
+      assert.equal(
+        201,
+        updateRes.status,
+        `Bad status code ${updateRes.status} ${updateBody}`
+      )
       updated = JSON.parse(updateBody)
       assert.ok(updated.id)
       assert.equal('Update', updated.type)
@@ -1398,7 +1410,8 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(source)
@@ -1412,7 +1425,8 @@ describe('onepage.pub', { only: true }, () => {
       const deleteRes = await fetch(actor1.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${token1}`
         },
         body: JSON.stringify(deleteSource)
@@ -1718,7 +1732,8 @@ describe('onepage.pub', { only: true }, () => {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token2}`,
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
         },
         body: JSON.stringify({
           '@context': AS2_CONTEXT,
@@ -2174,11 +2189,11 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it("removes the follow from the actor's pending following", async () => {
-      assert(!await isInStream(actor1.pendingFollowing, follow, token1))
+      assert(!(await isInStream(actor1.pendingFollowing, follow, token1)))
     })
 
     it("removes the follow from the other's pending followers", async () => {
-      assert(!await isInStream(actor2.pendingFollowers, follow, token2))
+      assert(!(await isInStream(actor2.pendingFollowers, follow, token2)))
     })
 
     it("puts the actor in the other's followers", async () => {
@@ -2242,11 +2257,11 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it("does not appear in the actor's pending following", async () => {
-      assert(!await isInStream(actor1.pendingFollowing, follow, token1))
+      assert(!(await isInStream(actor1.pendingFollowing, follow, token1)))
     })
 
     it("does not appear in the other's pending followers", async () => {
-      assert(!await isInStream(actor2.pendingFollowers, follow, token2))
+      assert(!(await isInStream(actor2.pendingFollowers, follow, token2)))
     })
 
     it("does not put the actor in the other's followers", async () => {
@@ -2374,7 +2389,7 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('follower cannot get self-only note through proxy', async () => {
-      assert(!await canGetProxy(self.object.id, actor1, token1))
+      assert(!(await canGetProxy(self.object.id, actor1, token1)))
     })
 
     it('random can get public note through proxy', async () => {
@@ -2382,15 +2397,15 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('random cannot get private note through proxy', async () => {
-      assert(!await canGetProxy(priv.object.id, actor3, token3))
+      assert(!(await canGetProxy(priv.object.id, actor3, token3)))
     })
 
     it('random cannot get followers-only note through proxy', async () => {
-      assert(!await canGetProxy(followers.object.id, actor3, token3))
+      assert(!(await canGetProxy(followers.object.id, actor3, token3)))
     })
 
     it('random cannot get self-only note through proxy', async () => {
-      assert(!await canGetProxy(self.object.id, actor3, token3))
+      assert(!(await canGetProxy(self.object.id, actor3, token3)))
     })
   })
 
@@ -2455,7 +2470,9 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it("reply appears in original note's replies", async () => {
-      assert(await isInStream(createNote.object.replies, createReply.object, token2))
+      assert(
+        await isInStream(createNote.object.replies, createReply.object, token2)
+      )
     })
   })
 
@@ -2517,14 +2534,20 @@ describe('onepage.pub', { only: true }, () => {
 
     it('correct value for update in inbox', async () => {
       const activities = await getMembers(actor1.inbox, token1)
-      const update = activities.find(a => a.id === updateNote.id)
-      assert.strictEqual(update.object?.contentMap?.en, 'Hello, world! (updated)')
+      const update = activities.find((a) => a.id === updateNote.id)
+      assert.strictEqual(
+        update.object?.contentMap?.en,
+        'Hello, world! (updated)'
+      )
     })
 
     it('correct value for create in inbox', async () => {
       const activities = await getMembers(actor1.inbox, token1)
-      const create = activities.find(a => a.id === createNote.id)
-      assert.strictEqual(create.object?.contentMap?.en, 'Hello, world! (updated)')
+      const create = activities.find((a) => a.id === createNote.id)
+      assert.strictEqual(
+        create.object?.contentMap?.en,
+        'Hello, world! (updated)'
+      )
     })
   })
 
@@ -2588,7 +2611,7 @@ describe('onepage.pub', { only: true }, () => {
 
     it('correct value for create in inbox', async () => {
       const activities = await getMembers(actor1.inbox, token1)
-      const create = activities.find(a => a.id === createNote.id)
+      const create = activities.find((a) => a.id === createNote.id)
       assert.strictEqual(create.object?.type, 'Tombstone')
     })
   })
@@ -2882,7 +2905,7 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('announce not in shares', async () => {
-      assert(!await isInStream(createNote.object.shares, announce, token1))
+      assert(!(await isInStream(createNote.object.shares, announce, token1)))
     })
   })
 
@@ -2939,7 +2962,7 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('activity is not in object likes stream', async () => {
-      assert(!await isInStream(createNote.object.likes, like, token1))
+      assert(!(await isInStream(createNote.object.likes, like, token1)))
     })
 
     it('object likes count is correct', async () => {
@@ -3001,7 +3024,7 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('activity is not in object shares stream', async () => {
-      assert(!await isInStream(createNote.object.shares, share, token1))
+      assert(!(await isInStream(createNote.object.shares, share, token1)))
     })
 
     it('object shares count is correct', async () => {
@@ -3043,19 +3066,19 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('actor is no longer in followers', async () => {
-      assert(!await isInStream(actor1.followers, actor2, token1))
+      assert(!(await isInStream(actor1.followers, actor2, token1)))
     })
 
     it('other is no longer in following', async () => {
-      assert(!await isInStream(actor2.following, actor1, token2))
+      assert(!(await isInStream(actor2.following, actor1, token2)))
     })
 
     it('actor is not in pending followers', async () => {
-      assert(!await isInStream(actor1.pendingFollowers, follow, token1))
+      assert(!(await isInStream(actor1.pendingFollowers, follow, token1)))
     })
 
     it('other is not in pending following', async () => {
-      assert(!await isInStream(actor2.pendingFollowing, follow, token2))
+      assert(!(await isInStream(actor2.pendingFollowing, follow, token2)))
     })
   })
 
@@ -3085,19 +3108,19 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('actor is not in followers', async () => {
-      assert(!await isInStream(actor1.followers, actor2, token1))
+      assert(!(await isInStream(actor1.followers, actor2, token1)))
     })
 
     it('other is not in following', async () => {
-      assert(!await isInStream(actor2.following, actor1, token2))
+      assert(!(await isInStream(actor2.following, actor1, token2)))
     })
 
     it('actor is no longer in pending followers', async () => {
-      assert(!await isInStream(actor1.pendingFollowers, follow, token1))
+      assert(!(await isInStream(actor1.pendingFollowers, follow, token1)))
     })
 
     it('other is no longer in pending following', async () => {
-      assert(!await isInStream(actor2.pendingFollowing, follow, token2))
+      assert(!(await isInStream(actor2.pendingFollowing, follow, token2)))
     })
   })
 
@@ -3151,12 +3174,20 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('fails on setting followers', async () => {
-      const status = await failActivity(actor1, token1, invalidUpdate('followers'))
+      const status = await failActivity(
+        actor1,
+        token1,
+        invalidUpdate('followers')
+      )
       assert(status >= 400 && status <= 499)
     })
 
     it('fails on setting following', async () => {
-      const status = await failActivity(actor1, token1, invalidUpdate('following'))
+      const status = await failActivity(
+        actor1,
+        token1,
+        invalidUpdate('following')
+      )
       assert(status >= 400 && status <= 499)
     })
 
@@ -3166,22 +3197,38 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('fails on setting blocked', async () => {
-      const status = await failActivity(actor1, token1, invalidUpdate('blocked'))
+      const status = await failActivity(
+        actor1,
+        token1,
+        invalidUpdate('blocked')
+      )
       assert(status >= 400 && status <= 499)
     })
 
     it('fails on setting pendingFollowers', async () => {
-      const status = await failActivity(actor1, token1, invalidUpdate('pendingFollowers'))
+      const status = await failActivity(
+        actor1,
+        token1,
+        invalidUpdate('pendingFollowers')
+      )
       assert(status >= 400 && status <= 499)
     })
 
     it('fails on setting pendingFollowing', async () => {
-      const status = await failActivity(actor1, token1, invalidUpdate('pendingFollowing'))
+      const status = await failActivity(
+        actor1,
+        token1,
+        invalidUpdate('pendingFollowing')
+      )
       assert(status >= 400 && status <= 499)
     })
 
     it('fails on setting outbox', async () => {
-      const status = await failActivity(actor1, token1, invalidUpdate('outbox'))
+      const status = await failActivity(
+        actor1,
+        token1,
+        invalidUpdate('outbox')
+      )
       assert(status >= 400 && status <= 499)
     })
   })
@@ -3213,12 +3260,20 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('succeeds on setting duplicate followers', async () => {
-      const update = await doActivity(actor1, token1, duplicateUpdate('followers'))
+      const update = await doActivity(
+        actor1,
+        token1,
+        duplicateUpdate('followers')
+      )
       assert.strictEqual(update.object?.followers?.id, actor1.followers)
     })
 
     it('succeeds on setting duplicate following', async () => {
-      const update = await doActivity(actor1, token1, duplicateUpdate('following'))
+      const update = await doActivity(
+        actor1,
+        token1,
+        duplicateUpdate('following')
+      )
       assert.strictEqual(update.object?.following?.id, actor1.following)
     })
 
@@ -3228,22 +3283,44 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('succeeds on setting duplicate blocked', async () => {
-      const update = await doActivity(actor1, token1, duplicateUpdate('blocked'))
+      const update = await doActivity(
+        actor1,
+        token1,
+        duplicateUpdate('blocked')
+      )
       assert.strictEqual(update.object?.blocked?.id, actor1.blocked?.id)
     })
 
     it('succeeds on setting duplicate pendingFollowers', async () => {
-      const update = await doActivity(actor1, token1, duplicateUpdate('pendingFollowers'))
-      assert.strictEqual(update.object?.pendingFollowers?.id, actor1.pendingFollowers?.id)
+      const update = await doActivity(
+        actor1,
+        token1,
+        duplicateUpdate('pendingFollowers')
+      )
+      assert.strictEqual(
+        update.object?.pendingFollowers?.id,
+        actor1.pendingFollowers?.id
+      )
     })
 
     it('succeeds on setting duplicate pendingFollowing', async () => {
-      const update = await doActivity(actor1, token1, duplicateUpdate('pendingFollowing'))
-      assert.strictEqual(update.object?.pendingFollowing?.id, actor1.pendingFollowing?.id)
+      const update = await doActivity(
+        actor1,
+        token1,
+        duplicateUpdate('pendingFollowing')
+      )
+      assert.strictEqual(
+        update.object?.pendingFollowing?.id,
+        actor1.pendingFollowing?.id
+      )
     })
 
     it('succeeds on setting duplicate outbox', async () => {
-      const update = await doActivity(actor1, token1, duplicateUpdate('outbox'))
+      const update = await doActivity(
+        actor1,
+        token1,
+        duplicateUpdate('outbox')
+      )
       assert.strictEqual(update.object?.outbox?.id, actor1.outbox)
     })
   })
@@ -3290,9 +3367,12 @@ describe('onepage.pub', { only: true }, () => {
       assert.ok(res.headers.get('Set-Cookie'))
       const location = res.headers.get('Location')
       const cookie = res.headers.get('Set-Cookie')
-      const res2 = await fetch(new URL(location, `https://localhost:${MAIN_PORT}/`), {
-        headers: { Cookie: cookie }
-      })
+      const res2 = await fetch(
+        new URL(location, `https://localhost:${MAIN_PORT}/`),
+        {
+          headers: { Cookie: cookie }
+        }
+      )
       const body2 = await res2.text()
       assert.strictEqual(
         res2.status,
@@ -3319,7 +3399,11 @@ describe('onepage.pub', { only: true }, () => {
         })
       })
       const text = await reg.text()
-      assert.strictEqual(reg.status, 200, `Bad status code ${reg.status}: ${text}`)
+      assert.strictEqual(
+        reg.status,
+        200,
+        `Bad status code ${reg.status}: ${text}`
+      )
       const cookie = reg.headers.get('Set-Cookie')
       assert.ok(cookie)
       assert(cookie.match('sid'))
@@ -3401,10 +3485,17 @@ describe('onepage.pub', { only: true }, () => {
         redirect: 'manual'
       })
       const body2 = await res2.text()
-      assert.strictEqual(res2.status, 302, `Bad status code ${res2.status}: ${body2}`)
+      assert.strictEqual(
+        res2.status,
+        302,
+        `Bad status code ${res2.status}: ${body2}`
+      )
       assert.ok(res2.headers.get('Location'))
       const location = res2.headers.get('Location')
-      assert.strictEqual(location.substring(0, REDIRECT_URI.length), REDIRECT_URI)
+      assert.strictEqual(
+        location.substring(0, REDIRECT_URI.length),
+        REDIRECT_URI
+      )
       const locUrl = new URL(location)
       code = locUrl.searchParams.get('code')
       assert.ok(code)
@@ -3428,8 +3519,15 @@ describe('onepage.pub', { only: true }, () => {
         })
       })
       const body3 = await res3.json()
-      assert.strictEqual(res3.status, 200, `Bad status code ${res3.status}: ${body3}`)
-      assert.strictEqual(res3.headers.get('Content-Type'), 'application/json; charset=utf-8')
+      assert.strictEqual(
+        res3.status,
+        200,
+        `Bad status code ${res3.status}: ${body3}`
+      )
+      assert.strictEqual(
+        res3.headers.get('Content-Type'),
+        'application/json; charset=utf-8'
+      )
       accessToken = body3.access_token
       assert.ok(accessToken)
       assert.strictEqual(body3.token_type, 'Bearer')
@@ -3446,14 +3544,19 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       const body = await res.json()
-      assert.strictEqual(res.status, 200, `Bad status code ${res.status}: ${body}`)
+      assert.strictEqual(
+        res.status,
+        200,
+        `Bad status code ${res.status}: ${body}`
+      )
     })
 
     it('can use the access token to write', async () => {
       const res = await fetch(actor.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${accessToken}`
         },
         body: JSON.stringify({
@@ -3462,7 +3565,11 @@ describe('onepage.pub', { only: true }, () => {
         })
       })
       const body = await res.json()
-      assert.strictEqual(res.status, 201, `Bad status code ${res.status}: ${body}`)
+      assert.strictEqual(
+        res.status,
+        201,
+        `Bad status code ${res.status}: ${body}`
+      )
     })
 
     it('can get access code with refresh token', async () => {
@@ -3479,7 +3586,10 @@ describe('onepage.pub', { only: true }, () => {
         })
       })
       const body = await res.json()
-      assert.strictEqual(res.headers.get('Content-Type'), 'application/json; charset=utf-8')
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/json; charset=utf-8'
+      )
       accessToken2 = body.access_token
       assert.ok(accessToken2)
       assert.strictEqual(body.token_type, 'Bearer')
@@ -3494,14 +3604,19 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       const body = await res.json()
-      assert.strictEqual(res.status, 200, `Bad status code ${res.status}: ${body}`)
+      assert.strictEqual(
+        res.status,
+        200,
+        `Bad status code ${res.status}: ${body}`
+      )
     })
 
     it('can use the refreshed access token to write', async () => {
       const res = await fetch(actor.outbox, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+          'Content-Type':
+            'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
           Authorization: `Bearer ${accessToken2}`
         },
         body: JSON.stringify({
@@ -3510,7 +3625,11 @@ describe('onepage.pub', { only: true }, () => {
         })
       })
       const body = await res.json()
-      assert.strictEqual(res.status, 201, `Bad status code ${res.status}: ${body}`)
+      assert.strictEqual(
+        res.status,
+        201,
+        `Bad status code ${res.status}: ${body}`
+      )
     })
   })
 
@@ -3541,7 +3660,10 @@ describe('onepage.pub', { only: true }, () => {
     })
     it('can use the read-only access token to read local', async () => {
       // This is a private collection so should only be available to the actor
-      const pendingFollowers = await getObject(actor.pendingFollowers.id, token)
+      const pendingFollowers = await getObject(
+        actor.pendingFollowers.id,
+        token
+      )
       assert.strictEqual(pendingFollowers.totalItems, 0)
     })
     it('can use the read-only access token to read remote', async () => {
@@ -3731,15 +3853,27 @@ describe('onepage.pub', { only: true }, () => {
     it('bootstrap in registration form', async () => {
       const res = await fetch(`https://localhost:${MAIN_PORT}/register`)
       const body = await res.text()
-      assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
-      assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(
+        body,
+        /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/
+      )
+      assert.match(
+        body,
+        /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/
+      )
       assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
     it('bootstrap in login form', async () => {
       const res = await fetch(`https://localhost:${MAIN_PORT}/login`)
       const body = await res.text()
-      assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
-      assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(
+        body,
+        /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/
+      )
+      assert.match(
+        body,
+        /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/
+      )
       assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
     it('bootstrap in registration results', async () => {
@@ -3755,8 +3889,14 @@ describe('onepage.pub', { only: true }, () => {
         })
       })
       const body = await res.text()
-      assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
-      assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(
+        body,
+        /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/
+      )
+      assert.match(
+        body,
+        /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/
+      )
       assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
     it('bootstrap in login results', async () => {
@@ -3772,12 +3912,21 @@ describe('onepage.pub', { only: true }, () => {
       })
       const location = res.headers.get('Location')
       const cookie = res.headers.get('Set-Cookie')
-      const res2 = await fetch(new URL(location, `https://localhost:${MAIN_PORT}/`), {
-        headers: { Cookie: cookie }
-      })
+      const res2 = await fetch(
+        new URL(location, `https://localhost:${MAIN_PORT}/`),
+        {
+          headers: { Cookie: cookie }
+        }
+      )
       const body2 = await res2.text()
-      assert.match(body2, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
-      assert.match(body2, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(
+        body2,
+        /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/
+      )
+      assert.match(
+        body2,
+        /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/
+      )
       assert.match(body2, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
     it('bootstrap in authorization form', async () => {
@@ -3786,7 +3935,9 @@ describe('onepage.pub', { only: true }, () => {
       const responseType = 'code'
       const scope = 'read write'
       const codeVerifier = crypto.randomBytes(32).toString('hex')
-      const codeChallenge = base64URLEncode(crypto.createHash('sha256').update(codeVerifier).digest())
+      const codeChallenge = base64URLEncode(
+        crypto.createHash('sha256').update(codeVerifier).digest()
+      )
       const qs = querystring.stringify({
         response_type: responseType,
         client_id: CLIENT_ID,
@@ -3800,8 +3951,14 @@ describe('onepage.pub', { only: true }, () => {
         headers: { Cookie: cookie }
       })
       const body = await res.text()
-      assert.match(body, /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/)
-      assert.match(body, /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/)
+      assert.match(
+        body,
+        /<link rel="stylesheet" href="\/bootstrap\/css\/bootstrap.min.css">/
+      )
+      assert.match(
+        body,
+        /<script src="\/bootstrap\/js\/bootstrap.min.js"><\/script>/
+      )
       assert.match(body, /<script src="\/popper\/popper.min.js"><\/script>/)
     })
   })
@@ -3825,31 +3982,59 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('cannot change id', async () => {
-      assert(await cantUpdate(actor, token, object, { id: 'https://example.com/object/1' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          id: 'https://example.com/object/1'
+        })
+      )
     })
 
     it('cannot change replies', async () => {
-      assert(await cantUpdate(actor, token, object, { replies: 'https://example.com/collection/3' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          replies: 'https://example.com/collection/3'
+        })
+      )
     })
 
     it('cannot change likes', async () => {
-      assert(await cantUpdate(actor, token, object, { likes: 'https://example.com/collection/4' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          likes: 'https://example.com/collection/4'
+        })
+      )
     })
 
     it('cannot change shares', async () => {
-      assert(await cantUpdate(actor, token, object, { shares: 'https://example.com/collection/5' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          shares: 'https://example.com/collection/5'
+        })
+      )
     })
 
     it('cannot change published', async () => {
-      assert(await cantUpdate(actor, token, object, { published: '20230920T00:00:00Z' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          published: '20230920T00:00:00Z'
+        })
+      )
     })
 
     it('cannot change updated', async () => {
-      assert(await cantUpdate(actor, token, object, { updated: '20230920T00:00:00Z' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          updated: '20230920T00:00:00Z'
+        })
+      )
     })
 
     it('cannot change attributedTo', async () => {
-      assert(await cantUpdate(actor, token, object, { attributedTo: 'https://example.com/user/3' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          attributedTo: 'https://example.com/user/3'
+        })
+      )
     })
   })
 
@@ -3863,23 +4048,43 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('cannot change first', async () => {
-      assert(await cantUpdate(actor, token, object, { first: 'https://example.com/object/1' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          first: 'https://example.com/object/1'
+        })
+      )
     })
 
     it('cannot change last', async () => {
-      assert(await cantUpdate(actor, token, object, { last: 'https://example.com/collection/3' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          last: 'https://example.com/collection/3'
+        })
+      )
     })
 
     it('cannot change current', async () => {
-      assert(await cantUpdate(actor, token, object, { current: 'https://example.com/collection/4' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          current: 'https://example.com/collection/4'
+        })
+      )
     })
 
     it('cannot change items', async () => {
-      assert(await cantUpdate(actor, token, object, { items: ['https://example.com/foo/bar'] }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          items: ['https://example.com/foo/bar']
+        })
+      )
     })
 
     it('cannot change orderedItems', async () => {
-      assert(await cantUpdate(actor, token, object, { orderedItems: ['https://example.com/foo/bar'] }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          orderedItems: ['https://example.com/foo/bar']
+        })
+      )
     })
 
     it('cannot change totalItems', async () => {
@@ -3897,31 +4102,51 @@ describe('onepage.pub', { only: true }, () => {
     it('cannot change next', async () => {
       const coll = await getObject(actor.followers, token)
       const object = await getObject(coll.first.id, token)
-      assert(await cantUpdate(actor, token, object, { next: 'https://example.com/object/1' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          next: 'https://example.com/object/1'
+        })
+      )
     })
 
     it('cannot change prev', async () => {
       const coll = await getObject(actor.followers, token)
       const object = await getObject(coll.first.id, token)
-      assert(await cantUpdate(actor, token, object, { prev: 'https://example.com/collection/3' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          prev: 'https://example.com/collection/3'
+        })
+      )
     })
 
     it('cannot change partOf', async () => {
       const coll = await getObject(actor.followers, token)
       const object = await getObject(coll.first.id, token)
-      assert(await cantUpdate(actor, token, object, { partOf: 'https://example.com/collection/25' }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          partOf: 'https://example.com/collection/25'
+        })
+      )
     })
 
     it('cannot change items', async () => {
       const coll = await getObject(actor.followers, token)
       const object = await getObject(coll.first.id, token)
-      assert(await cantUpdate(actor, token, object, { items: ['https://example.com/foo/bar'] }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          items: ['https://example.com/foo/bar']
+        })
+      )
     })
 
     it('cannot change orderedItems', async () => {
       const coll = await getObject(actor.followers, token)
       const object = await getObject(coll.first.id, token)
-      assert(await cantUpdate(actor, token, object, { orderedItems: ['https://example.com/foo/bar'] }))
+      assert(
+        await cantUpdate(actor, token, object, {
+          orderedItems: ['https://example.com/foo/bar']
+        })
+      )
     })
 
     it('cannot change startIndex', async () => {
@@ -4199,9 +4424,9 @@ describe('onepage.pub', { only: true }, () => {
     let created = null
     before(async () => {
       // TODO: figure out how to set the path for the blocklist better
-      server = await startServer(FOURTH_PORT,
-        { OPP_BLOCK_LIST: path.join('.', 'blocklist.csv') }
-      );
+      server = await startServer(FOURTH_PORT, {
+        OPP_BLOCK_LIST: path.join('.', 'blocklist.csv')
+      });
       [actor1, token1] = await registerActor(MAIN_PORT);
       [actor2, token2] = await registerActor(REMOTE_PORT);
       [actor3, token3] = await registerActor(FOURTH_PORT)
@@ -4251,7 +4476,7 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       await settle(REMOTE_PORT)
-      assert.ok(!await isInStream(actor3.inbox, activity, token3))
+      assert.ok(!(await isInStream(actor3.inbox, activity, token3)))
     })
 
     it('will accept read from unblocked', async () => {
@@ -4259,7 +4484,7 @@ describe('onepage.pub', { only: true }, () => {
     })
 
     it('will not accept read from blocked', async () => {
-      assert.ok(!await canGetProxy(created.object.id, actor2, token2))
+      assert.ok(!(await canGetProxy(created.object.id, actor2, token2)))
     })
   })
 
@@ -4280,12 +4505,22 @@ describe('onepage.pub', { only: true }, () => {
       [actor, , cookie] = await registerActor()
       authz = actor.endpoints.oauthAuthorizationEndpoint
       const nonAS2Client =
-      'name: foo\n' +
-      'type: bar\n' +
-      'redirectURI: https://notimportant.example/callback'
-      nonAS2Server = await startClientServer(THIRD_PORT, nonAS2Client, 'application/yaml')
-      const mismatchUriClient = { ...defaultClient, redirectURI: 'https://mismatch.example/callback' }
-      mismatchUriServer = await startClientServer(FOURTH_PORT, JSON.stringify(mismatchUriClient))
+        'name: foo\n' +
+        'type: bar\n' +
+        'redirectURI: https://notimportant.example/callback'
+      nonAS2Server = await startClientServer(
+        THIRD_PORT,
+        nonAS2Client,
+        'application/yaml'
+      )
+      const mismatchUriClient = {
+        ...defaultClient,
+        redirectURI: 'https://mismatch.example/callback'
+      }
+      mismatchUriServer = await startClientServer(
+        FOURTH_PORT,
+        JSON.stringify(mismatchUriClient)
+      )
     })
     after(async () => {
       nonAS2Server.close()
@@ -4305,7 +4540,10 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(`${authz}?${qs}`, {
         headers: { Cookie: cookie }
       })
-      assert.ok(res.status >= 400 && res.status < 500, `Bad status code ${res.status}`)
+      assert.ok(
+        res.status >= 400 && res.status < 500,
+        `Bad status code ${res.status}`
+      )
     })
     it('refuses client ID that does not exist', async () => {
       const qs = querystring.stringify({
@@ -4320,7 +4558,10 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(`${authz}?${qs}`, {
         headers: { Cookie: cookie }
       })
-      assert.ok(res.status >= 400 && res.status < 500, `Bad status code ${res.status}`)
+      assert.ok(
+        res.status >= 400 && res.status < 500,
+        `Bad status code ${res.status}`
+      )
     })
     it('refuses client ID that does not return an AS2 object', async () => {
       const qs = querystring.stringify({
@@ -4335,7 +4576,10 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(`${authz}?${qs}`, {
         headers: { Cookie: cookie }
       })
-      assert.ok(res.status >= 400 && res.status < 500, `Bad status code ${res.status}`)
+      assert.ok(
+        res.status >= 400 && res.status < 500,
+        `Bad status code ${res.status}`
+      )
     })
     it('refuses client ID that does not have a matching redirectURI', async () => {
       const qs = querystring.stringify({
@@ -4350,7 +4594,10 @@ describe('onepage.pub', { only: true }, () => {
       const res = await fetch(`${authz}?${qs}`, {
         headers: { Cookie: cookie }
       })
-      assert.ok(res.status >= 400 && res.status < 500, `Bad status code ${res.status}`)
+      assert.ok(
+        res.status >= 400 && res.status < 500,
+        `Bad status code ${res.status}`
+      )
     })
   })
 
@@ -4369,8 +4616,9 @@ describe('onepage.pub', { only: true }, () => {
       assert.strictEqual(res.status, 200)
     })
     it('uses origin URLs for server ID', async () => {
-      const res = await fetch(`http://localhost:${THIRD_PORT}/`,
-        { headers: { Accept: 'application/activity+json' } })
+      const res = await fetch(`http://localhost:${THIRD_PORT}/`, {
+        headers: { Accept: 'application/activity+json' }
+      })
       const json = await res.json()
       assert.strictEqual(json.id, 'https://social.example/')
     })
@@ -4482,10 +4730,13 @@ describe('onepage.pub', { only: true }, () => {
       const location2 = res3.headers.get('Location')
       assert.ok(location2.startsWith('/endpoint/oauth/authorize'))
       const cookie2 = res3.headers.get('Set-Cookie')
-      const res5 = await fetch(new URL(location2, `https://localhost:${MAIN_PORT}/`), {
-        headers: { Cookie: cookie2 },
-        redirect: 'manual'
-      })
+      const res5 = await fetch(
+        new URL(location2, `https://localhost:${MAIN_PORT}/`),
+        {
+          headers: { Cookie: cookie2 },
+          redirect: 'manual'
+        }
+      )
       const body5 = await res5.text()
       assert.strictEqual(
         res5.status,
@@ -4508,20 +4759,17 @@ describe('onepage.pub', { only: true }, () => {
 
     before(async () => {
       [actor] = await registerActor()
-      pair = await generateKeyPair(
-        'rsa',
-        {
-          modulusLength: 2048,
-          privateKeyEncoding: {
-            type: 'pkcs1',
-            format: 'pem'
-          },
-          publicKeyEncoding: {
-            type: 'pkcs1',
-            format: 'pem'
-          }
+      pair = await generateKeyPair('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
         }
-      )
+      })
       clientActor = {
         id: `https://localhost:${FIFTH_PORT}/actor`,
         type: 'Person',
@@ -4552,33 +4800,42 @@ describe('onepage.pub', { only: true }, () => {
         to: [actor.id],
         object: clientNote
       }
-      peer = https.createServer({
-        key: fs.readFileSync('localhost.key'),
-        cert: fs.readFileSync('localhost.crt')
-      }, (req, res) => {
-        if (req.url === '/actor') {
-          res.writeHead(200)
-          res.end(JSON.stringify({
-            '@context': AS2_CONTEXT,
-            ...clientActor
-          }))
-        } else if (req.url === '/note') {
-          res.writeHead(200)
-          res.end(JSON.stringify({
-            '@context': AS2_CONTEXT,
-            ...clientNote
-          }))
-        } else if (req.url === '/activity') {
-          res.writeHead(200)
-          res.end(JSON.stringify({
-            '@context': AS2_CONTEXT,
-            ...clientActivity
-          }))
-        } else {
-          res.writeHead(404)
-          res.end('Not found')
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          if (req.url === '/actor') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...clientActor
+              })
+            )
+          } else if (req.url === '/note') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...clientNote
+              })
+            )
+          } else if (req.url === '/activity') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...clientActivity
+              })
+            )
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
         }
-      })
+      )
       peer.listen(FIFTH_PORT)
     })
 
@@ -4589,7 +4846,13 @@ describe('onepage.pub', { only: true }, () => {
     it('Can send a signed request', async () => {
       const inbox = actor.inbox
       const date = new Date().toUTCString()
-      const header = await signRequest(keyId, pair.privateKey, 'POST', inbox, date)
+      const header = await signRequest(
+        keyId,
+        pair.privateKey,
+        'POST',
+        inbox,
+        date
+      )
       const body = JSON.stringify({
         '@context': AS2_CONTEXT,
         ...clientActivity
@@ -4604,8 +4867,10 @@ describe('onepage.pub', { only: true }, () => {
         body
       })
       const resBody = await res.text()
-      assert.ok(res.status >= 200 && res.status < 300,
-        `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`)
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`
+      )
     })
   })
 
@@ -4634,9 +4899,9 @@ describe('onepage.pub', { only: true }, () => {
         name: 'test.png',
         summaryMap: { en: 'An image with the word "test"' }
       })
-      const jsonBlob = new Blob(
-        [jsonPayload],
-        { type: 'application/activity+json' })
+      const jsonBlob = new Blob([jsonPayload], {
+        type: 'application/activity+json'
+      })
       formData.append('object', jsonBlob)
 
       // Add image/png file
@@ -4653,7 +4918,10 @@ describe('onepage.pub', { only: true }, () => {
         body: formData
       })
       const resBody = await res.text()
-      assert.ok(res.status >= 200 && res.status < 300, `Bad status ${res.status}: ${resBody}`)
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status}: ${resBody}`
+      )
       implicitCreate = res.headers.get('Location')
       assert.ok(implicitCreate)
     })
@@ -4670,9 +4938,9 @@ describe('onepage.pub', { only: true }, () => {
           summaryMap: { en: 'An image with the word "test"' }
         }
       })
-      const jsonBlob = new Blob(
-        [jsonPayload],
-        { type: 'application/activity+json' })
+      const jsonBlob = new Blob([jsonPayload], {
+        type: 'application/activity+json'
+      })
       formData.append('object', jsonBlob)
 
       // Add image/png file
@@ -4689,7 +4957,10 @@ describe('onepage.pub', { only: true }, () => {
         body: formData
       })
       const resBody = await res.text()
-      assert.ok(res.status >= 200 && res.status < 300, `Bad status ${res.status}: ${resBody}`)
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status}: ${resBody}`
+      )
       explicitCreate = res.headers.get('Location')
       assert.ok(explicitCreate)
     })
@@ -4713,7 +4984,10 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       const buffer = await res.arrayBuffer()
-      assert.ok(res.status >= 200 && res.status < 300, `Bad status ${res.status}`)
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status}`
+      )
       assert.ok(buffer.byteLength > 0)
     })
 
@@ -4726,7 +5000,10 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       const buffer = await res.arrayBuffer()
-      assert.ok(res.status >= 200 && res.status < 300, `Bad status ${res.status}`)
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status}`
+      )
       assert.ok(buffer.byteLength > 0)
     })
 
@@ -4781,21 +5058,25 @@ describe('onepage.pub', { only: true }, () => {
         }
       })
       note2 = createNote2.object
-      withItems = (await doActivity(actor, token, {
-        type: 'Create',
-        to: [PUBLIC],
-        object: {
-          type: 'Collection',
-          items: [note1.id]
-        }
-      })).object
-      noItems = (await doActivity(actor, token, {
-        type: 'Create',
-        to: [PUBLIC],
-        object: {
-          type: 'Collection'
-        }
-      })).object
+      withItems = (
+        await doActivity(actor, token, {
+          type: 'Create',
+          to: [PUBLIC],
+          object: {
+            type: 'Collection',
+            items: [note1.id]
+          }
+        })
+      ).object
+      noItems = (
+        await doActivity(actor, token, {
+          type: 'Create',
+          to: [PUBLIC],
+          object: {
+            type: 'Collection'
+          }
+        })
+      ).object
     })
 
     it('can get a collection with items', async () => {
@@ -5035,7 +5316,8 @@ describe('onepage.pub', { only: true }, () => {
       const id = `https://localhost:${MAIN_PORT}/`
       const res = await fetch(`https://localhost:${MAIN_PORT}/`, {
         headers: {
-          Accept: 'application/activity+json,application/ld+json,application/json'
+          Accept:
+            'application/activity+json,application/ld+json,application/json'
         }
       })
       const obj = await res.json()
@@ -5054,7 +5336,8 @@ describe('onepage.pub', { only: true }, () => {
       const id = `https://localhost:${MAIN_PORT}/`
       const res = await fetch(id, {
         headers: {
-          Accept: 'application/activity+json,application/ld+json,application/json'
+          Accept:
+            'application/activity+json,application/ld+json,application/json'
         }
       })
       assert(res.ok)
@@ -5064,7 +5347,8 @@ describe('onepage.pub', { only: true }, () => {
       const keyId = obj.publicKey.id
       const keyRes = await fetch(keyId, {
         headers: {
-          Accept: 'application/activity+json,application/ld+json,application/json'
+          Accept:
+            'application/activity+json,application/ld+json,application/json'
         }
       })
       assert(keyRes.ok)
@@ -5086,29 +5370,57 @@ describe('onepage.pub', { only: true }, () => {
     before(async () => {
       [actor1] = await registerActor()
     })
-    it('Actor has webfinger property', { only: true }, async () => {
+    it('Actor has webfinger property', async () => {
       const obj = await getObject(actor1.id)
       assert.strictEqual(typeof obj, 'object')
       assert('@context' in obj)
       assert(Array.isArray(obj['@context']))
-      assert(obj['@context'].includes('https://purl.archive.org/socialweb/webfinger'))
+      assert(
+        obj['@context'].includes(
+          'https://purl.archive.org/socialweb/webfinger'
+        )
+      )
       assert('webfinger' in obj)
       assert.strictEqual(typeof obj.webfinger, 'string')
-      assert.strictEqual(obj.webfinger, `${actor1.preferredUsername}@localhost:${MAIN_PORT}`)
+      assert.strictEqual(
+        obj.webfinger,
+        `${actor1.preferredUsername}@localhost:${MAIN_PORT}`
+      )
     })
   })
 
-  describe('Actor has miscellany context', { only: true }, () => {
+  describe('Actor has miscellany context', () => {
     let actor1 = null
     before(async () => {
       [actor1] = await registerActor()
     })
-    it('Actor has miscellany context', { only: true }, async () => {
+    it('Actor has miscellany context', async () => {
       const obj = await getObject(actor1.id)
       assert.strictEqual(typeof obj, 'object')
       assert('@context' in obj)
       assert(Array.isArray(obj['@context']))
-      assert(obj['@context'].includes('https://purl.archive.org/socialweb/miscellany'))
+      assert(
+        obj['@context'].includes(
+          'https://purl.archive.org/socialweb/miscellany'
+        )
+      )
+    })
+  })
+
+  describe('Actor has CORS headers', () => {
+    let actor1 = null
+    before(async () => {
+      [actor1] = await registerActor()
+    })
+    it('Actor has CORS headers', async () => {
+      const headers = {
+        accept: 'application/activity+json'
+      }
+      const res = await fetch(actor1.id, {
+        headers
+      })
+      assert.strictEqual(200, res.status)
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), '*')
     })
   })
 })

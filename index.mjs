@@ -31,11 +31,14 @@ const PORT = process.env.OPP_PORT || 65380
 const KEY = process.env.OPP_KEY || 'localhost.key'
 const CERT = process.env.OPP_CERT || 'localhost.crt'
 const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
-const SESSION_SECRET = process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
+const SESSION_SECRET =
+  process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
 const INVITE_CODE = process.env.OPP_INVITE_CODE || null
 const BLOCK_LIST = process.env.OPP_BLOCK_LIST || null
-const ORIGIN = process.env.OPP_ORIGIN || ((PORT === 443) ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
-const NAME = process.env.OPP_NAME || (new URL(ORIGIN)).hostname
+const ORIGIN =
+  process.env.OPP_ORIGIN ||
+  (PORT === 443 ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
+const NAME = process.env.OPP_NAME || new URL(ORIGIN).hostname
 const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
 
 // Ensure the Upload directory exists
@@ -69,14 +72,25 @@ const BLOCKED_CONTEXT = 'https://purl.archive.org/socialweb/blocked'
 const PENDING_CONTEXT = 'https://purl.archive.org/socialweb/pending'
 const WEBFINGER_CONTEXT = 'https://purl.archive.org/socialweb/webfinger'
 const MISCELLANY_CONTEXT = 'https://purl.archive.org/socialweb/miscellany'
-const CONTEXT = [AS_CONTEXT, SEC_CONTEXT, BLOCKED_CONTEXT, PENDING_CONTEXT, WEBFINGER_CONTEXT, MISCELLANY_CONTEXT]
+const CONTEXT = [
+  AS_CONTEXT,
+  SEC_CONTEXT,
+  BLOCKED_CONTEXT,
+  PENDING_CONTEXT,
+  WEBFINGER_CONTEXT,
+  MISCELLANY_CONTEXT
+]
 
 const LD_MEDIA_TYPE = 'application/ld+json'
 const ACTIVITY_MEDIA_TYPE = 'application/activity+json'
 const JSON_MEDIA_TYPE = 'application/json'
 const ACCEPT_HEADER = `${LD_MEDIA_TYPE};q=1.0, ${ACTIVITY_MEDIA_TYPE};q=0.9, ${JSON_MEDIA_TYPE};q=0.3`
 const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public'
-const PUBLIC_OBJ = { id: PUBLIC, nameMap: { en: 'Public' }, type: 'Collection' }
+const PUBLIC_OBJ = {
+  id: PUBLIC,
+  nameMap: { en: 'Public' },
+  type: 'Collection'
+}
 const MAX_PAGE_SIZE = 20
 
 // Functions
@@ -85,10 +99,12 @@ const jwtsign = promisify(jwt.sign)
 const jwtverify = promisify(jwt.verify)
 const generateKeyPair = promisify(crypto.generateKeyPair)
 
-const isString = value => typeof value === 'string' || value instanceof String
+const isString = (value) =>
+  typeof value === 'string' || value instanceof String
 
 const base64URLEncode = (str) =>
-  str.toString('base64')
+  str
+    .toString('base64')
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '')
@@ -186,11 +202,21 @@ class Database {
   }
 
   async init () {
-    await this.run('CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255), privateKey TEXT)')
-    await this.run('CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)')
-    await this.run('CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))')
-    await this.run('CREATE TABLE IF NOT EXISTS upload (relative VARCHAR(255), mediaType VARCHAR(255), objectId VARCHAR(255))')
-    await this.run('CREATE TABLE IF NOT EXISTS server (origin VARCHAR(255) PRIMARY KEY, privateKey TEXT, publicKey TEXT)')
+    await this.run(
+      'CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255), privateKey TEXT)'
+    )
+    await this.run(
+      'CREATE TABLE IF NOT EXISTS object (id VARCHAR(255) PRIMARY KEY, owner VARCHAR(255), data TEXT)'
+    )
+    await this.run(
+      'CREATE TABLE IF NOT EXISTS addressee (objectId VARCHAR(255), addresseeId VARCHAR(255))'
+    )
+    await this.run(
+      'CREATE TABLE IF NOT EXISTS upload (relative VARCHAR(255), mediaType VARCHAR(255), objectId VARCHAR(255))'
+    )
+    await this.run(
+      'CREATE TABLE IF NOT EXISTS server (origin VARCHAR(255) PRIMARY KEY, privateKey TEXT, publicKey TEXT)'
+    )
 
     // Create the public key for this server if it doesn't exist
 
@@ -259,14 +285,28 @@ class Database {
 }
 
 class HTTPSignature {
-  constructor (keyId, privateKey = null, method = null, url = null, date = null, digest = null) {
+  constructor (
+    keyId,
+    privateKey = null,
+    method = null,
+    url = null,
+    date = null,
+    digest = null
+  ) {
     if (!privateKey) {
       const sigHeader = keyId
-      const parts = Object.fromEntries(sigHeader.split(',').map((clause) => {
-        const match = clause.match(/^\s*(\w+)\s*=\s*"(.*?)"\s*$/)
-        return [match[1], match[2].replace(/\\"/, '"')]
-      }))
-      if (!parts.keyId || !parts.headers || !parts.signature || !parts.algorithm) {
+      const parts = Object.fromEntries(
+        sigHeader.split(',').map((clause) => {
+          const match = clause.match(/^\s*(\w+)\s*=\s*"(.*?)"\s*$/)
+          return [match[1], match[2].replace(/\\"/, '"')]
+        })
+      )
+      if (
+        !parts.keyId ||
+        !parts.headers ||
+        !parts.signature ||
+        !parts.algorithm
+      ) {
         throw new Error('Invalid signature header')
       }
       if (parts.algorithm !== 'rsa-sha256') {
@@ -280,18 +320,24 @@ class HTTPSignature {
       this.keyId = keyId
       this.privateKey = privateKey
       this.method = method
-      this.url = (isString(url)) ? new URL(url) : url
+      this.url = isString(url) ? new URL(url) : url
       this.date = date
       this.digest = digest
       this.signature = this.sign(this.signableData())
-      this.header = `keyId="${this.keyId}",headers="(request-target) host date${(this.digest) ? ' digest' : ''}",signature="${this.signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`
+      this.header = `keyId="${this.keyId}",headers="(request-target) host date${
+        this.digest ? ' digest' : ''
+      }",signature="${this.signature.replace(
+        /"/g,
+        '\\"'
+      )}",algorithm="rsa-sha256"`
     }
   }
 
   signableData () {
-    const target = (this.url.search && this.url.search.length)
-      ? `${this.url.pathname}?${this.url.search}`
-      : `${this.url.pathname}`
+    const target =
+      this.url.search && this.url.search.length
+        ? `${this.url.pathname}?${this.url.search}`
+        : `${this.url.pathname}`
     let data = `(request-target): ${this.method.toLowerCase()} ${target}\n`
     data += `host: ${this.url.host}\n`
     data += `date: ${this.date}`
@@ -313,7 +359,9 @@ class HTTPSignature {
     const lines = []
     for (const name of this.headers.split(' ')) {
       if (name === '(request-target)') {
-        lines.push(`(request-target): ${req.method.toLowerCase()} ${req.originalUrl}`)
+        lines.push(
+          `(request-target): ${req.method.toLowerCase()} ${req.originalUrl}`
+        )
       } else {
         const value = req.get(name)
         lines.push(`${name}: ${value}`)
@@ -321,7 +369,7 @@ class HTTPSignature {
     }
     const data = lines.join('\n')
     const url = new URL(this.keyId)
-    const fragment = (url.hash) ? url.hash.slice(1) : null
+    const fragment = url.hash ? url.hash.slice(1) : null
     url.hash = ''
 
     const ao = await ActivityObject.get(url.toString())
@@ -331,15 +379,25 @@ class HTTPSignature {
 
     if (!fragment) {
       publicKey = ao
-    } else if (fragment in await ao.json()) {
-      publicKey = await ActivityObject.get(await ao.prop(fragment), ['publicKeyPem', 'owner'])
-    } else if (fragment === 'main-key' && 'publicKey' in await ao.json()) {
-      publicKey = await ActivityObject.get(await ao.prop('publicKey'), ['publicKeyPem', 'owner'])
+    } else if (fragment in (await ao.json())) {
+      publicKey = await ActivityObject.get(await ao.prop(fragment), [
+        'publicKeyPem',
+        'owner'
+      ])
+    } else if (fragment === 'main-key' && 'publicKey' in (await ao.json())) {
+      publicKey = await ActivityObject.get(await ao.prop('publicKey'), [
+        'publicKeyPem',
+        'owner'
+      ])
     } else {
       return null
     }
 
-    if (!await publicKey.json() || !await publicKey.prop('owner') || !await publicKey.prop('publicKeyPem')) {
+    if (
+      !(await publicKey.json()) ||
+      !(await publicKey.prop('owner')) ||
+      !(await publicKey.prop('publicKeyPem'))
+    ) {
       return null
     }
 
@@ -347,7 +405,12 @@ class HTTPSignature {
     verifier.write(data)
     verifier.end()
 
-    if (verifier.verify(await publicKey.prop('publicKeyPem'), Buffer.from(this.signature, 'base64'))) {
+    if (
+      verifier.verify(
+        await publicKey.prop('publicKeyPem'),
+        Buffer.from(this.signature, 'base64')
+      )
+    ) {
       const ownerId = await publicKey.prop('owner')
       const owner = await ActivityObject.get(ownerId)
       await owner.cache(ownerId, [PUBLIC])
@@ -446,8 +509,12 @@ class ActivityObject {
     } else if (typeof ref === 'object') {
       if (ref instanceof ActivityObject) {
         return ref
-      } else if (props && props.every((prop) =>
-        Array.isArray(prop) ? prop.some(p => p in ref) : prop in ref)) {
+      } else if (
+        props &&
+        props.every((prop) =>
+          Array.isArray(prop) ? prop.some((p) => p in ref) : prop in ref
+        )
+      ) {
         return new ActivityObject(ref)
       } else if ('id' in ref) {
         return await ActivityObject.getById(ref.id, subject)
@@ -490,9 +557,13 @@ class ActivityObject {
     }
     let keyId = null
     let privKey = null
-    if (subject && await User.isUser(subject)) {
+    if (subject && (await User.isUser(subject))) {
       const user = await User.fromActorId(await toId(subject))
-      const subjectObj = await ActivityObject.get(subject, ['publicKey'], subject)
+      const subjectObj = await ActivityObject.get(
+        subject,
+        ['publicKey'],
+        subject
+      )
       keyId = await toId(await subjectObj.prop('publicKey'))
       privKey = user.privateKey
     } else {
@@ -615,7 +686,9 @@ class ActivityObject {
   }
 
   async isCollectionPage () {
-    return ['CollectionPage', 'OrderedCollectionPage'].includes(await this.type())
+    return ['CollectionPage', 'OrderedCollectionPage'].includes(
+      await this.type()
+    )
   }
 
   async save (owner = null, addressees = null) {
@@ -627,44 +700,108 @@ class ActivityObject {
       addressees = ActivityObject.guessAddressees(data)
     }
     data.type = data.type || this.defaultType()
-    data.id = data.id || await ActivityObject.makeId(data.type)
+    data.id = data.id || (await ActivityObject.makeId(data.type))
     data.updated = new Date().toISOString()
     data.published = data.published || data.updated
     // self-ownership
     const ownerId = (await toId(owner)) || data.id
-    const addresseeIds = await Promise.all(addressees.map((addressee) => toId(addressee)))
-    await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [data.id, ownerId, JSON.stringify(data)])
-    await Promise.all(addresseeIds.map((addresseeId) =>
-      db.run(
-        'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-        [data.id, addresseeId]
-      )))
+    const addresseeIds = await Promise.all(
+      addressees.map((addressee) => toId(addressee))
+    )
+    await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [
+      data.id,
+      ownerId,
+      JSON.stringify(data)
+    ])
+    await Promise.all(
+      addresseeIds.map((addresseeId) =>
+        db.run('INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)', [
+          data.id,
+          addresseeId
+        ])
+      )
+    )
     this.#id = data.id
     this.#json = data
   }
 
-  static #coreTypes = ['Object', 'Link', 'Activity', 'IntransitiveActivity', 'Collection',
-    'OrderedCollection', 'CollectionPage', 'OrderedCollectionPage']
+  static #coreTypes = [
+    'Object',
+    'Link',
+    'Activity',
+    'IntransitiveActivity',
+    'Collection',
+    'OrderedCollection',
+    'CollectionPage',
+    'OrderedCollectionPage'
+  ]
 
-  static #activityTypes = ['Accept', 'Add', 'Announce', 'Arrive', 'Block', 'Create',
-    'Delete', 'Dislike', 'Flag', 'Follow', 'Ignore', 'Invite', 'Join', 'Leave',
-    'Like', 'Listen', 'Move', 'Offer', 'Question', 'Reject', 'Read', 'Remove',
-    'TentativeReject', 'TentativeAccept', 'Travel', 'Undo', 'Update', 'View']
+  static #activityTypes = [
+    'Accept',
+    'Add',
+    'Announce',
+    'Arrive',
+    'Block',
+    'Create',
+    'Delete',
+    'Dislike',
+    'Flag',
+    'Follow',
+    'Ignore',
+    'Invite',
+    'Join',
+    'Leave',
+    'Like',
+    'Listen',
+    'Move',
+    'Offer',
+    'Question',
+    'Reject',
+    'Read',
+    'Remove',
+    'TentativeReject',
+    'TentativeAccept',
+    'Travel',
+    'Undo',
+    'Update',
+    'View'
+  ]
 
-  static #actorTypes = ['Application', 'Group', 'Organization', 'Person', 'Service']
+  static #actorTypes = [
+    'Application',
+    'Group',
+    'Organization',
+    'Person',
+    'Service'
+  ]
 
   static #objectTypes = [
-    'Article', 'Audio', 'Document', 'Event', 'Image', 'Note', 'Page', 'Place',
-    'Profile', 'Relationship', 'Tombstone', 'Video']
+    'Article',
+    'Audio',
+    'Document',
+    'Event',
+    'Image',
+    'Note',
+    'Page',
+    'Place',
+    'Profile',
+    'Relationship',
+    'Tombstone',
+    'Video'
+  ]
 
   static #linkTypes = ['Mention']
 
-  static #knownTypes = [].concat(ActivityObject.#coreTypes, ActivityObject.#activityTypes,
-    ActivityObject.#actorTypes, ActivityObject.#objectTypes,
-    ActivityObject.#linkTypes)
+  static #knownTypes = [].concat(
+    ActivityObject.#coreTypes,
+    ActivityObject.#activityTypes,
+    ActivityObject.#actorTypes,
+    ActivityObject.#objectTypes,
+    ActivityObject.#linkTypes
+  )
 
   static bestType (type) {
-    const types = (Array.isArray(type)) ? type : [type]
+    const types = Array.isArray(type) ? type : [type]
     for (const item of types) {
       if (item in ActivityObject.#knownTypes) {
         return item
@@ -675,18 +812,28 @@ class ActivityObject {
   }
 
   static isActivityType (type) {
-    const types = (Array.isArray(type)) ? type : [type]
-    return types.some(t => {
-      return ['Activity', 'IntransitiveActivity'].includes(t) ||
+    const types = Array.isArray(type) ? type : [type]
+    return types.some((t) => {
+      return (
+        ['Activity', 'IntransitiveActivity'].includes(t) ||
         ActivityObject.#activityTypes.includes(t)
+      )
     })
   }
 
   static isObjectType (type) {
-    const types = (Array.isArray(type)) ? type : [type]
-    return types.some(t => {
-      return ['Object', 'Link', 'Collection', 'CollectionPage', 'OrderedCollection', 'OrderedCollectionPage'].includes(t) ||
-        ActivityObject.#objectTypes.includes(t)
+    const types = Array.isArray(type) ? type : [type]
+    return types.some((t) => {
+      return (
+        [
+          'Object',
+          'Link',
+          'Collection',
+          'CollectionPage',
+          'OrderedCollection',
+          'OrderedCollectionPage'
+        ].includes(t) || ActivityObject.#objectTypes.includes(t)
+      )
     })
   }
 
@@ -699,43 +846,56 @@ class ActivityObject {
     if (!addressees) {
       addressees = ActivityObject.guessAddressees(data)
     }
-    const ownerId = await toId(owner) || data.id
-    const addresseeIds = await Promise.all(addressees.map((addressee) => toId(addressee)))
-    const qry = 'INSERT OR REPLACE INTO object (id, owner, data) VALUES (?, ?, ?)'
+    const ownerId = (await toId(owner)) || data.id
+    const addresseeIds = await Promise.all(
+      addressees.map((addressee) => toId(addressee))
+    )
+    const qry =
+      'INSERT OR REPLACE INTO object (id, owner, data) VALUES (?, ?, ?)'
     await db.run(qry, [dataId, ownerId, JSON.stringify(data)])
-    await Promise.all(addresseeIds.map(async (addresseeId) =>
-      await db.run(
-        'INSERT OR IGNORE INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-        [dataId, await toId(addresseeId)]
-      )))
+    await Promise.all(
+      addresseeIds.map(
+        async (addresseeId) =>
+          await db.run(
+            'INSERT OR IGNORE INTO addressee (objectId, addresseeId) VALUES (?, ?)',
+            [dataId, await toId(addresseeId)]
+          )
+      )
+    )
   }
 
   async patch (patch) {
-    const merged = { ...await this.json(), ...patch, updated: new Date().toISOString() }
+    const merged = {
+      ...(await this.json()),
+      ...patch,
+      updated: new Date().toISOString()
+    }
     // null means delete
     for (const prop in patch) {
       if (patch[prop] == null) {
         delete merged[prop]
       }
     }
-    await db.run(
-      'UPDATE object SET data = ? WHERE id = ?',
-      [JSON.stringify(merged), await this.id()]
-    )
+    await db.run('UPDATE object SET data = ? WHERE id = ?', [
+      JSON.stringify(merged),
+      await this.id()
+    ])
     this.#json = merged
   }
 
   async replace (replacement) {
-    await db.run(
-      'UPDATE object SET data = ? WHERE id = ?',
-      [JSON.stringify(replacement), await this.id()]
-    )
+    await db.run('UPDATE object SET data = ? WHERE id = ?', [
+      JSON.stringify(replacement),
+      await this.id()
+    ])
     this.#json = replacement
   }
 
   async owner () {
     if (!this.#owner) {
-      const row = await db.get('SELECT owner FROM object WHERE id = ?', [await this.id()])
+      const row = await db.get('SELECT owner FROM object WHERE id = ?', [
+        await this.id()
+      ])
       if (!row) {
         this.#owner = null
       } else {
@@ -748,8 +908,13 @@ class ActivityObject {
   async addressees () {
     if (!this.#addressees) {
       const id = await this.id()
-      const rows = await db.all('SELECT addresseeId FROM addressee WHERE objectId = ?', [id])
-      this.#addressees = await Promise.all(rows.map((row) => ActivityObject.get(row.addresseeId)))
+      const rows = await db.all(
+        'SELECT addresseeId FROM addressee WHERE objectId = ?',
+        [id]
+      )
+      this.#addressees = await Promise.all(
+        rows.map((row) => ActivityObject.get(row.addresseeId))
+      )
     }
     return this.#addressees
   }
@@ -757,7 +922,9 @@ class ActivityObject {
   async canRead (subject) {
     const owner = await this.owner()
     const addressees = await this.addressees()
-    const addresseeIds = await Promise.all(addressees.map((addressee) => addressee.id()))
+    const addresseeIds = await Promise.all(
+      addressees.map((addressee) => addressee.id())
+    )
     if (subject && typeof subject !== 'string') {
       throw new Error(`Unexpected subject: ${JSON.stringify(subject)}`)
     }
@@ -765,7 +932,7 @@ class ActivityObject {
     if (subject && domainIsBlocked(subject)) {
       return false
     }
-    if (subject && await User.isUser(owner)) {
+    if (subject && (await User.isUser(owner))) {
       const blockedProp = await owner.prop('blocked')
       const blocked = new Collection(blockedProp)
       if (await blocked.hasMember(subject)) {
@@ -781,7 +948,7 @@ class ActivityObject {
       return false
     }
     // owner can always read
-    if (subject === await owner.id()) {
+    if (subject === (await owner.id())) {
       return true
     }
     // direct addressees can always read
@@ -805,7 +972,7 @@ class ActivityObject {
   async canWrite (subject) {
     const owner = await this.owner()
     // owner can always write
-    if (subject === await owner.id()) {
+    if (subject === (await owner.id())) {
       return true
     }
     // TODO: if we add a way to grant write access
@@ -902,10 +1069,7 @@ class ActivityObject {
     'url'
   ]
 
-  static #arrayProps = [
-    'items',
-    'orderedItems'
-  ]
+  static #arrayProps = ['items', 'orderedItems']
 
   async expanded () {
     // force a full read
@@ -931,8 +1095,8 @@ class ActivityObject {
       if (prop in object) {
         if (Array.isArray(object[prop])) {
           object[prop] = await Promise.all(object[prop].map(toBrief))
-        } else if (prop === 'object' && await this.needsExpandedObject()) {
-          object[prop] = await (new ActivityObject(object[prop])).expanded()
+        } else if (prop === 'object' && (await this.needsExpandedObject())) {
+          object[prop] = await new ActivityObject(object[prop]).expanded()
         } else {
           object[prop] = await toBrief(object[prop])
         }
@@ -991,7 +1155,7 @@ class ActivityObject {
   async needsExpandedObject () {
     const needs = ['Create', 'Update', 'Accept', 'Reject', 'Announce']
     const type = await this.type()
-    const types = (Array.isArray(type)) ? type : [type]
+    const types = Array.isArray(type) ? type : [type]
     return types.some((t) => needs.includes(t))
   }
 
@@ -1021,11 +1185,14 @@ class ActivityObject {
     const id = await toId(addressee)
     const addressees = await this.addressees()
     for (const a of addressees) {
-      if (await a.id() === id) {
+      if ((await a.id()) === id) {
         return
       }
     }
-    await db.run('INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)', [await this.id(), id])
+    await db.run(
+      'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
+      [await this.id(), id]
+    )
   }
 }
 
@@ -1042,7 +1209,11 @@ class Activity extends ActivityObject {
     let activity = await this.json()
     const actor = await ActivityObject.guessOwner(activity)
     const addressees = ActivityObject.guessAddressees(activity)
-    const actorObj = await ActivityObject.get(actor, ['followers', 'following', 'pendingFollowers', 'pendingFollowing'], actor)
+    const actorObj = await ActivityObject.get(
+      actor,
+      ['followers', 'following', 'pendingFollowers', 'pendingFollowing'],
+      actor
+    )
     const appliers = {
       Follow: async () => {
         const objectProp = await this.prop('object')
@@ -1051,7 +1222,9 @@ class Activity extends ActivityObject {
         }
         const other = await ActivityObject.get(objectProp, null, actorObj)
         if (!other) {
-          throw new createError.BadRequest(`No such object to follow: ${JSON.stringify(objectProp)}`)
+          throw new createError.BadRequest(
+            `No such object to follow: ${JSON.stringify(objectProp)}`
+          )
         }
         await other.expand()
         const otherId = await other.id()
@@ -1059,9 +1232,14 @@ class Activity extends ActivityObject {
         if (await following.hasMember(otherId)) {
           throw new createError.BadRequest('Already following')
         }
-        const pendingFollowing = new Collection(await actorObj.prop('pendingFollowing'))
-        if (await pendingFollowing.find(async (act) =>
-          await toId(await act.prop('object')) === otherId)) {
+        const pendingFollowing = new Collection(
+          await actorObj.prop('pendingFollowing')
+        )
+        if (
+          await pendingFollowing.find(
+            async (act) => (await toId(await act.prop('object'))) === otherId
+          )
+        ) {
           throw new createError.BadRequest('Already pending following')
         }
         let pendingFollowers = null
@@ -1072,9 +1250,14 @@ class Activity extends ActivityObject {
           if (await followers.hasMember(actorId)) {
             throw new createError.BadRequest('Already followed')
           }
-          pendingFollowers = new Collection(await other.prop('pendingFollowers'))
-          if (await pendingFollowers.find(async (act) =>
-            await toId(await act.prop('object')) === actorId)) {
+          pendingFollowers = new Collection(
+            await other.prop('pendingFollowers')
+          )
+          if (
+            await pendingFollowers.find(
+              async (act) => (await toId(await act.prop('object'))) === actorId
+            )
+          ) {
             throw new createError.BadRequest('Already pending follower')
           }
         }
@@ -1089,13 +1272,21 @@ class Activity extends ActivityObject {
         if (!objectProp) {
           throw new createError.BadRequest('No object accepted')
         }
-        const accepted = await ActivityObject.get(objectProp, [['id', '@id'], 'actor', 'type'], actorObj)
+        const accepted = await ActivityObject.get(
+          objectProp,
+          [['id', '@id'], 'actor', 'type'],
+          actorObj
+        )
         switch (await accepted.type()) {
           case 'Follow': {
-            const pendingFollowers = new Collection(await actorObj.prop('pendingFollowers'))
+            const pendingFollowers = new Collection(
+              await actorObj.prop('pendingFollowers')
+            )
             await pendingFollowers.expand()
-            if (!await pendingFollowers.hasMember(await accepted.id())) {
-              throw new createError.BadRequest('Not awaiting acceptance for follow')
+            if (!(await pendingFollowers.hasMember(await accepted.id()))) {
+              throw new createError.BadRequest(
+                'Not awaiting acceptance for follow'
+              )
             }
             const other = await ActivityObject.get(
               await accepted.prop('actor'),
@@ -1105,10 +1296,14 @@ class Activity extends ActivityObject {
             const isUser = await User.isUser(other)
             let pendingFollowing = null
             if (isUser) {
-              pendingFollowing = new Collection(await other.prop('pendingFollowing'))
+              pendingFollowing = new Collection(
+                await other.prop('pendingFollowing')
+              )
               await pendingFollowers.expand()
-              if (!await pendingFollowing.hasMember(await accepted.id())) {
-                throw new createError.BadRequest('Not awaiting acceptance for follow')
+              if (!(await pendingFollowing.hasMember(await accepted.id()))) {
+                throw new createError.BadRequest(
+                  'Not awaiting acceptance for follow'
+                )
               }
             }
             await pendingFollowers.remove(accepted)
@@ -1128,20 +1323,36 @@ class Activity extends ActivityObject {
         if (!objectProp) {
           throw new createError.BadRequest('No object followed')
         }
-        const rejected = await ActivityObject.get(objectProp, ['id', 'type', 'actor'], actorObj)
+        const rejected = await ActivityObject.get(
+          objectProp,
+          ['id', 'type', 'actor'],
+          actorObj
+        )
         switch (await rejected.type()) {
           case 'Follow': {
-            const pendingFollowers = new Collection(await actorObj.prop('pendingFollowers'))
-            if (!await pendingFollowers.hasMember(await rejected.id())) {
-              throw new createError.BadRequest('Not awaiting acceptance for follow')
+            const pendingFollowers = new Collection(
+              await actorObj.prop('pendingFollowers')
+            )
+            if (!(await pendingFollowers.hasMember(await rejected.id()))) {
+              throw new createError.BadRequest(
+                'Not awaiting acceptance for follow'
+              )
             }
-            const other = await ActivityObject.get(await rejected.prop('actor'), ['pendingFollowing'], actorObj)
+            const other = await ActivityObject.get(
+              await rejected.prop('actor'),
+              ['pendingFollowing'],
+              actorObj
+            )
             const isUser = await User.isUser(other)
             let pendingFollowing = null
             if (isUser) {
-              pendingFollowing = new Collection(await other.prop('pendingFollowing'))
-              if (!await pendingFollowing.hasMember(await rejected.id())) {
-                throw new createError.BadRequest('Not awaiting acceptance for follow')
+              pendingFollowing = new Collection(
+                await other.prop('pendingFollowing')
+              )
+              if (!(await pendingFollowing.hasMember(await rejected.id()))) {
+                throw new createError.BadRequest(
+                  'Not awaiting acceptance for follow'
+                )
               }
             }
             await pendingFollowers.remove(rejected)
@@ -1162,24 +1373,33 @@ class Activity extends ActivityObject {
         await ActivityObject.copyAddresseeProps(activity, object)
         object.type = object.type || 'Object'
         const summaryEn = `A(n) ${object.type} by ${await actorObj.name()}`
-        if (!['name', 'nameMap', 'summary', 'summaryMap'].some(p => p in object)) {
+        if (
+          !['name', 'nameMap', 'summary', 'summaryMap'].some((p) => p in object)
+        ) {
           object.summaryMap = {
             en: summaryEn
           }
         }
         for (const prop of ['likes', 'replies', 'shares']) {
-          const value = await Collection.empty(await actorObj.id(), addressees,
-            { summaryMap: { en: `${prop} of ${summaryEn}` } })
+          const value = await Collection.empty(
+            await actorObj.id(),
+            addressees,
+            { summaryMap: { en: `${prop} of ${summaryEn}` } }
+          )
           object[prop] = await value.id()
         }
         // Add paging setup for collections
-        const types = (Array.isArray(object.type)) ? object.type : [object.type]
-        if (types.some(t => ['Collection', 'OrderedCollection'].includes(t)) &&
-          !('items' in object) && !('orderedItems' in object)) {
+        const types = Array.isArray(object.type) ? object.type : [object.type]
+        if (
+          types.some((t) => ['Collection', 'OrderedCollection'].includes(t)) &&
+          !('items' in object) &&
+          !('orderedItems' in object)
+        ) {
           object.id = await ActivityObject.makeId(object.type)
-          const pageProps = ('OrderedCollection' in types)
-            ? { type: 'OrderedCollectionPage', orderedItems: [] }
-            : { type: 'CollectionPage', items: [] }
+          const pageProps =
+            'OrderedCollection' in types
+              ? { type: 'OrderedCollectionPage', orderedItems: [] }
+              : { type: 'CollectionPage', items: [] }
           const page = new ActivityObject({
             partOf: object.id,
             attributedTo: await actorObj.id(),
@@ -1194,9 +1414,13 @@ class Activity extends ActivityObject {
         activity.object = await saved.id()
         if (await saved.prop('inReplyTo')) {
           const inReplyToProp = await saved.prop('inReplyTo')
-          const parent = await ActivityObject.get(inReplyToProp, ['id', 'replies'], actorObj)
+          const parent = await ActivityObject.get(
+            inReplyToProp,
+            ['id', 'replies'],
+            actorObj
+          )
           const parentOwner = await parent.owner()
-          if (parentOwner && await User.isUser(parentOwner)) {
+          if (parentOwner && (await User.isUser(parentOwner))) {
             const replies = new Collection(await parent.prop('replies'))
             await replies.prepend(saved)
           }
@@ -1210,66 +1434,124 @@ class Activity extends ActivityObject {
         if (!activity?.object?.id) {
           throw new createError.BadRequest('No id for object to update')
         }
-        const object = await ActivityObject.getById(activity.object.id, actorObj)
+        const object = await ActivityObject.getById(
+          activity.object.id,
+          actorObj
+        )
         if (!object) {
-          throw new createError.BadRequest(`Unable to get object ${activity.object.id}`)
+          throw new createError.BadRequest(
+            `Unable to get object ${activity.object.id}`
+          )
         }
         const objectOwner = await object.owner()
-        if (!objectOwner || await objectOwner.id() !== await actorObj.id()) {
-          throw new createError.BadRequest("You can't update an object you don't own")
+        if (
+          !objectOwner ||
+          (await objectOwner.id()) !== (await actorObj.id())
+        ) {
+          throw new createError.BadRequest(
+            "You can't update an object you don't own"
+          )
         }
         // prevent updating certain properties directly
         if (await User.isUser(object)) {
-          for (const prop of ['inbox', 'outbox', 'followers', 'following', 'pendingFollowers', 'pendingFollowing', 'liked', 'blocked']) {
-            if (prop in activity.object && await toId(activity.object[prop]) !== await toId(await object.prop(prop))) {
-              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+          for (const prop of [
+            'inbox',
+            'outbox',
+            'followers',
+            'following',
+            'pendingFollowers',
+            'pendingFollowing',
+            'liked',
+            'blocked'
+          ]) {
+            if (
+              prop in activity.object &&
+              (await toId(activity.object[prop])) !==
+                (await toId(await object.prop(prop)))
+            ) {
+              throw new createError.BadRequest(
+                `Cannot update ${prop} directly`
+              )
             }
           }
         }
         // prevent updating collection properties directly
         if (await object.isCollection()) {
           for (const prop of ['first', 'last', 'current']) {
-            if (prop in activity.object && await toId(activity.object[prop]) !== await toId(await object.prop(prop))) {
-              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            if (
+              prop in activity.object &&
+              (await toId(activity.object[prop])) !==
+                (await toId(await object.prop(prop)))
+            ) {
+              throw new createError.BadRequest(
+                `Cannot update ${prop} directly`
+              )
             }
           }
           for (const prop of ['totalItems']) {
-            if (prop in activity.object && activity.object[prop] !== await object.prop(prop)) {
-              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            if (
+              prop in activity.object &&
+              activity.object[prop] !== (await object.prop(prop))
+            ) {
+              throw new createError.BadRequest(
+                `Cannot update ${prop} directly`
+              )
             }
           }
         }
         // prevent updating collection properties directly
         if (await object.isCollectionPage()) {
           for (const prop of ['prev', 'next', 'partOf']) {
-            if (prop in activity.object && await toId(activity.object[prop]) !== await toId(await object.prop(prop))) {
-              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            if (
+              prop in activity.object &&
+              (await toId(activity.object[prop])) !==
+                (await toId(await object.prop(prop)))
+            ) {
+              throw new createError.BadRequest(
+                `Cannot update ${prop} directly`
+              )
             }
           }
           for (const prop of ['startIndex']) {
-            if (prop in activity.object && activity.object[prop] !== await object.prop(prop)) {
-              throw new createError.BadRequest(`Cannot update ${prop} directly`)
+            if (
+              prop in activity.object &&
+              activity.object[prop] !== (await object.prop(prop))
+            ) {
+              throw new createError.BadRequest(
+                `Cannot update ${prop} directly`
+              )
             }
           }
         }
         // Common between page and collection
-        if (await object.isCollection() || await object.isCollectionPage()) {
+        if (
+          (await object.isCollection()) ||
+          (await object.isCollectionPage())
+        ) {
           for (const prop of ['items', 'orderedItems']) {
             if (prop in activity.object) {
               const proposed = activity.object[prop]
               const current = await object.prop(prop)
               if (!current) {
-                throw new createError.BadRequest(`Cannot insert ${prop} directly`)
+                throw new createError.BadRequest(
+                  `Cannot insert ${prop} directly`
+                )
               }
               if (!Array.isArray(proposed)) {
-                throw new createError.BadRequest(`Cannot insert scalar value for ${prop}`)
+                throw new createError.BadRequest(
+                  `Cannot insert scalar value for ${prop}`
+                )
               }
               if (proposed.length !== current.length) {
-                throw new createError.BadRequest(`Cannot change size of ${prop}`)
+                throw new createError.BadRequest(
+                  `Cannot change size of ${prop}`
+                )
               }
               for (const i in current) {
                 if (proposed[i] !== current[i]) {
-                  throw new createError.BadRequest(`Cannot change values of ${prop}`)
+                  throw new createError.BadRequest(
+                    `Cannot change values of ${prop}`
+                  )
                 }
               }
             }
@@ -1277,14 +1559,25 @@ class Activity extends ActivityObject {
         }
         // prevent updating object properties directly
         for (const prop of ['replies', 'likes', 'shares', 'attributedTo']) {
-          if (prop in activity.object && await toId(activity.object[prop]) !== await toId(await object.prop(prop))) {
+          if (
+            prop in activity.object &&
+            (await toId(activity.object[prop])) !==
+              (await toId(await object.prop(prop)))
+          ) {
             throw new createError.BadRequest(`Cannot update ${prop} directly`)
           }
         }
         // prevent updating non-object properties directly
         for (const prop of ['published', 'updated']) {
-          if (prop in activity.object && activity.object[prop] !== await object.prop(prop)) {
-            logger.debug(`Update mismatch for ${prop}: ${activity.object[prop]} !== ${await object.prop(prop)} `)
+          if (
+            prop in activity.object &&
+            activity.object[prop] !== (await object.prop(prop))
+          ) {
+            logger.debug(
+              `Update mismatch for ${prop}: ${
+                activity.object[prop]
+              } !== ${await object.prop(prop)} `
+            )
             throw new createError.BadRequest(`Cannot update ${prop} directly`)
           }
         }
@@ -1296,13 +1589,19 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest('No object to delete')
         }
-        const object = await ActivityObject.get(activity.object, ['id', 'type'], actorObj)
-        if (!await object.id()) {
+        const object = await ActivityObject.get(
+          activity.object,
+          ['id', 'type'],
+          actorObj
+        )
+        if (!(await object.id())) {
           throw new createError.BadRequest('No id for object to delete')
         }
         const objectOwner = await object.owner()
-        if (!objectOwner || await objectOwner.id() !== await toId(actor)) {
-          throw new createError.BadRequest("You can't delete an object you don't own")
+        if (!objectOwner || (await objectOwner.id()) !== (await toId(actor))) {
+          throw new createError.BadRequest(
+            "You can't delete an object you don't own"
+          )
         }
         const timestamp = new Date().toISOString()
         await object.replace({
@@ -1322,27 +1621,44 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest('No object to add')
         }
-        const object = await ActivityObject.get(activity.object, ['id', 'type'], actorObj)
-        if (!await object.id()) {
+        const object = await ActivityObject.get(
+          activity.object,
+          ['id', 'type'],
+          actorObj
+        )
+        if (!(await object.id())) {
           throw new createError.BadRequest('No id for object to add')
         }
         if (!activity.target) {
           throw new createError.BadRequest('No target to add to')
         }
         const target = new Collection(activity.target)
-        if (!await target.id()) {
+        if (!(await target.id())) {
           throw new createError.BadRequest('No id for object to add to')
         }
-        if (!await target.isCollection()) {
+        if (!(await target.isCollection())) {
           throw new createError.BadRequest("Can't add to a non-collection")
         }
         const targetOwner = await target.owner()
-        if (!targetOwner || await targetOwner.id() !== await actorObj.id()) {
-          throw new createError.BadRequest("You can't add to an object you don't own")
+        if (
+          !targetOwner ||
+          (await targetOwner.id()) !== (await actorObj.id())
+        ) {
+          throw new createError.BadRequest(
+            "You can't add to an object you don't own"
+          )
         }
-        for (const prop of ['inbox', 'outbox', 'followers', 'following', 'liked']) {
-          if (await target.id() === await toId(actor[prop])) {
-            throw new createError.BadRequest(`Can't add an object directly to your ${prop}`)
+        for (const prop of [
+          'inbox',
+          'outbox',
+          'followers',
+          'following',
+          'liked'
+        ]) {
+          if ((await target.id()) === (await toId(actor[prop]))) {
+            throw new createError.BadRequest(
+              `Can't add an object directly to your ${prop}`
+            )
           }
         }
         if (await target.hasMember(await object.id())) {
@@ -1355,30 +1671,49 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest('No object to remove')
         }
-        const object = await ActivityObject.get(activity.object, ['id', 'type'], actorObj)
-        if (!await object.id()) {
+        const object = await ActivityObject.get(
+          activity.object,
+          ['id', 'type'],
+          actorObj
+        )
+        if (!(await object.id())) {
           throw new createError.BadRequest('No id for object to remove')
         }
         if (!activity.target) {
           throw new createError.BadRequest('No target to remove from')
         }
         const target = new Collection(activity.target)
-        if (!await target.id()) {
+        if (!(await target.id())) {
           throw new createError.BadRequest('No id for object to remove from')
         }
-        if (!await target.isCollection()) {
-          throw new createError.BadRequest("Can't remove from a non-collection")
+        if (!(await target.isCollection())) {
+          throw new createError.BadRequest(
+            "Can't remove from a non-collection"
+          )
         }
         const targetOwner = await target.owner()
-        if (!targetOwner || await targetOwner.id() !== await actorObj.id()) {
-          throw new createError.BadRequest("You can't remove from an object you don't own")
+        if (
+          !targetOwner ||
+          (await targetOwner.id()) !== (await actorObj.id())
+        ) {
+          throw new createError.BadRequest(
+            "You can't remove from an object you don't own"
+          )
         }
-        for (const prop of ['inbox', 'outbox', 'followers', 'following', 'liked']) {
-          if (await target.id() === await toId(actor[prop])) {
-            throw new createError.BadRequest(`Can't remove an object directly from your ${prop}`)
+        for (const prop of [
+          'inbox',
+          'outbox',
+          'followers',
+          'following',
+          'liked'
+        ]) {
+          if ((await target.id()) === (await toId(actor[prop]))) {
+            throw new createError.BadRequest(
+              `Can't remove an object directly from your ${prop}`
+            )
           }
         }
-        if (!await target.hasMember(await object.id())) {
+        if (!(await target.hasMember(await object.id()))) {
           throw new createError.BadRequest('Not a member')
         }
         await target.remove(object)
@@ -1388,9 +1723,15 @@ class Activity extends ActivityObject {
         if (!activity.object) {
           throw new createError.BadRequest('No object to like')
         }
-        const object = await ActivityObject.get(activity.object, ['id', 'type', 'likes'], actorObj)
-        if (!await object.canRead(await actorObj.id())) {
-          throw new createError.BadRequest("Can't like an object you can't read")
+        const object = await ActivityObject.get(
+          activity.object,
+          ['id', 'type', 'likes'],
+          actorObj
+        )
+        if (!(await object.canRead(await actorObj.id()))) {
+          throw new createError.BadRequest(
+            "Can't like an object you can't read"
+          )
         }
         const liked = new Collection(await actorObj.prop('liked'))
         if (await liked.hasMember(await object.id())) {
@@ -1412,14 +1753,15 @@ class Activity extends ActivityObject {
         return activity
       },
       Block: async () => {
-        if (!await this.prop('object')) {
+        if (!(await this.prop('object'))) {
           throw new createError.BadRequest('No object to block')
         }
         const blocked = new Collection(await actorObj.prop('blocked'))
         const other = await ActivityObject.get(
-          (await this.prop('object')),
+          await this.prop('object'),
           ['id', 'type', 'followers', 'following'],
-          actorObj)
+          actorObj
+        )
         if (await blocked.hasMember(await other.id())) {
           throw new createError.BadRequest('Already blocked!')
         }
@@ -1437,7 +1779,7 @@ class Activity extends ActivityObject {
         return activity
       },
       Announce: async () => {
-        if (!await this.prop('object')) {
+        if (!(await this.prop('object'))) {
           throw new createError.BadRequest('Nothing to announce')
         }
         const object = await ActivityObject.get(
@@ -1453,7 +1795,7 @@ class Activity extends ActivityObject {
         return activity
       },
       Undo: async () => {
-        if (!await this.prop('object')) {
+        if (!(await this.prop('object'))) {
           throw new createError.BadRequest('Nothing to undo')
         }
         const object = await ActivityObject.get(
@@ -1462,18 +1804,21 @@ class Activity extends ActivityObject {
           actorObj
         )
         const owner = await object.owner()
-        if (await owner.id() !== await actorObj.id()) {
-          throw new createError.BadRequest('Cannot undo an object you do not own')
+        if ((await owner.id()) !== (await actorObj.id())) {
+          throw new createError.BadRequest(
+            'Cannot undo an object you do not own'
+          )
         }
         switch (await object.type()) {
           case 'Like': {
-            if (!await object.prop('object')) {
+            if (!(await object.prop('object'))) {
               throw new createError.BadRequest('Nothing liked')
             }
             const likedObject = await ActivityObject.get(
               await object.prop('object'),
               ['id', 'type', 'likes'],
-              actorObj)
+              actorObj
+            )
             const liked = new Collection(await actorObj.prop('liked'))
             await liked.remove(likedObject)
             const likedObjectOwner = await likedObject.owner()
@@ -1484,7 +1829,7 @@ class Activity extends ActivityObject {
             break
           }
           case 'Block': {
-            if (!await object.prop('object')) {
+            if (!(await object.prop('object'))) {
               throw new createError.BadRequest('Nothing blocked')
             }
             const blockedObject = await ActivityObject.get(
@@ -1497,7 +1842,7 @@ class Activity extends ActivityObject {
             break
           }
           case 'Follow': {
-            if (!await object.prop('object')) {
+            if (!(await object.prop('object'))) {
               throw new createError.BadRequest('Nothing followed')
             }
             const followedObject = await ActivityObject.get(
@@ -1505,27 +1850,38 @@ class Activity extends ActivityObject {
               ['id', 'type', 'followers'],
               actorObj
             )
-            const pendingFollowing = new Collection(await actorObj.prop('pendingFollowing'))
+            const pendingFollowing = new Collection(
+              await actorObj.prop('pendingFollowing')
+            )
             if (await pendingFollowing.hasMember(await object.id())) {
               await pendingFollowing.remove(object)
             } else {
-              const following = new Collection(await actorObj.prop('following'))
+              const following = new Collection(
+                await actorObj.prop('following')
+              )
               await following.remove(followedObject)
             }
             const followedObjectOwner = await followedObject.owner()
-            if (followedObjectOwner && await User.isUser(followedObjectOwner)) {
-              const pendingFollowers = new Collection(await followedObjectOwner.prop('pendingFollowers'))
+            if (
+              followedObjectOwner &&
+              (await User.isUser(followedObjectOwner))
+            ) {
+              const pendingFollowers = new Collection(
+                await followedObjectOwner.prop('pendingFollowers')
+              )
               if (await pendingFollowers.hasMember(await object.id())) {
                 await pendingFollowers.remove(object)
               } else {
-                const followers = new Collection(await followedObject.prop('followers'))
+                const followers = new Collection(
+                  await followedObject.prop('followers')
+                )
                 await followers.remove(actorObj)
               }
             }
             break
           }
           case 'Announce': {
-            if (!await object.prop('object')) {
+            if (!(await object.prop('object'))) {
               throw new createError.BadRequest('Nothing announced')
             }
             const sharedObject = await ActivityObject.get(
@@ -1546,7 +1902,7 @@ class Activity extends ActivityObject {
       }
     }
     const type = await this.type()
-    const types = (Array.isArray(type)) ? type : [type]
+    const types = Array.isArray(type) ? type : [type]
     for (const item of types) {
       if (item in appliers) {
         activity = await appliers[item]()
@@ -1562,32 +1918,42 @@ class Activity extends ActivityObject {
       addressees = ActivityObject.guessAddressees(activity)
     }
 
-    addressees = await Promise.all(addressees.map(async (addressee) => toId(addressee)))
+    addressees = await Promise.all(
+      addressees.map(async (addressee) => toId(addressee))
+    )
 
     // Expand public, followers, other lists
 
-    const expanded = (await Promise.all(addressees.map(async (addressee) => {
-      if (addressee === PUBLIC) {
-        const followers = new Collection(await owner.prop('followers'))
-        return await followers.members()
-      } else {
-        const obj = new ActivityObject(addressee)
-        if (await obj.isCollection()) {
-          const coll = new Collection(addressee)
-          const objOwner = await obj.owner()
-          if (coll &&
-              await objOwner.id() === await owner.id()) {
-            return await coll.members()
+    const expanded = (
+      await Promise.all(
+        addressees.map(async (addressee) => {
+          if (addressee === PUBLIC) {
+            const followers = new Collection(await owner.prop('followers'))
+            return await followers.members()
+          } else {
+            const obj = new ActivityObject(addressee)
+            if (await obj.isCollection()) {
+              const coll = new Collection(addressee)
+              const objOwner = await obj.owner()
+              if (coll && (await objOwner.id()) === (await owner.id())) {
+                return await coll.members()
+              }
+            }
           }
-        }
-      }
-      return addressee
-    }))).filter((v, i, a) => v && a.indexOf(v) === i && v !== owner.id).flat()
+          return addressee
+        })
+      )
+    )
+      .filter((v, i, a) => v && a.indexOf(v) === i && v !== owner.id)
+      .flat()
 
     // Deliver to each of the expanded addressees
 
     const body = JSON.stringify(activity)
-    const { privateKey } = await db.get('SELECT privateKey FROM user WHERE actorId = ?', [await owner.id()])
+    const { privateKey } = await db.get(
+      'SELECT privateKey FROM user WHERE actorId = ?',
+      [await owner.id()]
+    )
     const keyId = await toId(await owner.prop('publicKey'))
 
     const sendTo = async (addressee) => {
@@ -1609,7 +1975,14 @@ class Activity extends ActivityObject {
         const inbox = await toId(inboxProp)
         const date = new Date().toUTCString()
         const digest = digestBody(body)
-        const signature = new HTTPSignature(keyId, privateKey, 'POST', inbox, date, digest)
+        const signature = new HTTPSignature(
+          keyId,
+          privateKey,
+          'POST',
+          inbox,
+          date,
+          digest
+        )
         try {
           const res = await fetch(inbox, {
             method: 'POST',
@@ -1623,7 +1996,9 @@ class Activity extends ActivityObject {
           })
           const resBody = await res.text()
           if (res.statusCode < 200 || res.statusCode >= 300) {
-            throw new Error(`Bad status ${res.statusCode} for delivery to ${inbox}: ${resBody}`)
+            throw new Error(
+              `Bad status ${res.statusCode} for delivery to ${inbox}: ${resBody}`
+            )
           }
         } catch (err) {
           logger.warn(`Failed delivery to ${inbox}: ${err.message}`)
@@ -1638,8 +2013,15 @@ class Activity extends ActivityObject {
   }
 
   static duckType (data) {
-    const props = ['actor', 'object', 'target', 'result', 'origin', 'instrument']
-    return props.some(p => p in data)
+    const props = [
+      'actor',
+      'object',
+      'target',
+      'result',
+      'origin',
+      'instrument'
+    ]
+    return props.some((p) => p in data)
   }
 
   async setActor (actor) {
@@ -1665,7 +2047,9 @@ class Collection extends ActivityObject {
   async hasMember (object) {
     await this.expand()
     const objectId = await toId(object)
-    const match = (item) => ((isString(item) && item === objectId) || ((typeof item === 'object') && item.id === objectId))
+    const match = (item) =>
+      (isString(item) && item === objectId) ||
+      (typeof item === 'object' && item.id === objectId)
     if (await this.hasProp('orderedItems')) {
       const orderedItems = await this.prop('orderedItems')
       return orderedItems.some(match)
@@ -1674,9 +2058,11 @@ class Collection extends ActivityObject {
       return items.some(match)
     } else if (await this.hasProp('first')) {
       let page = null
-      for (let pageId = await this.prop('first');
+      for (
+        let pageId = await this.prop('first');
         pageId;
-        pageId = await page.prop('next')) {
+        pageId = await page.prop('next')
+      ) {
         page = new ActivityObject(pageId)
         await page.expand()
         if (await page.hasProp('orderedItems')) {
@@ -1704,14 +2090,20 @@ class Collection extends ActivityObject {
     const collection = await this.json()
     const objectId = await object.id()
     if (collection.orderedItems) {
-      await this.patch({ totalItems: collection.totalItems + 1, orderedItems: [objectId, ...collection.orderedItems] })
+      await this.patch({
+        totalItems: collection.totalItems + 1,
+        orderedItems: [objectId, ...collection.orderedItems]
+      })
     } else if (collection.items) {
-      await this.patch({ totalItems: collection.totalItems + 1, items: [objectId, ...collection.items] })
+      await this.patch({
+        totalItems: collection.totalItems + 1,
+        items: [objectId, ...collection.items]
+      })
     } else if (collection.first) {
       const first = new ActivityObject(collection.first)
       await first.expand()
       const firstJson = await first.json()
-      const ip = ['orderedItems', 'items'].find(p => p in firstJson)
+      const ip = ['orderedItems', 'items'].find((p) => p in firstJson)
       if (!ip) {
         throw new Error('No items or orderedItems in first page')
       }
@@ -1732,7 +2124,10 @@ class Collection extends ActivityObject {
         props[ip] = [objectId]
         const newFirst = new ActivityObject(props)
         await newFirst.save()
-        await this.patch({ totalItems: collection.totalItems + 1, first: await newFirst.id() })
+        await this.patch({
+          totalItems: collection.totalItems + 1,
+          first: await newFirst.id()
+        })
         await first.patch({ prev: await newFirst.id() })
       }
     }
@@ -1758,7 +2153,10 @@ class Collection extends ActivityObject {
       const i = collection.items.indexOf(objectId)
       if (i !== -1) {
         collection.items.splice(i, 1)
-        await this.patch({ totalItems: collection.totalItems - 1, items: collection.items })
+        await this.patch({
+          totalItems: collection.totalItems - 1,
+          items: collection.items
+        })
       }
     } else {
       let ref = collection.first
@@ -1836,10 +2234,11 @@ class Collection extends ActivityObject {
     let ref = this.prop('first')
     while (ref) {
       const page = new ActivityObject(ref)
-      if (!await page.isCollectionPage()) {
+      if (!(await page.isCollectionPage())) {
         break
       }
-      const items = (await page.prop('items') || await page.prop('orderedItems') || [])
+      const items =
+        (await page.prop('items')) || (await page.prop('orderedItems')) || []
       for (const item of items) {
         const itemObj = new ActivityObject(item)
         const result = await test(itemObj)
@@ -1867,37 +2266,47 @@ class RemoteActivity extends Activity {
       addressees = ActivityObject.guessAddressees(data)
     }
     const dataId = await this.id()
-    const ownerId = await toId(owner) || dataId
-    const addresseeIds = await Promise.all(addressees.map((addressee) => toId(addressee)))
-    await db.run(
-      'INSERT INTO object (id, owner, data) VALUES (?, ?, ?)',
-      [await dataId, ownerId, JSON.stringify(data)]
+    const ownerId = (await toId(owner)) || dataId
+    const addresseeIds = await Promise.all(
+      addressees.map((addressee) => toId(addressee))
     )
-    await Promise.all(addresseeIds.map((addresseeId) =>
-      db.run(
-        'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-        [dataId, addresseeId]
-      )))
+    await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [
+      await dataId,
+      ownerId,
+      JSON.stringify(data)
+    ])
+    await Promise.all(
+      addresseeIds.map((addresseeId) =>
+        db.run('INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)', [
+          dataId,
+          addresseeId
+        ])
+      )
+    )
   }
 
   async apply (remote = null, addressees = null, ...args) {
     const owner = args[0]
-    const ownerObj = await ActivityObject.get(
-      owner,
-      ['id', 'type', 'followers', 'following', 'pendingFollowers', 'pendingFollowing']
-    )
+    const ownerObj = await ActivityObject.get(owner, [
+      'id',
+      'type',
+      'followers',
+      'following',
+      'pendingFollowers',
+      'pendingFollowing'
+    ])
     if (!remote) {
-      remote = await ActivityObject.get(await this.prop('actor'), ['id'], ownerObj)
+      remote = await ActivityObject.get(
+        await this.prop('actor'),
+        ['id'],
+        ownerObj
+      )
     }
     if (!addressees) {
       addressees = ActivityObject.guessAddressees(await this.json())
     }
 
-    const remoteObj = await ActivityObject.get(
-      remote,
-      ['id'],
-      ownerObj
-    )
+    const remoteObj = await ActivityObject.get(remote, ['id'], ownerObj)
     const remoteAppliers = {
       Follow: async () => {
         const object = await ActivityObject.get(
@@ -1905,31 +2314,35 @@ class RemoteActivity extends Activity {
           ['id', 'type'],
           ownerObj
         )
-        if (await object.id() === await ownerObj.id()) {
+        if ((await object.id()) === (await ownerObj.id())) {
           const followers = await Collection.get(
             await ownerObj.prop('followers'),
             ['id', ['orderedItems', 'items', 'first']],
-            ownerObj)
+            ownerObj
+          )
           if (await followers.hasMember(remote)) {
             throw new Error('Already a follower')
           }
           const pendingFollowers = await Collection.get(
             await ownerObj.prop('pendingFollowers'),
             ['id', 'type', ['orderedItems', 'items', 'first']],
-            ownerObj)
+            ownerObj
+          )
           if (await pendingFollowers.hasMember(await this.id())) {
             throw new Error('Already pending')
           }
           logger.debug(`Adding ${await this.id()} to pendingFollowers`)
           await pendingFollowers.prepend(this)
-          logger.debug(`Pending followers now ${await pendingFollowers.prop('totalItems')}`)
+          logger.debug(
+            `Pending followers now ${await pendingFollowers.prop('totalItems')}`
+          )
         }
       },
       Create: async () => {
         if (await this.prop('object')) {
           const ao = new ActivityObject(await this.prop('object'))
           const owner = await ao.owner()
-          if (owner && await owner.id() !== await remoteObj.id()) {
+          if (owner && (await owner.id()) !== (await remoteObj.id())) {
             throw new Error('Cannot create something you do not own!')
           }
           await ao.cache(await remoteObj.id(), addressees)
@@ -1937,12 +2350,15 @@ class RemoteActivity extends Activity {
             const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
             await inReplyTo.expand()
             const inReplyToOwner = await inReplyTo.owner()
-            if (inReplyToOwner && await inReplyToOwner.id() === await ownerObj.id()) {
-              if (!await inReplyTo.canRead(await remoteObj.id())) {
+            if (
+              inReplyToOwner &&
+              (await inReplyToOwner.id()) === (await ownerObj.id())
+            ) {
+              if (!(await inReplyTo.canRead(await remoteObj.id()))) {
                 throw new Error('Cannot reply to something you cannot read!')
               }
               const replies = new Collection(await inReplyTo.prop('replies'))
-              if (!await replies.hasMember(ao)) {
+              if (!(await replies.hasMember(ao))) {
                 await replies.prepend(ao)
               }
             }
@@ -1953,7 +2369,7 @@ class RemoteActivity extends Activity {
         if (await this.prop('object')) {
           const ao = new ActivityObject(await this.prop('object'))
           const aoOwner = await ao.owner()
-          if (aoOwner && await aoOwner.id() !== await remoteObj.id()) {
+          if (aoOwner && (await aoOwner.id()) !== (await remoteObj.id())) {
             throw new Error('Cannot update something you do not own!')
           }
           await ao.cache(remote, addressees)
@@ -1961,12 +2377,15 @@ class RemoteActivity extends Activity {
             const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
             await inReplyTo.expand()
             const inReplyToOwner = await inReplyTo.owner()
-            if (inReplyToOwner && await inReplyToOwner.id() === await ownerObj.id()) {
-              if (!await inReplyTo.canRead(remote)) {
+            if (
+              inReplyToOwner &&
+              (await inReplyToOwner.id()) === (await ownerObj.id())
+            ) {
+              if (!(await inReplyTo.canRead(remote))) {
                 throw new Error('Cannot reply to something you cannot read!')
               }
               const replies = new Collection(await inReplyTo.prop('replies'))
-              if (!await replies.hasMember(ao)) {
+              if (!(await replies.hasMember(ao))) {
                 await replies.prepend(ao)
               }
             }
@@ -1977,7 +2396,7 @@ class RemoteActivity extends Activity {
         if (await this.prop('object')) {
           const ao = new ActivityObject(await this.prop('object'))
           const aoOwner = await ao.owner()
-          if (aoOwner && await aoOwner.id() !== await remoteObj.id()) {
+          if (aoOwner && (await aoOwner.id()) !== (await remoteObj.id())) {
             throw new Error('Cannot delete something you do not own!')
           }
           await ao.cache(remote, addressees)
@@ -1988,12 +2407,12 @@ class RemoteActivity extends Activity {
           const ao = new ActivityObject(await this.prop('object'))
           const aoOwner = await ao.owner()
           if (await User.isUser(aoOwner)) {
-            if (!await ao.canRead(await remoteObj.id())) {
+            if (!(await ao.canRead(await remoteObj.id()))) {
               throw new Error('Cannot like something you cannot read!')
             }
             await ao.expand()
             const likes = new Collection(await ao.prop('likes'))
-            if (!await likes.hasMember(this)) {
+            if (!(await likes.hasMember(this))) {
               await likes.prepend(this)
             }
           }
@@ -2004,12 +2423,12 @@ class RemoteActivity extends Activity {
           const ao = new ActivityObject(await this.prop('object'))
           const aoOwner = await ao.owner()
           if (await User.isUser(aoOwner)) {
-            if (!await ao.canRead(await remoteObj.id())) {
+            if (!(await ao.canRead(await remoteObj.id()))) {
               throw new Error('Cannot share something you cannot read!')
             }
             await ao.expand()
             const shares = new Collection(await ao.prop('shares'))
-            if (!await shares.hasMember(this)) {
+            if (!(await shares.hasMember(this))) {
               await shares.prepend(this)
             }
           }
@@ -2020,7 +2439,7 @@ class RemoteActivity extends Activity {
           const ao = new ActivityObject(await this.prop('object'))
           const aoOwner = await ao.owner()
           if (await User.isUser(aoOwner)) {
-            if (!await ao.canRead(await remoteObj.id())) {
+            if (!(await ao.canRead(await remoteObj.id()))) {
               throw new Error('Cannot add something you cannot read!')
             }
           }
@@ -2028,10 +2447,10 @@ class RemoteActivity extends Activity {
             const target = new ActivityObject(await this.prop('target'))
             const targetOwner = await target.owner()
             if (await User.isUser(targetOwner)) {
-              if (!await target.canRead(await remoteObj.id())) {
+              if (!(await target.canRead(await remoteObj.id()))) {
                 throw new Error('Cannot add to something you cannot read!')
               }
-              if (!await target.canWrite(await remoteObj.id())) {
+              if (!(await target.canWrite(await remoteObj.id()))) {
                 throw new Error('Cannot add to something you do not own!')
               }
             }
@@ -2043,19 +2462,20 @@ class RemoteActivity extends Activity {
           const ao = new ActivityObject(await this.prop('object'))
           const aoOwner = await ao.owner()
           if (await User.isUser(aoOwner)) {
-            if (!await ao.canRead(await remoteObj.id())) {
+            if (!(await ao.canRead(await remoteObj.id()))) {
               throw new Error('Cannot add something you cannot read!')
             }
           }
-          const targetProp = await this.prop('target') || await this.prop('origin')
+          const targetProp =
+            (await this.prop('target')) || (await this.prop('origin'))
           if (targetProp) {
             const target = new ActivityObject(targetProp)
             const targetOwner = await target.owner()
             if (await User.isUser(targetOwner)) {
-              if (!await target.canRead(await remoteObj.id())) {
+              if (!(await target.canRead(await remoteObj.id()))) {
                 throw new Error('Cannot remove from you cannot read!')
               }
-              if (!await target.canWrite(await remoteObj.id())) {
+              if (!(await target.canWrite(await remoteObj.id()))) {
                 throw new Error('Cannot remove from something you do not own!')
               }
             }
@@ -2080,13 +2500,19 @@ class RemoteActivity extends Activity {
               throw new Error('No object!')
             }
             const object = new ActivityObject(objectProp)
-            if (await actor.id() === await ownerObj.id() &&
-              await object.id() === await remoteObj.id()) {
-              const pendingFollowing = new Collection(await ownerObj.prop('pendingFollowing'))
-              if (!await pendingFollowing.hasMember(await accepted.id())) {
+            if (
+              (await actor.id()) === (await ownerObj.id()) &&
+              (await object.id()) === (await remoteObj.id())
+            ) {
+              const pendingFollowing = new Collection(
+                await ownerObj.prop('pendingFollowing')
+              )
+              if (!(await pendingFollowing.hasMember(await accepted.id()))) {
                 throw new Error('Not pending!')
               }
-              const following = new Collection(await ownerObj.prop('following'))
+              const following = new Collection(
+                await ownerObj.prop('following')
+              )
               if (await following.hasMember(await object.id())) {
                 throw new Error('Already following!')
               }
@@ -2115,13 +2541,19 @@ class RemoteActivity extends Activity {
               throw new Error('No object!')
             }
             const object = new ActivityObject(objectProp)
-            if (await actor.id() === await ownerObj.id() &&
-              await object.id() === await remoteObj.id()) {
-              const pendingFollowing = new Collection(await ownerObj.prop('pendingFollowing'))
-              if (!await pendingFollowing.hasMember(await rejected.id())) {
+            if (
+              (await actor.id()) === (await ownerObj.id()) &&
+              (await object.id()) === (await remoteObj.id())
+            ) {
+              const pendingFollowing = new Collection(
+                await ownerObj.prop('pendingFollowing')
+              )
+              if (!(await pendingFollowing.hasMember(await rejected.id()))) {
                 throw new Error('Not pending!')
               }
-              const following = new Collection(await ownerObj.prop('following'))
+              const following = new Collection(
+                await ownerObj.prop('following')
+              )
               if (await following.hasMember(await object.id())) {
                 throw new Error('Already following!')
               }
@@ -2144,14 +2576,14 @@ class RemoteActivity extends Activity {
           throw new Error('No actor!')
         }
         const undoneActor = new ActivityObject(actorProp)
-        if (await remoteObj.id() !== await undoneActor.id()) {
+        if ((await remoteObj.id()) !== (await undoneActor.id())) {
           throw new Error('Not your activity to undo!')
         }
         switch (await undone.type()) {
           case 'Like': {
             const objectProp = await undone.prop('object')
             const object = new ActivityObject(objectProp)
-            if (!await object.canRead(await remoteObj.id())) {
+            if (!(await object.canRead(await remoteObj.id()))) {
               throw new Error('Cannot unlike something you cannot read!')
             }
             const objectOwner = await object.owner()
@@ -2165,7 +2597,7 @@ class RemoteActivity extends Activity {
           case 'Announce': {
             const objectProp = await undone.prop('object')
             const object = new ActivityObject(objectProp)
-            if (!await object.canRead(await remoteObj.id())) {
+            if (!(await object.canRead(await remoteObj.id()))) {
               throw new Error('Cannot unshare something you cannot read!')
             }
             const objectOwner = await object.owner()
@@ -2179,7 +2611,7 @@ class RemoteActivity extends Activity {
           case 'Follow': {
             const objectProp = await undone.prop('object')
             const object = new ActivityObject(objectProp)
-            if (!await object.canRead(await remoteObj.id())) {
+            if (!(await object.canRead(await remoteObj.id()))) {
               throw new Error('Cannot unshare something you cannot read!')
             }
             const objectOwner = await object.owner()
@@ -2187,7 +2619,9 @@ class RemoteActivity extends Activity {
               await object.expand()
               const followers = new Collection(await object.prop('followers'))
               await followers.remove(undoneActor)
-              const pendingFollowers = new Collection(await object.prop('pendingFollowers'))
+              const pendingFollowers = new Collection(
+                await object.prop('pendingFollowers')
+              )
               await pendingFollowers.remove(undone)
             }
           }
@@ -2195,7 +2629,9 @@ class RemoteActivity extends Activity {
       }
     }
 
-    const types = (Array.isArray(await this.type())) ? await this.type() : [await this.type()]
+    const types = Array.isArray(await this.type())
+      ? await this.type()
+      : [await this.type()]
 
     for (const type of types) {
       if (type in remoteAppliers) {
@@ -2224,12 +2660,16 @@ class User {
     }
     const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
     for (const prop of props) {
-      const coll = await Collection.empty(this.actorId, [PUBLIC], { nameMap: { en: `${this.username}'s ${prop}` } })
+      const coll = await Collection.empty(this.actorId, [PUBLIC], {
+        nameMap: { en: `${this.username}'s ${prop}` }
+      })
       data[prop] = await coll.id()
     }
     const privProps = ['blocked', 'pendingFollowers', 'pendingFollowing']
     for (const prop of privProps) {
-      const coll = await Collection.empty(this.actorId, [], { nameMap: { en: `${this.username}'s ${prop}` } })
+      const coll = await Collection.empty(this.actorId, [], {
+        nameMap: { en: `${this.username}'s ${prop}` }
+      })
       data[prop] = await coll.id()
     }
     const { publicKey, privateKey } = await newKeyPair()
@@ -2244,7 +2684,10 @@ class User {
     const person = new ActivityObject(data)
     await person.save()
     const passwordHash = await bcrypt.hash(this.password, 10)
-    await db.run('INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)', [this.username, passwordHash, this.actorId, privateKey])
+    await db.run(
+      'INSERT INTO user (username, passwordHash, actorId, privateKey) VALUES (?, ?, ?, ?)',
+      [this.username, passwordHash, this.actorId, privateKey]
+    )
   }
 
   static async isUser (object) {
@@ -2252,12 +2695,16 @@ class User {
       return false
     }
     const id = await toId(object)
-    const row = await db.get('SELECT actorId FROM user WHERE actorId = ?', [id])
+    const row = await db.get('SELECT actorId FROM user WHERE actorId = ?', [
+      id
+    ])
     return !!row
   }
 
   static async usernameExists (username) {
-    const row = await db.get('SELECT username FROM user WHERE username = ?', [username])
+    const row = await db.get('SELECT username FROM user WHERE username = ?', [
+      username
+    ])
     return !!row
   }
 
@@ -2271,7 +2718,9 @@ class User {
   }
 
   static async fromUsername (username) {
-    const row = await db.get('SELECT * FROM user WHERE username = ?', [username])
+    const row = await db.get('SELECT * FROM user WHERE username = ?', [
+      username
+    ])
     if (!row) {
       return null
     } else {
@@ -2292,11 +2741,13 @@ class User {
   }
 
   static async authenticate (username, password) {
-    const row = await db.get('SELECT * FROM user WHERE username = ?', [username])
+    const row = await db.get('SELECT * FROM user WHERE username = ?', [
+      username
+    ])
     if (!row) {
       return null
     }
-    if (!await bcrypt.compare(password, row.passwordHash)) {
+    if (!(await bcrypt.compare(password, row.passwordHash))) {
       return null
     }
     return User.fromRow(row)
@@ -2304,7 +2755,9 @@ class User {
 
   static async updateAllKeys () {
     // TODO: change this to use a cursor
-    const rows = await db.all('SELECT * FROM user where privateKey LIKE \'-----BEGIN RSA PRIVATE KEY-----%\'')
+    const rows = await db.all(
+      "SELECT * FROM user where privateKey LIKE '-----BEGIN RSA PRIVATE KEY-----%'"
+    )
     for (const row of rows) {
       const actor = new ActivityObject(row.actorId)
       const publicKey = new ActivityObject(await actor.prop('publicKey'))
@@ -2313,7 +2766,10 @@ class User {
       logger.info(`Updating keys for ${row.actorId}`)
       await publicKey.patch({ publicKeyPem: newPublicKeyPem })
       await actor.patch({ publicKey: await publicKey.id() })
-      await db.run('UPDATE user SET privateKey = ? WHERE actorId = ?', [newPrivateKeyPem, row.actorId])
+      await db.run('UPDATE user SET privateKey = ? WHERE actorId = ?', [
+        newPrivateKeyPem,
+        row.actorId
+      ])
     }
   }
 }
@@ -2327,7 +2783,9 @@ class Upload {
   }
 
   static async fromRelative (relative) {
-    const row = await db.get('SELECT * FROM upload WHERE relative = ?', [relative])
+    const row = await db.get('SELECT * FROM upload WHERE relative = ?', [
+      relative
+    ])
     if (!row) {
       return null
     } else {
@@ -2361,7 +2819,10 @@ class Upload {
       throw new Error('Cannot save upload without objectId')
     }
     await fsp.writeFile(this.path(), this.buffer)
-    await db.run('INSERT INTO upload (relative, mediaType, objectId) VALUES (?, ?, ?)', [this.relative, this.mediaType, this.objectId])
+    await db.run(
+      'INSERT INTO upload (relative, mediaType, objectId) VALUES (?, ?, ?)',
+      [this.relative, this.mediaType, this.objectId]
+    )
   }
 }
 
@@ -2370,11 +2831,9 @@ class Upload {
 const logger = winston.createLogger({
   level: LOG_LEVEL,
   format: winston.format.printf((info) => {
-    return `${(new Date()).toISOString()} ${info.level}: ${info.message}`
+    return `${new Date().toISOString()} ${info.level}: ${info.message}`
   }),
-  transports: [
-    new winston.transports.Console()
-  ]
+  transports: [new winston.transports.Console()]
 })
 
 // verbose output
@@ -2405,16 +2864,26 @@ app.use((req, res, next) => {
   next()
 })
 
-app.use(express.json({ type: ['application/json', 'application/activity+json', 'application/ld+json'] })) // for parsing application/json
+app.use(
+  express.json({
+    type: [
+      'application/json',
+      'application/activity+json',
+      'application/ld+json'
+    ]
+  })
+) // for parsing application/json
 app.use(express.urlencoded({ extended: true })) // for HTML forms
 
 // Enable session management
 app.use(cookieParser())
-app.use(session({
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false
-}))
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false
+  })
+)
 
 // CSRF token middleware
 const csrf = wrap(async (req, res, next) => {
@@ -2445,11 +2914,17 @@ class Server {
   static async get () {
     if (!Server.#singleton) {
       const origin = makeUrl('')
-      const row = await db.get('SELECT * FROM server where origin = ?', [origin])
+      const row = await db.get('SELECT * FROM server where origin = ?', [
+        origin
+      ])
       if (!row) {
         Server.#singleton = null
       } else {
-        Server.#singleton = new Server(row.origin, row.publicKey, row.privateKey)
+        Server.#singleton = new Server(
+          row.origin,
+          row.publicKey,
+          row.privateKey
+        )
       }
     }
     return Server.#singleton
@@ -2493,21 +2968,23 @@ class Server {
   }
 
   static async ensureKey () {
-    const row = await db.get('SELECT * FROM server WHERE origin = ?', [makeUrl('')])
+    const row = await db.get('SELECT * FROM server WHERE origin = ?', [
+      makeUrl('')
+    ])
     if (!row) {
       const { publicKey, privateKey } = await newKeyPair()
       await db.run(
         'INSERT INTO server (origin, privateKey, publicKey) ' +
-        ' VALUES (?, ?, ?) ' +
-        ' ON CONFLICT DO NOTHING',
+          ' VALUES (?, ?, ?) ' +
+          ' ON CONFLICT DO NOTHING',
         [makeUrl(''), privateKey, publicKey]
       )
     } else if (!row.privateKey) {
       const { publicKey, privateKey } = await newKeyPair()
       await db.run(
         'UPDATE server ' +
-        ' SET privateKey = ?, publicKey = ? ' +
-        ' WHERE origin = ?',
+          ' SET privateKey = ?, publicKey = ? ' +
+          ' WHERE origin = ?',
         [privateKey, publicKey, makeUrl('')]
       )
     } else if (row.privateKey.match(/^-----BEGIN RSA PRIVATE KEY-----/)) {
@@ -2515,8 +2992,8 @@ class Server {
       const publicKey = toSpki(row.publicKey)
       await db.run(
         'UPDATE server ' +
-        ' SET privateKey = ?, publicKey = ? ' +
-        ' WHERE origin = ?',
+          ' SET privateKey = ?, publicKey = ? ' +
+          ' WHERE origin = ?',
         [privateKey, publicKey, makeUrl('')]
       )
     }
@@ -2533,30 +3010,29 @@ const tokenTypeCheck = wrap(async (req, res, next) => {
 })
 
 const newKeyPair = async () => {
-  return await generateKeyPair(
-    'rsa',
-    {
-      modulusLength: 2048,
-      privateKeyEncoding: {
-        type: 'pkcs8',
-        format: 'pem'
-      },
-      publicKeyEncoding: {
-        type: 'spki',
-        format: 'pem'
-      }
+  return await generateKeyPair('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: {
+      type: 'pkcs8',
+      format: 'pem'
+    },
+    publicKeyEncoding: {
+      type: 'spki',
+      format: 'pem'
     }
-  )
+  })
 }
 
 app.use(passport.initialize()) // Initialize Passport
 app.use(passport.session())
 
-app.use(wrap(async (req, res, next) => {
-  const server = await Server.get()
-  req.jwtKeyData = server.privateKey()
-  return next()
-}))
+app.use(
+  wrap(async (req, res, next) => {
+    const server = await Server.get()
+    req.jwtKeyData = server.privateKey()
+    return next()
+  })
+)
 
 async function jwtOptional (req, res, next) {
   const mw = expressjwt({
@@ -2576,18 +3052,20 @@ async function jwtRequired (req, res, next) {
   return mw(req, res, next)
 }
 
-passport.use(new LocalStrategy(
-  function (username, password, done) {
+passport.use(
+  new LocalStrategy(function (username, password, done) {
     (async () => {
       const user = await User.authenticate(username, password)
       if (!user) {
-        return done(null, false, { message: 'Incorrect username or password.' })
+        return done(null, false, {
+          message: 'Incorrect username or password.'
+        })
       } else {
         return done(null, user)
       }
     })()
-  }
-))
+  })
+)
 
 passport.serializeUser(function (user, done) {
   const results = user.username
@@ -2608,26 +3086,49 @@ passport.deserializeUser(function (username, done) {
 app.use('/bootstrap/', express.static('node_modules/bootstrap/dist/'))
 app.use('/popper/', express.static('node_modules/@popperjs/core/dist/umd'))
 
-app.get('/', wrap(async (req, res) => {
-  if (req.accepts('html')) {
-    res.send(page('Home', `
+const cors = (req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*')
+  next()
+}
+
+app.get(
+  '/',
+  cors,
+  wrap(async (req, res) => {
+    if (req.accepts('html')) {
+      res.send(
+        page(
+          'Home',
+          `
     <p>This is an <a href="https://www.w3.org/TR/activitypub/">ActivityPub</a> server.</p>
     <p>It is currently in development.</p>
-`, req.user))
-  } else if (req.accepts('json') || req.accepts('application/activity+json') || req.accepts('application/ld+json')) {
+`,
+          req.user
+        )
+      )
+    } else if (
+      req.accepts('json') ||
+      req.accepts('application/activity+json') ||
+      req.accepts('application/ld+json')
+    ) {
+      const server = await Server.get()
+      res.set('Content-Type', 'application/activity+json')
+      res.json(await server.toJSON())
+    } else {
+      res.status(406).send('Not Acceptable')
+    }
+  })
+)
+
+app.get(
+  '/key',
+  cors,
+  wrap(async (req, res) => {
     const server = await Server.get()
     res.set('Content-Type', 'application/activity+json')
-    res.json(await server.toJSON())
-  } else {
-    res.status(406).send('Not Acceptable')
-  }
-}))
-
-app.get('/key', wrap(async (req, res) => {
-  const server = await Server.get()
-  res.set('Content-Type', 'application/activity+json')
-  res.json(await server.getKeyJSON())
-}))
+    res.json(await server.getKeyJSON())
+  })
+)
 
 const page = (title, body, user = null) => {
   const version = process.env.npm_package_version
@@ -2663,22 +3164,24 @@ const page = (title, body, user = null) => {
               <li class="nav-item active">
                 <a class="nav-link" href="/">Home</a>
               </li>
-              ${(user)
-                ? `
+              ${
+                user
+                  ? `
                 <li class="nav-item active">
                   <form action="/logout" method="POST" class="form-inline my-2 my-lg-0">
                   <button type="submit" class="btn btn-link nav-link">Logout</button>
                   </form>
                 </li>
                 `
-                : `
+                  : `
                 <li class="nav-item active">
                   <a class="nav-link" href="/register">Register</a>
                 </li>
                 <li class="nav-item active">
                   <a class="nav-link" href="/login">Log in</a>
                 </li>
-              `}
+              `
+              }
             </ul>
           </div>
         </nav>
@@ -2695,7 +3198,9 @@ const page = (title, body, user = null) => {
         <div class="footer bg-light" style="max-width: 600px;">
           <div class="container text-center">
           <p>
-            One Page Pub ${(version) ? `<span class="version">${version}</span>` : ''}
+            One Page Pub ${
+              version ? `<span class="version">${version}</span>` : ''
+            }
             | <a href="https://github.com/evanp/onepage.pub" target="_blank">GitHub</a></p>
           </div>
         </div>
@@ -2707,26 +3212,38 @@ const page = (title, body, user = null) => {
   </html>`
 }
 
-app.get('/queue', wrap(async (req, res) => {
-  res.status(200)
-  res.type('json')
-  res.json(pq.count)
-}))
+app.get(
+  '/queue',
+  cors,
+  wrap(async (req, res) => {
+    res.status(200)
+    res.type('json')
+    res.json(pq.count)
+  })
+)
 
-app.get('/register', csrf, wrap(async (req, res) => {
-  res.type('html')
-  res.status(200)
-  res.end(page('Register', `
+app.get(
+  '/register',
+  csrf,
+  wrap(async (req, res) => {
+    res.type('html')
+    res.status(200)
+    res.end(
+      page(
+        'Register',
+        `
     <div class="container mx-auto" style="max-width: 600px;">
     <form method="POST" action="/register">
-      ${(!INVITE_CODE || INVITE_CODE.length === 0)
-        ? ''
-        : `<div class="form-group row mb-3">
+      ${
+        !INVITE_CODE || INVITE_CODE.length === 0
+          ? ''
+          : `<div class="form-group row mb-3">
         <label for="invitecode" class="col-sm-4 col-form-label text-right">Invite code</label>
         <div class="col-sm-8">
         <input type="text" name="invitecode" id="invitecode" class="form-control" placeholder="Invite code" />
         </div>
-      </div>`}
+      </div>`
+      }
       <div class="form-group row mb-3">
         <label for="username" class="col-sm-4 col-form-label text-right">Username</label>
         <div class="col-sm-8">
@@ -2753,62 +3270,85 @@ app.get('/register', csrf, wrap(async (req, res) => {
         </div>
       </div>
     </form>
-  </div>`))
-}))
+  </div>`
+      )
+    )
+  })
+)
 
-app.post('/register', csrf, wrap(async (req, res) => {
-  if (req.get('Content-Type') !== 'application/x-www-form-urlencoded') {
-    throw new createError.BadRequest('Invalid Content-Type')
-  }
-  if (!req.body.username) {
-    throw new createError.BadRequest('Username is required')
-  }
-  if (!req.body.password) {
-    throw new createError.BadRequest('Password is required')
-  }
-  if (req.body.password !== req.body.confirmation) {
-    throw new createError.BadRequest('Passwords do not match')
-  }
-  if (INVITE_CODE && INVITE_CODE.length > 0 && (!req.body.invitecode || req.body.invitecode !== INVITE_CODE)) {
-    throw new createError.BadRequest('Correct invite code required')
-  }
-  const username = req.body.username
-
-  if (await User.usernameExists(username)) {
-    throw new createError.BadRequest('Username already exists')
-  }
-
-  const password = req.body.password
-  const user = new User(username, password)
-  await user.save()
-  const token = await jwtsign(
-    {
-      jwtid: nanoid(),
-      type: 'access',
-      subject: user.actorId,
-      scope: 'read write',
-      issuer: makeUrl('')
-    },
-    req.jwtKeyData,
-    { algorithm: 'RS256' }
-  )
-
-  req.login(user, (err) => {
-    if (err) {
-      throw new createError.InternalServerError('Failed to login')
+app.post(
+  '/register',
+  csrf,
+  wrap(async (req, res) => {
+    if (req.get('Content-Type') !== 'application/x-www-form-urlencoded') {
+      throw new createError.BadRequest('Invalid Content-Type')
     }
+    if (!req.body.username) {
+      throw new createError.BadRequest('Username is required')
+    }
+    if (!req.body.password) {
+      throw new createError.BadRequest('Password is required')
+    }
+    if (req.body.password !== req.body.confirmation) {
+      throw new createError.BadRequest('Passwords do not match')
+    }
+    if (
+      INVITE_CODE &&
+      INVITE_CODE.length > 0 &&
+      (!req.body.invitecode || req.body.invitecode !== INVITE_CODE)
+    ) {
+      throw new createError.BadRequest('Correct invite code required')
+    }
+    const username = req.body.username
+
+    if (await User.usernameExists(username)) {
+      throw new createError.BadRequest('Username already exists')
+    }
+
+    const password = req.body.password
+    const user = new User(username, password)
+    await user.save()
+    const token = await jwtsign(
+      {
+        jwtid: nanoid(),
+        type: 'access',
+        subject: user.actorId,
+        scope: 'read write',
+        issuer: makeUrl('')
+      },
+      req.jwtKeyData,
+      { algorithm: 'RS256' }
+    )
+
+    req.login(user, (err) => {
+      if (err) {
+        throw new createError.InternalServerError('Failed to login')
+      }
+      res.type('html')
+      res.status(200)
+      res.end(
+        page(
+          'Registered',
+          `
+      <p>Registered <a class="actor" href="${user.actorId}">${username}</a></p>
+      <p>Personal access token is <span class="token">${token}</span>`,
+          user
+        )
+      )
+    })
+  })
+)
+
+app.get(
+  '/login',
+  csrf,
+  wrap(async (req, res) => {
     res.type('html')
     res.status(200)
-    res.end(page('Registered', `
-      <p>Registered <a class="actor" href="${user.actorId}">${username}</a></p>
-      <p>Personal access token is <span class="token">${token}</span>`, user))
-  })
-}))
-
-app.get('/login', csrf, wrap(async (req, res) => {
-  res.type('html')
-  res.status(200)
-  res.end(page('Log in', `
+    res.end(
+      page(
+        'Log in',
+        `
     <div class="container mx-auto" style="max-width: 600px;">
     <form method="POST" action="/login">
     <div class="form-group row mb-3">
@@ -2830,8 +3370,11 @@ app.get('/login', csrf, wrap(async (req, res) => {
         <a href='/' class="btn btn-secondary">Cancel</a>
       </div>
     </div>
-    </form>`))
-}))
+    </form>`
+      )
+    )
+  })
+)
 
 app.post('/login', (req, res, next) => {
   const redirectTo = req.session.redirectTo
@@ -2858,99 +3401,128 @@ app.post('/login', (req, res, next) => {
   })(req, res, next)
 })
 
-app.get('/login/success', passport.authenticate('session'), wrap(async (req, res) => {
-  if (!req.isAuthenticated()) {
-    throw new createError.InternalServerError('Not authenticated')
-  }
-  const user = req.user
-  if (!user) {
-    throw new createError.InternalServerError('Invalid user even though isAuthenticated() is true')
-  }
-
-  const token = await jwtsign(
-    {
-      jwtid: nanoid(),
-      type: 'access',
-      subject: user.actorId,
-      scope: 'read write',
-      issuer: makeUrl('')
-    },
-    req.jwtKeyData,
-    { algorithm: 'RS256' }
-  )
-
-  res.type('html')
-  res.status(200)
-  res.end(page('Logged in', `
-    <p>Logged in <a class="actor" href="${user.actorId}">${user.username}</a></p>
-    <p>Personal access token is <span class="token">${token}</span>`, user))
-}))
-
-app.post('/logout', wrap(async (req, res) => {
-  req.logout((err) => {
-    if (err) {
-      throw new createError.InternalServerError('Failed to logout')
-    } else {
-      res.redirect('/')
+app.get(
+  '/login/success',
+  passport.authenticate('session'),
+  wrap(async (req, res) => {
+    if (!req.isAuthenticated()) {
+      throw new createError.InternalServerError('Not authenticated')
     }
-  })
-}))
+    const user = req.user
+    if (!user) {
+      throw new createError.InternalServerError(
+        'Invalid user even though isAuthenticated() is true'
+      )
+    }
 
-app.get('/live', wrap(async (req, res) => {
-  res.status(200)
-  res.set('Content-Type', 'text/plain')
-  res.end('OK')
-}))
-
-app.get('/ready', wrap(async (req, res) => {
-  const dbReady = await db.ready()
-  if (!dbReady) {
-    throw new createError.InternalServerError('Database not ready')
-  }
-  res.status(200)
-  res.set('Content-Type', 'text/plain')
-  res.end('OK')
-}))
-
-app.get('/.well-known/webfinger', wrap(async (req, res) => {
-  const resource = req.query.resource
-  if (!resource) {
-    throw new createError.BadRequest('Missing resource')
-  }
-  if (!resource.startsWith('acct:')) {
-    throw new createError.BadRequest('Resource must start with acct:')
-  }
-  if (!resource.includes('@')) {
-    throw new createError.BadRequest('Resource must contain @')
-  }
-  const [username, hostname] = resource.substr('acct:'.length).split('@')
-  if (hostname !== req.get('host')) {
-    throw new createError.NotFound('Hostname does not match')
-  }
-  const user = await db.get('SELECT username, actorId FROM user WHERE username = ?', [username])
-  if (!user) {
-    throw new createError.NotFound('User not found')
-  }
-  if (!user.username) {
-    throw new createError.NotFound('User not found')
-  }
-  if (!user.actorId) {
-    throw new createError.InternalServerError('Invalid user')
-  }
-  res.set('Content-Type', 'application/jrd+json')
-  res.json({
-    subject: resource,
-    links: [
+    const token = await jwtsign(
       {
-        rel: 'self',
-        type: 'application/activity+json',
-        href: user.actorId
-      }
-    ]
-  })
-}))
+        jwtid: nanoid(),
+        type: 'access',
+        subject: user.actorId,
+        scope: 'read write',
+        issuer: makeUrl('')
+      },
+      req.jwtKeyData,
+      { algorithm: 'RS256' }
+    )
 
-app.post('/endpoint/proxyUrl',
+    res.type('html')
+    res.status(200)
+    res.end(
+      page(
+        'Logged in',
+        `
+    <p>Logged in <a class="actor" href="${user.actorId}">${user.username}</a></p>
+    <p>Personal access token is <span class="token">${token}</span>`,
+        user
+      )
+    )
+  })
+)
+
+app.post(
+  '/logout',
+  wrap(async (req, res) => {
+    req.logout((err) => {
+      if (err) {
+        throw new createError.InternalServerError('Failed to logout')
+      } else {
+        res.redirect('/')
+      }
+    })
+  })
+)
+
+app.get(
+  '/live',
+  wrap(async (req, res) => {
+    res.status(200)
+    res.set('Content-Type', 'text/plain')
+    res.end('OK')
+  })
+)
+
+app.get(
+  '/ready',
+  wrap(async (req, res) => {
+    const dbReady = await db.ready()
+    if (!dbReady) {
+      throw new createError.InternalServerError('Database not ready')
+    }
+    res.status(200)
+    res.set('Content-Type', 'text/plain')
+    res.end('OK')
+  })
+)
+
+app.get(
+  '/.well-known/webfinger',
+  cors,
+  wrap(async (req, res) => {
+    const resource = req.query.resource
+    if (!resource) {
+      throw new createError.BadRequest('Missing resource')
+    }
+    if (!resource.startsWith('acct:')) {
+      throw new createError.BadRequest('Resource must start with acct:')
+    }
+    if (!resource.includes('@')) {
+      throw new createError.BadRequest('Resource must contain @')
+    }
+    const [username, hostname] = resource.substr('acct:'.length).split('@')
+    if (hostname !== req.get('host')) {
+      throw new createError.NotFound('Hostname does not match')
+    }
+    const user = await db.get(
+      'SELECT username, actorId FROM user WHERE username = ?',
+      [username]
+    )
+    if (!user) {
+      throw new createError.NotFound('User not found')
+    }
+    if (!user.username) {
+      throw new createError.NotFound('User not found')
+    }
+    if (!user.actorId) {
+      throw new createError.InternalServerError('Invalid user')
+    }
+    res.set('Content-Type', 'application/jrd+json')
+    res.json({
+      subject: resource,
+      links: [
+        {
+          rel: 'self',
+          type: 'application/activity+json',
+          href: user.actorId
+        }
+      ]
+    })
+  })
+)
+
+app.post(
+  '/endpoint/proxyUrl',
   jwtRequired,
   tokenTypeCheck,
   wrap(async (req, res) => {
@@ -2968,10 +3540,17 @@ app.post('/endpoint/proxyUrl',
     const actor = await user.getActor()
     const publicKey = new ActivityObject(await actor.prop('publicKey'))
     const date = new Date().toUTCString()
-    const signature = new HTTPSignature(await publicKey.id(), user.privateKey, 'GET', id, date)
+    const signature = new HTTPSignature(
+      await publicKey.id(),
+      user.privateKey,
+      'GET',
+      id,
+      date
+    )
     const fetchRes = await fetch(id, {
       headers: {
-        Accept: 'application/activity+json;q=1,application/ld+json;q=0.5,application/json;q=0.1',
+        Accept:
+          'application/activity+json;q=1,application/ld+json;q=0.5,application/json;q=0.1',
         Signature: signature.header,
         Date: date
       }
@@ -2982,268 +3561,334 @@ app.post('/endpoint/proxyUrl',
     }
     const fetchJson = await fetchRes.json()
     if (fetchRes.status === 410 && fetchJson.type !== 'Tombstone') {
-      logger.warn(`Error fetching ${id}: status = 410 but type is '${fetchJson.type}', not Tombstone`)
+      logger.warn(
+        `Error fetching ${id}: status = 410 but type is '${fetchJson.type}', not Tombstone`
+      )
       throw new createError.InternalServerError('Error fetching object')
     }
     res.status(fetchRes.status)
     res.set('Content-Type', 'application/activity+json')
     res.json(fetchJson)
-  }))
+  })
+)
 
-app.get('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wrap(async (req, res) => {
-  if (!req.isAuthenticated()) {
-    req.session.redirectTo = req.originalUrl
-    res.redirect('/login')
-  } else {
-    if (!req.query.client_id) {
-      throw new createError.BadRequest('Missing client_id')
-    }
-    let clientIdUrl = null
-    let client = null
-    try {
-      clientIdUrl = new URL(req.query.client_id)
-    } catch {
-      throw new createError.BadRequest('Invalid client_id')
-    }
-    if (clientIdUrl.protocol !== 'https:') {
-      throw new createError.BadRequest('Invalid client_id')
-    }
-    try {
-      client = await ActivityObject.getFromRemote(req.query.client_id)
-    } catch (err) {
-      throw new createError.BadRequest('Invalid client_id')
-    }
-    if (!req.query.redirect_uri) {
-      throw new createError.BadRequest('Missing redirect_uri')
-    }
-    if (req.query.redirect_uri !== await client.prop('redirectURI')) {
-      throw new createError.BadRequest('Invalid redirect_uri')
-    }
-    if (!req.query.response_type || req.query.response_type !== 'code') {
-      throw new createError.BadRequest('Missing or invalid response_type')
-    }
-    if (!req.query.scope) {
-      throw new createError.BadRequest('Missing scope')
-    }
-    if (!req.query.code_challenge) {
-      throw new createError.BadRequest('Missing code_challenge')
-    }
-    if (!req.query.code_challenge_method || req.query.code_challenge_method !== 'S256') {
-      throw new createError.BadRequest('Unsupported code challenge value')
-    }
+app.get(
+  '/endpoint/oauth/authorize',
+  cors,
+  csrf,
+  passport.authenticate('session'),
+  wrap(async (req, res) => {
+    if (!req.isAuthenticated()) {
+      req.session.redirectTo = req.originalUrl
+      res.redirect('/login')
+    } else {
+      if (!req.query.client_id) {
+        throw new createError.BadRequest('Missing client_id')
+      }
+      let clientIdUrl = null
+      let client = null
+      try {
+        clientIdUrl = new URL(req.query.client_id)
+      } catch {
+        throw new createError.BadRequest('Invalid client_id')
+      }
+      if (clientIdUrl.protocol !== 'https:') {
+        throw new createError.BadRequest('Invalid client_id')
+      }
+      try {
+        client = await ActivityObject.getFromRemote(req.query.client_id)
+      } catch (err) {
+        throw new createError.BadRequest('Invalid client_id')
+      }
+      if (!req.query.redirect_uri) {
+        throw new createError.BadRequest('Missing redirect_uri')
+      }
+      if (req.query.redirect_uri !== (await client.prop('redirectURI'))) {
+        throw new createError.BadRequest('Invalid redirect_uri')
+      }
+      if (!req.query.response_type || req.query.response_type !== 'code') {
+        throw new createError.BadRequest('Missing or invalid response_type')
+      }
+      if (!req.query.scope) {
+        throw new createError.BadRequest('Missing scope')
+      }
+      if (!req.query.code_challenge) {
+        throw new createError.BadRequest('Missing code_challenge')
+      }
+      if (
+        !req.query.code_challenge_method ||
+        req.query.code_challenge_method !== 'S256'
+      ) {
+        throw new createError.BadRequest('Unsupported code challenge value')
+      }
 
-    const name = await client.prop('name')
-    const url = await client.prop('url')
-    const icon = (await client.prop('icon')) ? await client.prop('icon').href || await client.prop('icon').url : null
-    const description = await client.prop('summary') || await client.prop('summaryMap')?.en
-    const author = await client.prop('attributedTo')?.name
-    const authorUrl = await client.prop('attributedTo')?.url
+      const name = await client.prop('name')
+      const url = await client.prop('url')
+      const icon = (await client.prop('icon'))
+        ? (await client.prop('icon').href) || (await client.prop('icon').url)
+        : null
+      const description =
+        (await client.prop('summary')) || (await client.prop('summaryMap')?.en)
+      const author = await client.prop('attributedTo')?.name
+      const authorUrl = await client.prop('attributedTo')?.url
 
-    res.type('html')
-    res.status(200)
-    res.end(page('Authorize', `
+      res.type('html')
+      res.status(200)
+      res.end(
+        page(
+          'Authorize',
+          `
       <p>
         This app is asking to authorize access to your account.
         <ul>
           <li>Client ID: ${req.query.client_id}</li>
-          <li>Name: ${(name) ? ((url) ? `<a target="_blank" href="${url}">${name}</a>` : name) : 'N/A'}</li>
-          <li>Icon: ${(icon) ? `<img src="${icon}" >` : 'N/A'}</li>
+          <li>Name: ${
+            name
+              ? url
+                ? `<a target="_blank" href="${url}">${name}</a>`
+                : name
+              : 'N/A'
+          }</li>
+          <li>Icon: ${icon ? `<img src="${icon}" >` : 'N/A'}</li>
           <li>Description: ${description || 'N/A'}</li>
-          <li>Author: ${(author) ? ((authorUrl) ? `<a target="_blank" href="${authorUrl}">${author}</a>` : author) : 'N/A'}</li>
+          <li>Author: ${
+            author
+              ? authorUrl
+                ? `<a target="_blank" href="${authorUrl}">${author}</a>`
+                : author
+              : 'N/A'
+          }</li>
           <li>Scope: ${req.query.scope}</li>
         </ul>
       </p>
       <form method="POST" action="/endpoint/oauth/authorize">
       <input type="hidden" name="csrf_token" value="${req.session.csrfToken}" />
       <input type="hidden" name="client_id" value="${req.query.client_id}" />
-      <input type="hidden" name="redirect_uri" value="${req.query.redirect_uri}" />
+      <input type="hidden" name="redirect_uri" value="${
+        req.query.redirect_uri
+      }" />
       <input type="hidden" name="scope" value="${req.query.scope}" />
-      <input type="hidden" name="code_challenge" value="${req.query.code_challenge}" />
+      <input type="hidden" name="code_challenge" value="${
+        req.query.code_challenge
+      }" />
       <input type="hidden" name="state" value="${req.query.state}" />
       <input type="submit" value="Authorize" />
-      </form>`, req.user))
-  }
-}))
+      </form>`,
+          req.user
+        )
+      )
+    }
+  })
+)
 
-app.post('/endpoint/oauth/authorize', csrf, passport.authenticate('session'), wrap(async (req, res) => {
-  if (!req.isAuthenticated()) {
-    res.redirect('/login&returnTo=' + encodeURIComponent(req.originalUrl))
-  } else {
-    if (!req.body.csrf_token || req.body.csrf_token !== req.session.csrfToken) {
-      throw new createError.BadRequest('Invalid CSRF token')
+app.post(
+  '/endpoint/oauth/authorize',
+  csrf,
+  passport.authenticate('session'),
+  wrap(async (req, res) => {
+    if (!req.isAuthenticated()) {
+      res.redirect('/login&returnTo=' + encodeURIComponent(req.originalUrl))
+    } else {
+      if (
+        !req.body.csrf_token ||
+        req.body.csrf_token !== req.session.csrfToken
+      ) {
+        throw new createError.BadRequest('Invalid CSRF token')
+      }
+      if (!req.body.client_id) {
+        throw new createError.BadRequest('Missing client_id')
+      }
+      if (!req.body.redirect_uri) {
+        throw new createError.BadRequest('Missing redirect_uri')
+      }
+      if (!req.body.scope) {
+        throw new createError.BadRequest('Missing scope')
+      }
+      if (!req.body.code_challenge) {
+        throw new createError.BadRequest('Missing code_challenge')
+      }
+      // We use a JWT for the authorization code
+      const code = await jwtsign(
+        {
+          jwtid: nanoid(),
+          type: 'authz',
+          subject: req.user.actorId,
+          scope: req.body.scope,
+          challenge: req.body.code_challenge,
+          client: req.body.client_id,
+          redir: req.body.redirect_uri,
+          expiresIn: '10m',
+          issuer: makeUrl('')
+        },
+        req.jwtKeyData,
+        { algorithm: 'RS256' }
+      )
+      const state = req.body.state
+      const location =
+        req.body.redirect_uri + '?' + querystring.stringify({ code, state })
+      res.redirect(location)
     }
-    if (!req.body.client_id) {
-      throw new createError.BadRequest('Missing client_id')
-    }
-    if (!req.body.redirect_uri) {
-      throw new createError.BadRequest('Missing redirect_uri')
-    }
-    if (!req.body.scope) {
-      throw new createError.BadRequest('Missing scope')
-    }
-    if (!req.body.code_challenge) {
-      throw new createError.BadRequest('Missing code_challenge')
-    }
-    // We use a JWT for the authorization code
-    const code = await jwtsign(
-      {
-        jwtid: nanoid(),
-        type: 'authz',
-        subject: req.user.actorId,
-        scope: req.body.scope,
-        challenge: req.body.code_challenge,
-        client: req.body.client_id,
-        redir: req.body.redirect_uri,
-        expiresIn: '10m',
-        issuer: makeUrl('')
-      },
-      req.jwtKeyData,
-      { algorithm: 'RS256' }
-    )
-    const state = req.body.state
-    const location = req.body.redirect_uri + '?' + querystring.stringify({ code, state })
-    res.redirect(location)
-  }
-}))
+  })
+)
 
-app.post('/endpoint/oauth/token', wrap(async (req, res) => {
-  const contentTypeHeader = req.get('Content-Type')
-  if (!contentTypeHeader) {
-    throw new createError.BadRequest('Invalid Content-Type')
-  }
-  const mediaType = contentTypeHeader.split(';')[0].trim()
-  if (mediaType !== 'application/x-www-form-urlencoded') {
-    throw new createError.BadRequest('Invalid Content-Type')
-  }
-  if (!req.body.grant_type || !['authorization_code', 'refresh_token'].includes(req.body.grant_type)) {
-    throw new createError.BadRequest('Invalid grant_type')
-  }
-  if (req.body.grant_type === 'authorization_code') {
-    if (!req.body.code) {
-      throw new createError.BadRequest('Missing code')
+app.post(
+  '/endpoint/oauth/token',
+  cors,
+  wrap(async (req, res) => {
+    const contentTypeHeader = req.get('Content-Type')
+    if (!contentTypeHeader) {
+      throw new createError.BadRequest('Invalid Content-Type')
     }
-    if (!req.body.redirect_uri) {
-      throw new createError.BadRequest('Missing redirect_uri')
+    const mediaType = contentTypeHeader.split(';')[0].trim()
+    if (mediaType !== 'application/x-www-form-urlencoded') {
+      throw new createError.BadRequest('Invalid Content-Type')
     }
-    if (!req.body.client_id) {
-      throw new createError.BadRequest('Missing client_id')
+    if (
+      !req.body.grant_type ||
+      !['authorization_code', 'refresh_token'].includes(req.body.grant_type)
+    ) {
+      throw new createError.BadRequest('Invalid grant_type')
     }
-    if (!req.body.code_verifier) {
-      throw new createError.BadRequest('Missing code_verifier')
-    }
-    const code = req.body.code
-    const fields = await jwtverify(code, req.jwtKeyData, { algorithm: 'RS256' })
-    if (fields.type !== 'authz') {
-      throw new createError.BadRequest('Invalid code')
-    }
-    if (fields.client !== req.body.client_id) {
-      throw new createError.BadRequest('Invalid client')
-    }
-    if (fields.redir !== req.body.redirect_uri) {
-      throw new createError.BadRequest('Invalid redirect_uri')
-    }
-    if (fields.challenge !== await base64URLEncode(crypto.createHash('sha256').update(req.body.code_verifier).digest())) {
-      throw new createError.BadRequest('Invalid code_verifier')
-    }
-    if (fields.issuer !== makeUrl('')) {
-      throw new createError.BadRequest('Invalid issuer')
-    }
-    const user = User.fromActorId(fields.subject)
-    if (!user) {
-      throw new createError.BadRequest('Invalid user')
-    }
-    // TODO: check that jwtid has not be reused
-    const token = await jwtsign(
-      {
-        jwtid: nanoid(),
-        type: 'access',
-        subject: fields.subject,
+    if (req.body.grant_type === 'authorization_code') {
+      if (!req.body.code) {
+        throw new createError.BadRequest('Missing code')
+      }
+      if (!req.body.redirect_uri) {
+        throw new createError.BadRequest('Missing redirect_uri')
+      }
+      if (!req.body.client_id) {
+        throw new createError.BadRequest('Missing client_id')
+      }
+      if (!req.body.code_verifier) {
+        throw new createError.BadRequest('Missing code_verifier')
+      }
+      const code = req.body.code
+      const fields = await jwtverify(code, req.jwtKeyData, {
+        algorithm: 'RS256'
+      })
+      if (fields.type !== 'authz') {
+        throw new createError.BadRequest('Invalid code')
+      }
+      if (fields.client !== req.body.client_id) {
+        throw new createError.BadRequest('Invalid client')
+      }
+      if (fields.redir !== req.body.redirect_uri) {
+        throw new createError.BadRequest('Invalid redirect_uri')
+      }
+      if (
+        fields.challenge !==
+        (await base64URLEncode(
+          crypto.createHash('sha256').update(req.body.code_verifier).digest()
+        ))
+      ) {
+        throw new createError.BadRequest('Invalid code_verifier')
+      }
+      if (fields.issuer !== makeUrl('')) {
+        throw new createError.BadRequest('Invalid issuer')
+      }
+      const user = User.fromActorId(fields.subject)
+      if (!user) {
+        throw new createError.BadRequest('Invalid user')
+      }
+      // TODO: check that jwtid has not be reused
+      const token = await jwtsign(
+        {
+          jwtid: nanoid(),
+          type: 'access',
+          subject: fields.subject,
+          scope: fields.scope,
+          client: fields.client,
+          expiresIn: '1d',
+          issuer: makeUrl('')
+        },
+        req.jwtKeyData,
+        { algorithm: 'RS256' }
+      )
+      const refreshToken = await jwtsign(
+        {
+          jwtid: nanoid(),
+          type: 'refresh',
+          subject: fields.subject,
+          scope: fields.scope,
+          client: fields.client,
+          expiresIn: '30d',
+          issuer: makeUrl('')
+        },
+        req.jwtKeyData,
+        { algorithm: 'RS256' }
+      )
+      res.set('Content-Type', 'application/json')
+      res.json({
+        access_token: token,
+        token_type: 'Bearer',
         scope: fields.scope,
-        client: fields.client,
-        expiresIn: '1d',
-        issuer: makeUrl('')
-      },
-      req.jwtKeyData,
-      { algorithm: 'RS256' }
-    )
-    const refreshToken = await jwtsign(
-      {
-        jwtid: nanoid(),
-        type: 'refresh',
-        subject: fields.subject,
+        expires_in: 86400,
+        refresh_token: refreshToken
+      })
+    } else if (req.body.grant_type === 'refresh_token') {
+      if (!req.body.refresh_token) {
+        throw new createError.BadRequest('Missing refresh_token')
+      }
+      const refreshToken = req.body.refresh_token
+      const fields = await jwtverify(refreshToken, req.jwtKeyData, {
+        algorithm: 'RS256'
+      })
+      if (fields.type !== 'refresh') {
+        throw new createError.BadRequest('Invalid code')
+      }
+      if (fields.issuer !== makeUrl('')) {
+        throw new createError.BadRequest('Invalid issuer')
+      }
+      const user = User.fromActorId(fields.subject)
+      if (!(await user)) {
+        throw new createError.BadRequest('Invalid user')
+      }
+      const token = await jwtsign(
+        {
+          jwtid: nanoid(),
+          type: 'access',
+          subject: fields.subject,
+          scope: fields.scope,
+          client: fields.client,
+          expiresIn: '1d',
+          issuer: makeUrl('')
+        },
+        req.jwtKeyData,
+        { algorithm: 'RS256' }
+      )
+      const newRefreshToken = await jwtsign(
+        {
+          jwtid: nanoid(),
+          type: 'refresh',
+          subject: fields.subject,
+          scope: fields.scope,
+          client: fields.client,
+          expiresIn: '30d',
+          issuer: makeUrl('')
+        },
+        req.jwtKeyData,
+        { algorithm: 'RS256' }
+      )
+      res.set('Content-Type', 'application/json')
+      res.json({
+        access_token: token,
+        token_type: 'Bearer',
         scope: fields.scope,
-        client: fields.client,
-        expiresIn: '30d',
-        issuer: makeUrl('')
-      },
-      req.jwtKeyData,
-      { algorithm: 'RS256' }
-    )
-    res.set('Content-Type', 'application/json')
-    res.json({
-      access_token: token,
-      token_type: 'Bearer',
-      scope: fields.scope,
-      expires_in: 86400,
-      refresh_token: refreshToken
-    })
-  } else if (req.body.grant_type === 'refresh_token') {
-    if (!req.body.refresh_token) {
-      throw new createError.BadRequest('Missing refresh_token')
+        expires_in: 86400,
+        refresh_token: newRefreshToken
+      })
     }
-    const refreshToken = req.body.refresh_token
-    const fields = await jwtverify(refreshToken, req.jwtKeyData, { algorithm: 'RS256' })
-    if (fields.type !== 'refresh') {
-      throw new createError.BadRequest('Invalid code')
-    }
-    if (fields.issuer !== makeUrl('')) {
-      throw new createError.BadRequest('Invalid issuer')
-    }
-    const user = User.fromActorId(fields.subject)
-    if (!await user) {
-      throw new createError.BadRequest('Invalid user')
-    }
-    const token = await jwtsign(
-      {
-        jwtid: nanoid(),
-        type: 'access',
-        subject: fields.subject,
-        scope: fields.scope,
-        client: fields.client,
-        expiresIn: '1d',
-        issuer: makeUrl('')
-      },
-      req.jwtKeyData,
-      { algorithm: 'RS256' }
-    )
-    const newRefreshToken = await jwtsign(
-      {
-        jwtid: nanoid(),
-        type: 'refresh',
-        subject: fields.subject,
-        scope: fields.scope,
-        client: fields.client,
-        expiresIn: '30d',
-        issuer: makeUrl('')
-      },
-      req.jwtKeyData,
-      { algorithm: 'RS256' }
-    )
-    res.set('Content-Type', 'application/json')
-    res.json({
-      access_token: token,
-      token_type: 'Bearer',
-      scope: fields.scope,
-      expires_in: 86400,
-      refresh_token: newRefreshToken
-    })
-  }
-}))
+  })
+)
 
-app.post('/endpoint/upload',
+app.post(
+  '/endpoint/upload',
   jwtRequired,
   tokenTypeCheck,
-  upload.fields([{ name: 'file', maxCount: 1 }, { name: 'object', maxCount: 1 }]),
+  upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'object', maxCount: 1 }
+  ]),
   wrap(async (req, res) => {
     if (!req.files || !req.files.file || !req.files.file[0]) {
       throw new createError.BadRequest('Missing file')
@@ -3276,13 +3921,17 @@ app.post('/endpoint/upload',
     } else if (ActivityObject.isObjectType(type)) {
       data = { type: 'Create', object: data }
     } else if (Activity.duckType(data)) {
-      data.type = (Array.isArray(data.type))
+      data.type = Array.isArray(data.type)
         ? data.type.concat('Activity')
-        : ((data.type) ? [data.type, 'Activity'] : 'Activity')
+        : data.type
+          ? [data.type, 'Activity']
+          : 'Activity'
     } else {
-      data.type = (Array.isArray(data.type))
+      data.type = Array.isArray(data.type)
         ? data.type.concat('Object')
-        : ((data.type) ? [data.type, 'Object'] : 'Object')
+        : data.type
+          ? [data.type, 'Object']
+          : 'Object'
       data = { type: 'Create', object: data }
     }
 
@@ -3317,9 +3966,11 @@ app.post('/endpoint/upload',
   })
 )
 
-app.get('/uploads/*',
+app.get(
+  '/uploads/*',
   jwtOptional,
   tokenTypeCheck,
+  cors,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const relative = req.params[0]
@@ -3338,7 +3989,9 @@ app.get('/uploads/*',
       if (req.auth?.subject) {
         throw new createError.Forbidden('Not authorized to read this object')
       } else {
-        throw new createError.Unauthorized(`You must provide credentials to read ${relative}`)
+        throw new createError.Unauthorized(
+          `You must provide credentials to read ${relative}`
+        )
       }
     }
     res.status(200)
@@ -3347,13 +4000,19 @@ app.get('/uploads/*',
   })
 )
 
-app.get('/:type/:id',
+app.get(
+  '/:type/:id',
   jwtOptional,
   tokenTypeCheck,
+  cors,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const full = makeUrl(req.originalUrl)
-    if (req.auth && req.auth.scope && !req.auth.scope.split(' ').includes('read')) {
+    if (
+      req.auth &&
+      req.auth.scope &&
+      !req.auth.scope.split(' ').includes('read')
+    ) {
       throw new createError.Forbidden('Missing read scope')
     }
     const obj = await ActivityObject.getById(full)
@@ -3364,7 +4023,9 @@ app.get('/:type/:id',
       if (req.auth?.subject) {
         throw new createError.Forbidden('Not authorized to read this object')
       } else {
-        throw new createError.Unauthorized(`You must provide credentials to read ${full}`)
+        throw new createError.Unauthorized(
+          `You must provide credentials to read ${full}`
+        )
       }
     }
     const output = await obj.expanded()
@@ -3385,13 +4046,7 @@ app.get('/:type/:id',
       output.endpoints = standardEndpoints()
       // XXX: Mastodon only accepts URLs here :(
 
-      const urlProps = [
-        'inbox',
-        'outbox',
-        'followers',
-        'following',
-        'liked'
-      ]
+      const urlProps = ['inbox', 'outbox', 'followers', 'following', 'liked']
 
       for (const prop of urlProps) {
         if (output[prop]) {
@@ -3402,7 +4057,7 @@ app.get('/:type/:id',
       // Add a webfinger for users
       const username = await obj.prop('preferredUsername')
       if (username) {
-        const hostPart = (new URL(ORIGIN)).host
+        const hostPart = new URL(ORIGIN).host
         output.webfinger = `${username}@${hostPart}`
       }
     }
@@ -3412,9 +4067,11 @@ app.get('/:type/:id',
     output['@context'] = output['@context'] || CONTEXT
     res.set('Content-Type', 'application/activity+json')
     res.json(output)
-  }))
+  })
+)
 
-app.post('/:type/:id',
+app.post(
+  '/:type/:id',
   jwtOptional,
   tokenTypeCheck,
   HTTPSignature.authenticate,
@@ -3425,18 +4082,20 @@ app.post('/:type/:id',
       throw new createError.NotFound('Object not found')
     }
     const owner = await obj.owner()
-    if (!await obj.json()) {
+    if (!(await obj.json())) {
       throw new createError.InternalServerError('Invalid object')
     }
     if (!owner) {
       throw new createError.InternalServerError('No owner found for object')
     }
-    if (full === await owner.prop('outbox')) {
-      if (req.auth?.subject !== await owner.id()) {
+    if (full === (await owner.prop('outbox'))) {
+      if (req.auth?.subject !== (await owner.id())) {
         throw new createError.Forbidden('You cannot post to this outbox')
       }
       if (!req.auth?.scope || !req.auth?.scope.split(' ').includes('write')) {
-        throw new createError.Forbidden('This app does not have permission to write to this outbox')
+        throw new createError.Forbidden(
+          'This app does not have permission to write to this outbox'
+        )
       }
       const ownerId = await owner.id()
       const outbox = await Collection.fromActivityObject(obj)
@@ -3448,13 +4107,17 @@ app.post('/:type/:id',
       } else if (ActivityObject.isObjectType(type)) {
         data = { type: 'Create', object: data }
       } else if (Activity.duckType(data)) {
-        data.type = (Array.isArray(data.type))
+        data.type = Array.isArray(data.type)
           ? data.type.concat('Activity')
-          : ((data.type) ? [data.type, 'Activity'] : 'Activity')
+          : data.type
+            ? [data.type, 'Activity']
+            : 'Activity'
       } else {
-        data.type = (Array.isArray(data.type))
+        data.type = Array.isArray(data.type)
           ? data.type.concat('Object')
-          : ((data.type) ? [data.type, 'Object'] : 'Object')
+          : data.type
+            ? [data.type, 'Object']
+            : 'Object'
         data = { type: 'Create', object: data }
       }
       data.id = await ActivityObject.makeId(data.type)
@@ -3472,14 +4135,17 @@ app.post('/:type/:id',
       res.set('Content-Type', 'application/activity+json')
       res.set('Location', await activity.id())
       res.json(output)
-    } else if (full === await owner.prop('inbox')) { // remote delivery
+    } else if (full === (await owner.prop('inbox'))) {
+      // remote delivery
       if (!req.auth?.subject) {
         throw new createError.Unauthorized('Invalid HTTP signature')
       }
       const remote = await ActivityObject.getById(req.auth.subject, owner)
       const remoteId = await remote.id()
       if (!(typeof remoteId === 'string')) {
-        throw new createError.InternalServerError(`Invalid remote id ${JSON.stringify(remoteId)}`)
+        throw new createError.InternalServerError(
+          `Invalid remote id ${JSON.stringify(remoteId)}`
+        )
       }
       if (domainIsBlocked(remoteId)) {
         throw new createError.Forbidden('Remote delivery blocked')
@@ -3488,13 +4154,16 @@ app.post('/:type/:id',
         throw new createError.Forbidden('Remote delivery only')
       }
       const activity = new RemoteActivity(req.body)
-      const actor = await activity.prop('actor') || await activity.prop('attributedTo')
+      const actor =
+        (await activity.prop('actor')) || (await activity.prop('attributedTo'))
       if (actor) {
         const actorId = await toId(actor)
         logger.debug(`New remote activity from ${actor}`)
         if (actorId !== remoteId) {
           logger.debug(`Actor ${actorId} does not match remote ${remoteId}`)
-          throw new createError.Forbidden(`Actor ${actorId} does not match remote ${remoteId}`)
+          throw new createError.Forbidden(
+            `Actor ${actorId} does not match remote ${remoteId}`
+          )
         }
       } else {
         activity.setActor(remote)
@@ -3511,7 +4180,8 @@ app.post('/:type/:id',
     } else {
       throw new createError.MethodNotAllowed('You cannot POST to this object')
     }
-  }))
+  })
+)
 
 app.use((err, req, res, next) => {
   if (createError.isHttpError(err)) {
@@ -3585,12 +4255,15 @@ process.on('exit', (code) => {
 // If we're public, run with ORIGIN. Otherwise,
 // run with HTTPS
 
-const server = (process.env.OPP_ORIGIN)
+const server = process.env.OPP_ORIGIN
   ? http.createServer(app)
-  : https.createServer({
-    key: KEY_DATA,
-    cert: CERT_DATA
-  }, app)
+  : https.createServer(
+    {
+      key: KEY_DATA,
+      cert: CERT_DATA
+    },
+    app
+  )
 
 db.init().then(() => {
   logger.info('Database initialized')
