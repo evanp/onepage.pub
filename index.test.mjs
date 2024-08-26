@@ -349,7 +349,10 @@ async function signRequest (keyId, privateKey, method, url, date) {
   signer.update(data)
   const signature = signer.sign(privateKey).toString('base64')
   signer.end()
-  const header = `keyId="${keyId}",headers="(request-target) host date",signature="${signature.replace(/"/g, '\\"')}",algorithm="rsa-sha256"`
+  const header = `keyId="${keyId}",headers="(request-target) host date",signature="${signature.replace(
+    /"/g,
+    '\\"'
+  )}",algorithm="rsa-sha256"`
   return header
 }
 
@@ -5376,9 +5379,7 @@ describe('onepage.pub', () => {
       assert('@context' in obj)
       assert(Array.isArray(obj['@context']))
       assert(
-        obj['@context'].includes(
-          'https://purl.archive.org/socialweb/webfinger'
-        )
+        obj['@context'].includes('https://purl.archive.org/socialweb/webfinger')
       )
       assert('webfinger' in obj)
       assert.strictEqual(typeof obj.webfinger, 'string')
@@ -5421,6 +5422,24 @@ describe('onepage.pub', () => {
       })
       assert.strictEqual(200, res.status)
       assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), '*')
+    })
+  })
+
+  describe('@context is first property', () => {
+    let actor1 = null
+    before(async () => {
+      [actor1] = await registerActor()
+    })
+    it('@context is first property', async () => {
+      const headers = {
+        accept: 'application/activity+json'
+      }
+      const res = await fetch(actor1.id, {
+        headers
+      })
+      assert.strictEqual(200, res.status)
+      const output = await res.text()
+      assert.match(output, /^{\s*"@context":/)
     })
   })
 })

@@ -3957,8 +3957,10 @@ app.post(
     const inbox = new Collection(await owner.prop('inbox'))
     await inbox.prepend(activity)
     pq.add(activity.distribute())
-    const output = await activity.expanded()
-    output['@context'] = output['@context'] || CONTEXT
+    const output = {
+      '@context': CONTEXT,
+      ...(await activity.expanded())
+    }
     res.status(201)
     res.set('Content-Type', 'application/activity+json')
     res.set('Location', await activity.id())
@@ -4028,7 +4030,7 @@ app.get(
         )
       }
     }
-    const output = await obj.expanded()
+    let output = await obj.expanded()
     for (const name of ['items', 'orderedItems']) {
       if (name in output && Array.isArray(output[name])) {
         const len = output[name].length
@@ -4064,7 +4066,10 @@ app.get(
     if (output.type === 'Tombstone') {
       res.status(410)
     }
-    output['@context'] = output['@context'] || CONTEXT
+    output = {
+      '@context': CONTEXT,
+      ...output
+    }
     res.set('Content-Type', 'application/activity+json')
     res.json(output)
   })
