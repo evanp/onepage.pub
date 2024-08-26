@@ -495,7 +495,7 @@ describe('onepage.pub', () => {
       assert(actorObj['@context'])
       assert.notEqual(
         -1,
-        actorObj['@context'].indexOf('https://w3id.org/security')
+        actorObj['@context'].indexOf('https://w3id.org/security/v1')
       )
     })
 

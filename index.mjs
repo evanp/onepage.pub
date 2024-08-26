@@ -67,7 +67,7 @@ const BLOCKED_DOMAINS = (() => {
 // Constants
 
 const AS_CONTEXT = 'https://www.w3.org/ns/activitystreams'
-const SEC_CONTEXT = 'https://w3id.org/security'
+const SEC_CONTEXT = 'https://w3id.org/security/v1'
 const BLOCKED_CONTEXT = 'https://purl.archive.org/socialweb/blocked'
 const PENDING_CONTEXT = 'https://purl.archive.org/socialweb/pending'
 const WEBFINGER_CONTEXT = 'https://purl.archive.org/socialweb/webfinger'
