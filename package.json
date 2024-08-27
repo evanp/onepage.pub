@@ -33,7 +33,9 @@
     "start": "node index.mjs",
     "test": "node --test --test-reporter=spec",
     "test:only": "node --test --test-only --test-reporter=spec",
-    "ver": "echo $npm_package_version"
+    "ver": "echo $npm_package_version",
+    "lint": "eslint . --ext .mjs",
+    "lint:fix": "eslint . --ext .mjs --fix"
   },
   "version": "0.9.3",
   "engine": {
