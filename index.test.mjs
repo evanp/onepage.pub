@@ -5379,7 +5379,9 @@ describe('onepage.pub', () => {
       assert('@context' in obj)
       assert(Array.isArray(obj['@context']))
       assert(
-        obj['@context'].includes('https://purl.archive.org/socialweb/webfinger')
+        obj['@context'].includes(
+          'https://purl.archive.org/socialweb/webfinger'
+        )
       )
       assert('webfinger' in obj)
       assert.strictEqual(typeof obj.webfinger, 'string')
@@ -5440,6 +5442,73 @@ describe('onepage.pub', () => {
       assert.strictEqual(200, res.status)
       const output = await res.text()
       assert.match(output, /^{\s*"@context":/)
+    })
+  })
+
+  describe('User collections have correct addressees', () => {
+    let actor1 = null
+    let token1 = null
+    let token2 = null
+    let outbox = null
+    before(async () => {
+      [actor1, token1] = await registerActor();
+      [, token2] = await registerActor()
+      for (let i = 0; i < 23; i++) {
+        await doActivity(actor1, token1, {
+          to: [PUBLIC],
+          type: 'Create',
+          object: {
+            type: 'Note',
+            contentMap: {
+              en: `Hello, World! (iteration ${i})`
+            }
+          }
+        })
+      }
+      await settle(MAIN_PORT)
+    })
+    it('Collection has correct addressees', async () => {
+      outbox = await getObject(actor1.outbox, token1)
+      assert.strictEqual(outbox.to.length, 1)
+      assert.strictEqual(outbox.to[0].id, PUBLIC)
+    })
+    it('First collection page has correct addressees', async () => {
+      const firstPage = await getObject(outbox.first.id, token1)
+      assert.strictEqual(firstPage.to.length, 1)
+      assert.strictEqual(firstPage.to[0].id, PUBLIC)
+    })
+    it('Last collection page has correct addressees', async () => {
+      const firstPage = await getObject(outbox.last.id, token1)
+      assert.strictEqual(firstPage.to.length, 1)
+      assert.strictEqual(firstPage.to[0].id, PUBLIC)
+    })
+    it('Other actor can get outbox', async () => {
+      const outbox = await getObject(actor1.outbox, token2)
+      assert.strictEqual(outbox.totalItems, 23)
+    })
+    it('Other actor can get first outbox page', async () => {
+      const outbox = await getObject(actor1.outbox, token2)
+      const firstPage = await getObject(outbox.first.id, token2)
+      assert.ok(firstPage)
+    })
+    it('Other actor can get last outbox page', async () => {
+      const outbox = await getObject(actor1.outbox, token2)
+      const lastPage = await getObject(outbox.last.id, token2)
+      assert.ok(lastPage)
+    })
+    it('Unauthenticated user can get outbox', async () => {
+      const outbox = await getObject(actor1.outbox)
+      assert.strictEqual(outbox.totalItems, 23)
+    })
+    it('Unauthenticated user can get first outbox page', async () => {
+      const outbox = await getObject(actor1.outbox)
+      const firstPage = await getObject(outbox.first.id)
+      assert.ok(firstPage)
+    })
+    it('Unauthenticated user can get last outbox page', async () => {
+      const outbox = await getObject(actor1.outbox)
+      const lastPage = await getObject(outbox.last.id)
+      assert.ok(lastPage)
     })
   })
 })
