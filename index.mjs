@@ -310,7 +310,7 @@ class HTTPSignature {
         throw new Error('Invalid signature header')
       }
       if (parts.algorithm !== 'rsa-sha256') {
-        throw new Error('unsupported algorithm')
+        throw new Error(`Unsupported algorithm: ${parts.algorithm}`)
       }
       this.keyId = parts.keyId
       this.headers = parts.headers
@@ -373,6 +373,11 @@ class HTTPSignature {
     url.hash = ''
 
     const ao = await ActivityObject.get(url.toString())
+
+    if (!ao) {
+      return null
+    }
+
     let publicKey = null
 
     // Mastodon uses 'main-key' instead of 'publicKey'
@@ -424,11 +429,17 @@ class HTTPSignature {
   static async authenticate (req, res, next) {
     const sigHeader = req.headers.signature
     if (sigHeader) {
-      const signature = new HTTPSignature(sigHeader)
-      const remote = await signature.validate(req)
-      if (remote) {
-        req.auth = { subject: await remote.id() }
-      } else {
+      try {
+        const signature = new HTTPSignature(sigHeader)
+        const remote = await signature.validate(req)
+        if (remote) {
+          req.auth = { subject: await remote.id() }
+        } else {
+          next(new createError.Unauthorized('Invalid HTTP signature'))
+        }
+      } catch (err) {
+        logger.warn(`Error validating signature: ${err.message}`)
+        logger.warn(`Signature: ${sigHeader}`)
         next(new createError.Unauthorized('Invalid HTTP signature'))
       }
     }
