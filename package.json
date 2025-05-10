@@ -5,7 +5,7 @@
     "bootstrap": "^5.3.3",
     "config": "^3.3.12",
     "cookie-parser": "^1.4.6",
-    "express": "^4.21.0",
+    "express": "^5.1.0",
     "express-async-handler": "^1.2.0",
     "express-jwt": "^8.4.1",
     "express-session": "^1.18.0",
