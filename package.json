@@ -19,7 +19,7 @@
     "passport-oauth2": "^1.8.0",
     "sqlite3": "^5.1.7",
     "supertest": "^7.0.0",
-    "winston": "^3.14.2"
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "eslint": "^8.57.1",
