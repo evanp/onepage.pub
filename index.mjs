@@ -324,12 +324,11 @@ class HTTPSignature {
       this.date = date
       this.digest = digest
       this.signature = this.sign(this.signableData())
-      this.header = `keyId="${this.keyId}",headers="(request-target) host date${
-        this.digest ? ' digest' : ''
-      }",signature="${this.signature.replace(
-        /"/g,
-        '\\"'
-      )}",algorithm="rsa-sha256"`
+      this.header = `keyId="${this.keyId}",headers="(request-target) host date${this.digest ? ' digest' : ''
+        }",signature="${this.signature.replace(
+          /"/g,
+          '\\"'
+        )}",algorithm="rsa-sha256"`
     }
   }
 
@@ -372,7 +371,7 @@ class HTTPSignature {
     const fragment = url.hash ? url.hash.slice(1) : null
     url.hash = ''
 
-    const ao = await ActivityObject.get(url.toString())
+    const ao = await ActivityObject.getKeyFromRemote(url.toString())
 
     if (!ao) {
       return null
@@ -560,7 +559,23 @@ class ActivityObject {
     }
   }
 
+  static async getKeyFromRemote (id, subject = null) {
+    let res = await ActivityObject.#getInternal(id, null, false)
+    if ([401, 403, 404].includes(res.status)) {
+      res = await ActivityObject.#getInternal(id, null, true)
+      if ([403, 404].includes(res.status) && subject) {
+        res = await ActivityObject.#getInternal(id, subject, true)
+      }
+    }
+    return await ActivityObject.#handleResponse(res, id)
+  }
+
   static async getFromRemote (id, subject = null) {
+    const res = await ActivityObject.#getInternal(id, subject, true)
+    return await ActivityObject.#handleResponse(res)
+  }
+
+  static async #getInternal (id, subject, sign) {
     const date = new Date().toISOString()
     const headers = {
       Date: date,
@@ -584,13 +599,20 @@ class ActivityObject {
     }
     const signature = new HTTPSignature(keyId, privKey, 'GET', id, date)
     headers.Signature = signature.header
-    const res = await fetch(id, { headers })
-    if (res.status !== 200) {
+    return await fetch(id, { headers })
+  }
+
+  static async #handleResponse (res, id) {
+    if (![200, 410].includes(res.status)) {
       logger.warn(`Error fetching ${id}: ${res.status} ${res.statusText}`)
       return null
     } else {
       const json = await res.json()
       const obj = new ActivityObject(json)
+      if (res.status === 410 && await obj.type() !== 'Tombstone') {
+        logger.warn(`Object ${id} returned 410 but is not a Tombstone`)
+        return null
+      }
       const owner = ActivityObject.guessOwner(json)
       const addressees = ActivityObject.guessAddressees(json)
       obj.#complete = true
@@ -1478,7 +1500,7 @@ class Activity extends ActivityObject {
             if (
               prop in activity.object &&
               (await toId(activity.object[prop])) !==
-                (await toId(await object.prop(prop)))
+              (await toId(await object.prop(prop)))
             ) {
               throw new createError.BadRequest(
                 `Cannot update ${prop} directly`
@@ -1492,7 +1514,7 @@ class Activity extends ActivityObject {
             if (
               prop in activity.object &&
               (await toId(activity.object[prop])) !==
-                (await toId(await object.prop(prop)))
+              (await toId(await object.prop(prop)))
             ) {
               throw new createError.BadRequest(
                 `Cannot update ${prop} directly`
@@ -1516,7 +1538,7 @@ class Activity extends ActivityObject {
             if (
               prop in activity.object &&
               (await toId(activity.object[prop])) !==
-                (await toId(await object.prop(prop)))
+              (await toId(await object.prop(prop)))
             ) {
               throw new createError.BadRequest(
                 `Cannot update ${prop} directly`
@@ -1573,7 +1595,7 @@ class Activity extends ActivityObject {
           if (
             prop in activity.object &&
             (await toId(activity.object[prop])) !==
-              (await toId(await object.prop(prop)))
+            (await toId(await object.prop(prop)))
           ) {
             throw new createError.BadRequest(`Cannot update ${prop} directly`)
           }
@@ -1585,8 +1607,7 @@ class Activity extends ActivityObject {
             activity.object[prop] !== (await object.prop(prop))
           ) {
             logger.debug(
-              `Update mismatch for ${prop}: ${
-                activity.object[prop]
+              `Update mismatch for ${prop}: ${activity.object[prop]
               } !== ${await object.prop(prop)} `
             )
             throw new createError.BadRequest(`Cannot update ${prop} directly`)
@@ -2857,7 +2878,7 @@ const db = new Database(DATABASE)
 // Initialize PromiseQueue
 
 const pq = new PromiseQueue()
-pq.add(async () => {})
+pq.add(async () => { })
 
 // Initialize Express
 const app = express()
@@ -2986,16 +3007,16 @@ class Server {
       const { publicKey, privateKey } = await newKeyPair()
       await db.run(
         'INSERT INTO server (origin, privateKey, publicKey) ' +
-          ' VALUES (?, ?, ?) ' +
-          ' ON CONFLICT DO NOTHING',
+        ' VALUES (?, ?, ?) ' +
+        ' ON CONFLICT DO NOTHING',
         [makeUrl(''), privateKey, publicKey]
       )
     } else if (!row.privateKey) {
       const { publicKey, privateKey } = await newKeyPair()
       await db.run(
         'UPDATE server ' +
-          ' SET privateKey = ?, publicKey = ? ' +
-          ' WHERE origin = ?',
+        ' SET privateKey = ?, publicKey = ? ' +
+        ' WHERE origin = ?',
         [privateKey, publicKey, makeUrl('')]
       )
     } else if (row.privateKey.match(/^-----BEGIN RSA PRIVATE KEY-----/)) {
@@ -3003,8 +3024,8 @@ class Server {
       const publicKey = toSpki(row.publicKey)
       await db.run(
         'UPDATE server ' +
-          ' SET privateKey = ?, publicKey = ? ' +
-          ' WHERE origin = ?',
+        ' SET privateKey = ?, publicKey = ? ' +
+        ' WHERE origin = ?',
         [privateKey, publicKey, makeUrl('')]
       )
     }
@@ -3175,16 +3196,15 @@ const page = (title, body, user = null) => {
               <li class="nav-item active">
                 <a class="nav-link" href="/">Home</a>
               </li>
-              ${
-                user
-                  ? `
+              ${user
+      ? `
                 <li class="nav-item active">
                   <form action="/logout" method="POST" class="form-inline my-2 my-lg-0">
                   <button type="submit" class="btn btn-link nav-link">Logout</button>
                   </form>
                 </li>
                 `
-                  : `
+      : `
                 <li class="nav-item active">
                   <a class="nav-link" href="/register">Register</a>
                 </li>
@@ -3192,7 +3212,7 @@ const page = (title, body, user = null) => {
                   <a class="nav-link" href="/login">Log in</a>
                 </li>
               `
-              }
+    }
             </ul>
           </div>
         </nav>
@@ -3209,9 +3229,8 @@ const page = (title, body, user = null) => {
         <div class="footer bg-light" style="max-width: 600px;">
           <div class="container text-center">
           <p>
-            One Page Pub ${
-              version ? `<span class="version">${version}</span>` : ''
-            }
+            One Page Pub ${version ? `<span class="version">${version}</span>` : ''
+    }
             | <a href="https://github.com/evanp/onepage.pub" target="_blank">GitHub</a></p>
           </div>
         </div>
@@ -3245,8 +3264,7 @@ app.get(
         `
     <div class="container mx-auto" style="max-width: 600px;">
     <form method="POST" action="/register">
-      ${
-        !INVITE_CODE || INVITE_CODE.length === 0
+      ${!INVITE_CODE || INVITE_CODE.length === 0
           ? ''
           : `<div class="form-group row mb-3">
         <label for="invitecode" class="col-sm-4 col-form-label text-right">Invite code</label>
@@ -3254,7 +3272,7 @@ app.get(
         <input type="text" name="invitecode" id="invitecode" class="form-control" placeholder="Invite code" />
         </div>
       </div>`
-      }
+        }
       <div class="form-group row mb-3">
         <label for="username" class="col-sm-4 col-form-label text-right">Username</label>
         <div class="col-sm-8">
@@ -3549,37 +3567,15 @@ app.post(
       throw new createError.Unauthorized('Missing read scope')
     }
     const actor = await user.getActor()
-    const publicKey = new ActivityObject(await actor.prop('publicKey'))
-    const date = new Date().toUTCString()
-    const signature = new HTTPSignature(
-      await publicKey.id(),
-      user.privateKey,
-      'GET',
-      id,
-      date
-    )
-    const fetchRes = await fetch(id, {
-      headers: {
-        Accept:
-          'application/activity+json;q=1,application/ld+json;q=0.5,application/json;q=0.1',
-        Signature: signature.header,
-        Date: date
-      }
-    })
-    if (![200, 410].includes(fetchRes.status)) {
-      logger.warn(`Error fetching ${id}: ${fetchRes.status}`)
-      throw new createError.InternalServerError('Error fetching object')
+    const obj = await ActivityObject.getFromRemote(id, await actor.id())
+
+    if (!obj) {
+      throw new createError.NotFound('Object not found')
     }
-    const fetchJson = await fetchRes.json()
-    if (fetchRes.status === 410 && fetchJson.type !== 'Tombstone') {
-      logger.warn(
-        `Error fetching ${id}: status = 410 but type is '${fetchJson.type}', not Tombstone`
-      )
-      throw new createError.InternalServerError('Error fetching object')
-    }
-    res.status(fetchRes.status)
+
+    res.status((await obj.type() === 'Tombstone') ? 410 : 200)
     res.set('Content-Type', 'application/activity+json')
-    res.json(fetchJson)
+    res.json(await obj.json())
   })
 )
 
@@ -3653,21 +3649,19 @@ app.get(
         This app is asking to authorize access to your account.
         <ul>
           <li>Client ID: ${req.query.client_id}</li>
-          <li>Name: ${
-            name
-              ? url
-                ? `<a target="_blank" href="${url}">${name}</a>`
-                : name
-              : 'N/A'
+          <li>Name: ${name
+            ? url
+              ? `<a target="_blank" href="${url}">${name}</a>`
+              : name
+            : 'N/A'
           }</li>
           <li>Icon: ${icon ? `<img src="${icon}" >` : 'N/A'}</li>
           <li>Description: ${description || 'N/A'}</li>
-          <li>Author: ${
-            author
-              ? authorUrl
-                ? `<a target="_blank" href="${authorUrl}">${author}</a>`
-                : author
-              : 'N/A'
+          <li>Author: ${author
+            ? authorUrl
+              ? `<a target="_blank" href="${authorUrl}">${author}</a>`
+              : author
+            : 'N/A'
           }</li>
           <li>Scope: ${req.query.scope}</li>
         </ul>
@@ -3675,13 +3669,11 @@ app.get(
       <form method="POST" action="/endpoint/oauth/authorize">
       <input type="hidden" name="csrf_token" value="${req.session.csrfToken}" />
       <input type="hidden" name="client_id" value="${req.query.client_id}" />
-      <input type="hidden" name="redirect_uri" value="${
-        req.query.redirect_uri
-      }" />
+      <input type="hidden" name="redirect_uri" value="${req.query.redirect_uri
+          }" />
       <input type="hidden" name="scope" value="${req.query.scope}" />
-      <input type="hidden" name="code_challenge" value="${
-        req.query.code_challenge
-      }" />
+      <input type="hidden" name="code_challenge" value="${req.query.code_challenge
+          }" />
       <input type="hidden" name="state" value="${req.query.state}" />
       <input type="submit" value="Authorize" />
       </form>`,
