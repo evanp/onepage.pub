@@ -709,8 +709,8 @@ class ActivityObject {
     }
   }
 
-  async expand () {
-    const json = await this.expanded()
+  async expand (subject = null) {
+    const json = await this.expanded(subject)
     this.#json = json
     return this.#json
   }
@@ -1105,13 +1105,13 @@ class ActivityObject {
 
   static #arrayProps = ['items', 'orderedItems']
 
-  async expanded () {
+  async expanded (subject = null) {
     // force a full read
     const id = await this.id()
     if (!id) {
       throw new Error('No id for object being expanded')
     }
-    const ao = await ActivityObject.getById(id)
+    const ao = await ActivityObject.getById(id, subject)
     if (!ao) {
       throw new Error(`No such object: ${id}`)
     }
@@ -1130,7 +1130,8 @@ class ActivityObject {
         if (Array.isArray(object[prop])) {
           object[prop] = await Promise.all(object[prop].map(toBrief))
         } else if (prop === 'object' && (await this.needsExpandedObject())) {
-          object[prop] = await new ActivityObject(object[prop]).expanded()
+          object[prop] =
+            await new ActivityObject(object[prop]).expanded(subject)
         } else {
           object[prop] = await toBrief(object[prop])
         }
@@ -1260,7 +1261,7 @@ class Activity extends ActivityObject {
             `No such object to follow: ${JSON.stringify(objectProp)}`
           )
         }
-        await other.expand()
+        await other.expand(actorObj)
         const otherId = await other.id()
         const following = new Collection(await actorObj.prop('following'))
         if (await following.hasMember(otherId)) {
@@ -1316,7 +1317,7 @@ class Activity extends ActivityObject {
             const pendingFollowers = new Collection(
               await actorObj.prop('pendingFollowers')
             )
-            await pendingFollowers.expand()
+            await pendingFollowers.expand(actorObj)
             if (!(await pendingFollowers.hasMember(await accepted.id()))) {
               throw new createError.BadRequest(
                 'Not awaiting acceptance for follow'
@@ -1333,7 +1334,7 @@ class Activity extends ActivityObject {
               pendingFollowing = new Collection(
                 await other.prop('pendingFollowing')
               )
-              await pendingFollowers.expand()
+              await pendingFollowers.expand(actorObj)
               if (!(await pendingFollowing.hasMember(await accepted.id()))) {
                 throw new createError.BadRequest(
                   'Not awaiting acceptance for follow'
@@ -1924,7 +1925,7 @@ class Activity extends ActivityObject {
             )
             const sharedObjectOwner = await sharedObject.owner()
             if (await User.isUser(sharedObjectOwner)) {
-              await sharedObject.expand()
+              await sharedObject.expand(actorObj)
               const shares = new Collection(await sharedObject.prop('shares'))
               await shares.remove(object)
             }
@@ -1993,7 +1994,7 @@ class Activity extends ActivityObject {
       let other = await ActivityObject.get(addressee, null, owner)
       if (await User.isUser(other)) {
         // Local delivery
-        await other.expand()
+        await other.expand(owner)
         logger.debug(`Local delivery for ${activity.id} to ${addressee}`)
         const inbox = new Collection(await other.prop('inbox'))
         await inbox.prependData(activity)
@@ -2077,8 +2078,8 @@ class Collection extends ActivityObject {
     return coll
   }
 
-  async hasMember (object) {
-    await this.expand()
+  async hasMember (object, subject = null) {
+    await this.expand(subject)
     const objectId = await toId(object)
     const match = (item) =>
       (isString(item) && item === objectId) ||
@@ -2097,7 +2098,7 @@ class Collection extends ActivityObject {
         pageId = await page.prop('next')
       ) {
         page = new ActivityObject(pageId)
-        await page.expand()
+        await page.expand(subject)
         if (await page.hasProp('orderedItems')) {
           const orderedItems = await page.prop('orderedItems')
           if (orderedItems.some(match)) {
@@ -2381,7 +2382,7 @@ class RemoteActivity extends Activity {
           await ao.cache(await remoteObj.id(), addressees)
           if (await ao.prop('inReplyTo')) {
             const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
-            await inReplyTo.expand()
+            await inReplyTo.expand(ownerObj)
             const inReplyToOwner = await inReplyTo.owner()
             if (
               inReplyToOwner &&
@@ -2408,7 +2409,7 @@ class RemoteActivity extends Activity {
           await ao.cache(remote, addressees)
           if (await ao.prop('inReplyTo')) {
             const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
-            await inReplyTo.expand()
+            await inReplyTo.expand(ownerObj)
             const inReplyToOwner = await inReplyTo.owner()
             if (
               inReplyToOwner &&
@@ -2443,7 +2444,7 @@ class RemoteActivity extends Activity {
             if (!(await ao.canRead(await remoteObj.id()))) {
               throw new Error('Cannot like something you cannot read!')
             }
-            await ao.expand()
+            await ao.expand(ownerObj)
             const likes = new Collection(await ao.prop('likes'))
             if (!(await likes.hasMember(this))) {
               await likes.prepend(this)
@@ -2459,7 +2460,7 @@ class RemoteActivity extends Activity {
             if (!(await ao.canRead(await remoteObj.id()))) {
               throw new Error('Cannot share something you cannot read!')
             }
-            await ao.expand()
+            await ao.expand(ownerObj)
             const shares = new Collection(await ao.prop('shares'))
             if (!(await shares.hasMember(this))) {
               await shares.prepend(this)
@@ -2603,7 +2604,7 @@ class RemoteActivity extends Activity {
         }
         const undone = new ActivityObject(objectProp)
         // Make sure it's expanded
-        await undone.expand()
+        await undone.expand(ownerObj)
         const actorProp = await undone.prop('actor')
         if (!actorProp) {
           throw new Error('No actor!')
@@ -2621,7 +2622,7 @@ class RemoteActivity extends Activity {
             }
             const objectOwner = await object.owner()
             if (await User.isUser(objectOwner)) {
-              await object.expand()
+              await object.expand(ownerObj)
               const likes = new Collection(await object.prop('likes'))
               await likes.remove(undone)
             }
@@ -2635,7 +2636,7 @@ class RemoteActivity extends Activity {
             }
             const objectOwner = await object.owner()
             if (await User.isUser(objectOwner)) {
-              await object.expand()
+              await object.expand(ownerObj)
               const shares = new Collection(await object.prop('shares'))
               await shares.remove(undone)
             }
@@ -2649,7 +2650,7 @@ class RemoteActivity extends Activity {
             }
             const objectOwner = await object.owner()
             if (await User.isUser(objectOwner)) {
-              await object.expand()
+              await object.expand(ownerObj)
               const followers = new Collection(await object.prop('followers'))
               await followers.remove(undoneActor)
               const pendingFollowers = new Collection(
