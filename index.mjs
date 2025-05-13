@@ -1031,6 +1031,8 @@ class ActivityObject {
       }
     }
     switch (object.type) {
+      case 'Key':
+      case 'PublicKey':
       case 'CryptographicKey':
         brief = {
           ...brief,
