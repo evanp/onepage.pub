@@ -398,6 +398,7 @@ class HTTPSignature {
     }
 
     if (
+      !publicKey ||
       !(await publicKey.json()) ||
       !(await publicKey.prop('owner')) ||
       !(await publicKey.prop('publicKeyPem'))
