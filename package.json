@@ -37,7 +37,7 @@
     "lint": "eslint . --ext .mjs",
     "lint:fix": "eslint . --ext .mjs --fix"
   },
-  "version": "0.9.5",
+  "version": "0.9.6",
   "engine": {
     "node": ">=20.0.0"
   }
