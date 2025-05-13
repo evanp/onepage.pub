@@ -40,6 +40,7 @@ const ORIGIN =
   (PORT === 443 ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || new URL(ORIGIN).hostname
 const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
+const MAXIMUM_TIME_SKEW = 5 * 60 * 1000 // 5 minutes
 
 // Ensure the Upload directory exists
 
@@ -430,6 +431,22 @@ class HTTPSignature {
     const sigHeader = req.headers.signature
     if (sigHeader) {
       try {
+        // Check for date header and time skew
+        if (!req.headers.date) {
+          return next(new createError.BadRequest('Missing date header'))
+        }
+        const date = new Date(req.headers.date)
+        if (Math.abs(date.getTime() - Date.now()) > MAXIMUM_TIME_SKEW) {
+          return next(new createError.BadRequest('Time skew detected'))
+        }
+        if (req.rawBodyText && req.rawBodyText.length !== 0) {
+          if (!req.headers.digest) {
+            return next(new createError.BadRequest('Missing digest header'))
+          }
+          if (req.headers.digest !== digestBody(req.rawBodyText)) {
+            return next(new createError.BadRequest('Invalid digest header'))
+          }
+        }
         const signature = new HTTPSignature(sigHeader)
         const remote = await signature.validate(req)
         if (remote) {
@@ -577,7 +594,7 @@ class ActivityObject {
   }
 
   static async #getInternal (id, subject, sign) {
-    const date = new Date().toISOString()
+    const date = new Date().toUTCString()
     const headers = {
       Date: date,
       Accept: ACCEPT_HEADER
@@ -605,7 +622,8 @@ class ActivityObject {
 
   static async #handleResponse (res, id) {
     if (![200, 410].includes(res.status)) {
-      logger.warn(`Error fetching ${id}: ${res.status} ${res.statusText}`)
+      const message = await res.text()
+      logger.warn(`Error fetching ${id}: ${res.status} ${res.statusText} (${message})`)
       return null
     } else {
       const json = await res.json()
@@ -2906,7 +2924,10 @@ app.use(
       'application/json',
       'application/activity+json',
       'application/ld+json'
-    ]
+    ],
+    verify: (req, res, buf, encoding) => {
+      req.rawBodyText = buf.toString(encoding || 'utf8')
+    }
   })
 ) // for parsing application/json
 app.use(express.urlencoded({ extended: true })) // for HTML forms

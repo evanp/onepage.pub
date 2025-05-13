@@ -336,20 +336,25 @@ const settle = async (port = MAIN_PORT) => {
   } while (count > 0)
 }
 
-async function signRequest (keyId, privateKey, method, url, date) {
+async function signRequest (keyId, privateKey, method, url, date, digest = null) {
   url = typeof url === 'string' ? new URL(url) : url
   const target =
     url.search && url.search.length
       ? `${url.pathname}?${url.search}`
       : `${url.pathname}`
+  let headers = '(request-target) host date'
   let data = `(request-target): ${method.toLowerCase()} ${target}\n`
   data += `host: ${url.host}\n`
   data += `date: ${date}`
+  if (digest) {
+    data += `\ndigest: ${digest}`
+    headers = `${headers} digest`
+  }
   const signer = crypto.createSign('sha256')
   signer.update(data)
   const signature = signer.sign(privateKey).toString('base64')
   signer.end()
-  const header = `keyId="${keyId}",headers="(request-target) host date",signature="${signature.replace(
+  const header = `keyId="${keyId}",headers="${headers}",signature="${signature.replace(
     /"/g,
     '\\"'
   )}",algorithm="rsa-sha256"`
@@ -4849,23 +4854,29 @@ describe('onepage.pub', () => {
     it('Can send a signed request', async () => {
       const inbox = actor.inbox
       const date = new Date().toUTCString()
+      const body = JSON.stringify({
+        '@context': AS2_CONTEXT,
+        ...clientActivity
+      })
+      const hash = crypto.createHash('sha256')
+      hash.update(body)
+      const digest = `sha-256=${hash.digest('base64')}`
+
       const header = await signRequest(
         keyId,
         pair.privateKey,
         'POST',
         inbox,
-        date
+        date,
+        digest
       )
-      const body = JSON.stringify({
-        '@context': AS2_CONTEXT,
-        ...clientActivity
-      })
       const res = await fetch(inbox, {
         method: 'POST',
         headers: {
           'Content-Type': AS2_MEDIA_TYPE,
           Signature: header,
-          Date: date
+          Date: date,
+          Digest: digest
         },
         body
       })
