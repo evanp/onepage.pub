@@ -573,7 +573,7 @@ class ActivityObject {
 
   static async getFromRemote (id, subject = null) {
     const res = await ActivityObject.#getInternal(id, subject, true)
-    return await ActivityObject.#handleResponse(res)
+    return await ActivityObject.#handleResponse(res, id)
   }
 
   static async #getInternal (id, subject, sign) {
