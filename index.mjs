@@ -1031,7 +1031,7 @@ class ActivityObject {
       }
     }
     switch (object.type) {
-      case 'Key':
+      case 'CryptographicKey':
         brief = {
           ...brief,
           owner: object.owner,
@@ -2708,7 +2708,7 @@ class User {
     }
     const { publicKey, privateKey } = await newKeyPair()
     const pkey = new ActivityObject({
-      type: 'Key',
+      type: 'CryptographicKey',
       owner: this.actorId,
       to: [PUBLIC],
       publicKeyPem: publicKey
@@ -2975,7 +2975,7 @@ class Server {
       type: 'Service',
       name: process.OPP_NAME || 'One Page Pub',
       publicKey: {
-        type: 'Key',
+        type: 'CryptographicKey',
         id: this.keyId(),
         owner: this.#origin,
         publicKeyPem: this.#publicKey
@@ -2986,7 +2986,7 @@ class Server {
   getKeyJSON () {
     return {
       '@context': CONTEXT,
-      type: 'Key',
+      type: 'CryptographicKey',
       id: this.keyId(),
       owner: this.#origin,
       publicKeyPem: this.#publicKey
