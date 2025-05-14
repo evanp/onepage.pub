@@ -192,6 +192,15 @@ function digestBody (body) {
   return `sha-256=${hash.digest('base64')}`
 }
 
+function equalDigests (digest1, digest2) {
+  const [alg1, hash1] = digest1.split('=', 2)
+  const [alg2, hash2] = digest2.split('=', 2)
+  if (alg1.toLowerCase() !== alg2.toLowerCase()) {
+    return false
+  }
+  return hash1 === hash2
+}
+
 // Classes
 
 class Database {
@@ -445,7 +454,7 @@ class HTTPSignature {
           }
           const digest = req.headers.digest
           const calculated = digestBody(req.rawBodyText)
-          if (digest !== calculated) {
+          if (!equalDigests(digest, calculated)) {
             logger.debug(`Digest mismatch: header "${digest}" != calculated "${calculated}"`)
             return next(new createError.BadRequest('Invalid digest header'))
           }
