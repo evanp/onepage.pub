@@ -34,6 +34,7 @@ const startServer = (port = MAIN_PORT, props = {}) => {
   return new Promise((resolve, reject) => {
     const server = spawn('node', ['index.mjs'], {
       env: {
+        OPP_LOG_LEVEL: 'silent',
         OPP_HOSTNAME: 'localhost',
         ...process.env,
         ...props,
