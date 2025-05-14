@@ -381,7 +381,7 @@ class HTTPSignature {
     const fragment = url.hash ? url.hash.slice(1) : null
     url.hash = ''
 
-    const ao = await ActivityObject.getKeyFromRemote(url.toString())
+    const ao = await ActivityObject.getKeyById(url.toString())
 
     if (!ao) {
       return null
@@ -586,6 +586,20 @@ class ActivityObject {
       const obj = new ActivityObject(JSON.parse(row.data))
       obj.#complete = true
       return obj
+    }
+  }
+
+  static async getKeyById (id, subject = null) {
+    if (id === PUBLIC) {
+      return new ActivityObject(PUBLIC_OBJ)
+    }
+    const obj = await ActivityObject.getFromDatabase(id, subject)
+    if (obj) {
+      return obj
+    } else if (ActivityObject.isRemoteId(id)) {
+      return await ActivityObject.getKeyFromRemote(id, subject)
+    } else {
+      return null
     }
   }
 
