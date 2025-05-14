@@ -443,7 +443,10 @@ class HTTPSignature {
           if (!req.headers.digest) {
             return next(new createError.BadRequest('Missing digest header'))
           }
-          if (req.headers.digest !== digestBody(req.rawBodyText)) {
+          const digest = req.headers.digest
+          const calculated = digestBody(req.rawBodyText)
+          if (digest !== calculated) {
+            logger.debug(`Digest mismatch: header "${digest}" != calculated "${calculated}"`)
             return next(new createError.BadRequest('Invalid digest header'))
           }
         }
