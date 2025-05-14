@@ -30,7 +30,7 @@ const HOSTNAME = process.env.OPP_HOSTNAME || 'localhost'
 const PORT = process.env.OPP_PORT || 65380
 const KEY = process.env.OPP_KEY || 'localhost.key'
 const CERT = process.env.OPP_CERT || 'localhost.crt'
-const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'warn'
+const LOG_LEVEL = process.env.OPP_LOG_LEVEL || 'info'
 const SESSION_SECRET =
   process.env.OPP_SESSION_SECRET || 'insecure-session-secret'
 const INVITE_CODE = process.env.OPP_INVITE_CODE || null
@@ -4220,8 +4220,11 @@ app.post(
 
 app.use((err, req, res, next) => {
   if (createError.isHttpError(err)) {
-    if (err.statusCode > 500) {
+    if (err.statusCode >= 500) {
       logger.error(`Error status ${err.statusCode}: `, err)
+      logger.debug(err.stack)
+    } else if (err.statusCode >= 400 && err.statusCode < 500) {
+      logger.warn(`Error ${err.statusCode} processing ${req.url}: ${err.message}`)
       logger.debug(err.stack)
     }
     res.status(err.statusCode)

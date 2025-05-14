@@ -54,7 +54,7 @@ everyone's links to you.
 - OPP_PORT: the port to listen on (default: `3000`). Same caveat as above.
 - OPP_KEY: path to your SSL private key file (default: `localhost.key`).
 - OPP_CERT: path to your SSL certificate file (default: `localhost.cert`).
-- OPP_LOG_LEVEL: the level of logging to do (default: `info`). Can be `debug`, `info`, `warn`, or `error`.
+- OPP_LOG_LEVEL: the level of logging to do (default: `info`). Can be `debug`, `info`, `warn`, `error` or `silent`.
 - OPP_SESSION_SECRET: a random value to use for secrets in sessions. You should change this to something random.
 - OPP_INVITE_CODE: If this is non-blank, then only users who have this code can register.
 - OPP_BLOCK_LIST: a blocklist file for blocking domains. In Mastodon
