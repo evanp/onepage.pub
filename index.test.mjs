@@ -391,6 +391,7 @@ describe('onepage.pub', () => {
       assert.strictEqual(obj.type, 'Service')
       assert.strictEqual(obj.name, 'One Page Pub')
       assert.strictEqual(obj.id, `https://localhost:${MAIN_PORT}/`)
+      assert.strictEqual(obj.preferredUsername, `localhost:${MAIN_PORT}`)
     })
   })
 

@@ -3023,6 +3023,7 @@ class Server {
       id: this.#origin,
       type: 'Service',
       name: process.OPP_NAME || 'One Page Pub',
+      preferredUsername: URL.parse(this.#origin).host,
       publicKey: {
         type: 'CryptographicKey',
         id: this.keyId(),
