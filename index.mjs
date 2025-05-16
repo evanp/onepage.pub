@@ -373,7 +373,7 @@ class HTTPSignature {
         )
       } else {
         const value = req.get(name)
-        lines.push(`${name}: ${value}`)
+        lines.push(`${name.toLowerCase()}: ${value.trim()}`)
       }
     }
     const data = lines.join('\n')
