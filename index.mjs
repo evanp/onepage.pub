@@ -364,7 +364,7 @@ class HTTPSignature {
     return signature
   }
 
-  async validate (req) {
+  async validate (req, cache = true) {
     const lines = []
     for (const name of this.headers.split(' ')) {
       if (name === '(request-target)') {
@@ -381,7 +381,9 @@ class HTTPSignature {
     const fragment = url.hash ? url.hash.slice(1) : null
     url.hash = ''
 
-    const ao = await ActivityObject.getKeyById(url.toString())
+    const ao = (cache)
+      ? await ActivityObject.getKeyById(url.toString())
+      : await ActivityObject.getKeyFromRemote(url.toString())
 
     if (!ao) {
       return null
@@ -460,7 +462,12 @@ class HTTPSignature {
           }
         }
         const signature = new HTTPSignature(sigHeader)
-        const remote = await signature.validate(req)
+
+        // Try once with cache
+        let remote = await signature.validate(req, true)
+        if (!remote) {
+          remote = await signature.validate(req, false)
+        }
         if (remote) {
           req.auth = { subject: await remote.id() }
         } else {
