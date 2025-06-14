@@ -4324,6 +4324,10 @@ process.on('exit', (code) => {
   console.log(`About to exit with code: ${code}`)
 })
 
+const fixups = [
+  User.updateAllKeys
+]
+
 // If we're public, run with ORIGIN. Otherwise,
 // run with HTTPS
 
@@ -4341,9 +4345,10 @@ db.init().then(() => {
   logger.info('Database initialized')
   server.listen(PORT, () => {
     console.log(`Listening on ${PORT}`)
-    // Database fixes go here
-    User.updateAllKeys().then(() => {
-      logger.info('Updated all keys')
-    })
+    for (const fixup of fixups) {
+      fixup().then((result) => {
+        logger.info(result)
+      })
+    }
   })
 })
