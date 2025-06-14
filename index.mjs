@@ -2859,6 +2859,22 @@ class User {
       ])
     }
   }
+
+  async doActivity (data) {
+    const actor = await this.getActor()
+    const ownerId = await actor.id()
+    const outbox = new Collection(await actor.prop('outbox'))
+    data.id = await ActivityObject.makeId(data.type)
+    data.actor = ownerId
+    const activity = new Activity(data, ownerId)
+    await activity.apply()
+    await activity.save()
+    await outbox.prepend(activity)
+    const inbox = new Collection(await actor.prop('inbox'))
+    await inbox.prepend(activity)
+    pq.add(activity.distribute())
+    return activity
+  }
 }
 
 class Upload {
@@ -4164,8 +4180,6 @@ app.post(
           'This app does not have permission to write to this outbox'
         )
       }
-      const ownerId = await owner.id()
-      const outbox = await Collection.fromActivityObject(obj)
       let data = req.body
       // We do some testing for implicit create
       const type = data.type
@@ -4187,15 +4201,8 @@ app.post(
             : 'Object'
         data = { type: 'Create', object: data }
       }
-      data.id = await ActivityObject.makeId(data.type)
-      data.actor = ownerId
-      const activity = new Activity(data, ownerId)
-      await activity.apply()
-      await activity.save()
-      await outbox.prepend(activity)
-      const inbox = new Collection(await owner.prop('inbox'))
-      await inbox.prepend(activity)
-      pq.add(activity.distribute())
+      const user = await User.fromActorId(await owner.id())
+      const activity = await user.doActivity(data)
       const output = {
         '@context': CONTEXT,
         ...(await activity.expanded())
