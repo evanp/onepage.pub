@@ -23,11 +23,6 @@
     "winston": "^3.17.0"
   },
   "devDependencies": {
-    "eslint": "^9.30.1",
-    "eslint-config-standard": "^17.1.0",
-    "eslint-plugin-import": "^2.31.0",
-    "eslint-plugin-n": "^16.6.2",
-    "eslint-plugin-promise": "^6.6.0",
     "standard": "^17.1.2"
   },
   "scripts": {
@@ -35,8 +30,8 @@
     "test": "node --test --test-reporter=spec",
     "test:only": "node --test --test-only --test-reporter=spec",
     "ver": "echo $npm_package_version",
-    "lint": "eslint . --ext .mjs",
-    "lint:fix": "eslint . --ext .mjs --fix"
+    "lint": "standard",
+    "lint:fix": "standard --fix"
   },
   "version": "0.11.3",
   "engine": {
