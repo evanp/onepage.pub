@@ -22,6 +22,7 @@ import multer from 'multer'
 import mime from 'mime'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
+import cors from 'cors'
 
 // Configuration
 
@@ -2967,6 +2968,8 @@ app.use((req, res, next) => {
   next()
 })
 
+app.use(cors())
+
 app.use(
   express.json({
     type: [
@@ -3193,14 +3196,8 @@ passport.deserializeUser(function (username, done) {
 app.use('/bootstrap/', express.static('node_modules/bootstrap/dist/'))
 app.use('/popper/', express.static('node_modules/@popperjs/core/dist/umd'))
 
-const cors = (req, res, next) => {
-  res.set('Access-Control-Allow-Origin', '*')
-  next()
-}
-
 app.get(
   '/',
-  cors,
   wrap(async (req, res) => {
     if (req.accepts('html')) {
       res.send(
@@ -3229,7 +3226,6 @@ app.get(
 
 app.get(
   '/key',
-  cors,
   wrap(async (req, res) => {
     const server = await Server.get()
     res.set('Content-Type', 'application/activity+json')
@@ -3319,7 +3315,6 @@ const page = (title, body, user = null) => {
 
 app.get(
   '/queue',
-  cors,
   wrap(async (req, res) => {
     res.status(200)
     res.type('json')
@@ -3582,7 +3577,6 @@ app.get(
 
 app.get(
   '/.well-known/webfinger',
-  cors,
   wrap(async (req, res) => {
     const resource = req.query.resource
     if (!resource) {
@@ -3656,7 +3650,6 @@ app.post(
 
 app.get(
   '/endpoint/oauth/authorize',
-  cors,
   csrf,
   passport.authenticate('session'),
   wrap(async (req, res) => {
@@ -3811,7 +3804,6 @@ app.post(
 
 app.post(
   '/endpoint/oauth/token',
-  cors,
   wrap(async (req, res) => {
     const contentTypeHeader = req.get('Content-Type')
     if (!contentTypeHeader) {
@@ -4050,7 +4042,6 @@ app.get(
   '/uploads/*',
   jwtOptional,
   tokenTypeCheck,
-  cors,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const relative = req.params[0]
@@ -4084,7 +4075,6 @@ app.get(
   '/:type/:id',
   jwtOptional,
   tokenTypeCheck,
-  cors,
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const full = makeUrl(req.originalUrl)

@@ -5524,4 +5524,20 @@ describe('onepage.pub', () => {
       assert.ok(lastPage)
     })
   })
+  describe('CORS headers for HEAD', async () => {
+    let actor1 = null
+    before(async () => {
+      [actor1] = await registerActor()
+      await settle(MAIN_PORT)
+    })
+    it('HEAD request has liberal CORS headers', async () => {
+      const res = await fetch(actor1.id, {
+        method: 'HEAD'
+      })
+      assert.ok(res.ok)
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.headers.get('Access-Control-Allow-Origin'))
+      assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), '*')
+    })
+  })
 })
