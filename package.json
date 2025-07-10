@@ -13,7 +13,7 @@
     "http-errors": "^2.0.0",
     "jsonwebtoken": "^9.0.2",
     "mime": "^4.0.7",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.0.1",
     "nanoid": "^5.1.5",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
