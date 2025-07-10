@@ -88,6 +88,11 @@ const ACTIVITY_MEDIA_TYPE = 'application/activity+json'
 const JSON_MEDIA_TYPE = 'application/json'
 const ACCEPT_HEADER = `${LD_MEDIA_TYPE};q=1.0, ${ACTIVITY_MEDIA_TYPE};q=0.9, ${JSON_MEDIA_TYPE};q=0.3`
 const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public'
+const PUBLICS = [
+  PUBLIC,
+  'as:Public',
+  'Public'
+]
 const PUBLIC_OBJ = {
   id: PUBLIC,
   nameMap: { en: 'Public' },
@@ -103,6 +108,8 @@ const generateKeyPair = promisify(crypto.generateKeyPair)
 
 const isString = (value) =>
   typeof value === 'string' || value instanceof String
+
+const isPublic = (id) => PUBLICS.includes(id)
 
 const base64URLEncode = (str) =>
   str
@@ -537,7 +544,7 @@ class ActivityObject {
   }
 
   static async getJSON (id) {
-    if (id === PUBLIC) {
+    if (isPublic(id)) {
       return PUBLIC_OBJ
     }
     const row = await db.get('SELECT data FROM object WHERE id = ?', [id])
@@ -573,7 +580,7 @@ class ActivityObject {
   }
 
   static async getById (id, subject = null) {
-    if (id === PUBLIC) {
+    if (isPublic(id)) {
       return new ActivityObject(PUBLIC_OBJ)
     }
     const obj = await ActivityObject.getFromDatabase(id, subject)
@@ -598,7 +605,7 @@ class ActivityObject {
   }
 
   static async getKeyById (id, subject = null) {
-    if (id === PUBLIC) {
+    if (isPublic(id)) {
       return new ActivityObject(PUBLIC_OBJ)
     }
     const obj = await ActivityObject.getFromDatabase(id, subject)
@@ -2015,7 +2022,7 @@ class Activity extends ActivityObject {
     const expanded = (
       await Promise.all(
         addressees.map(async (addressee) => {
-          if (addressee === PUBLIC) {
+          if (isPublic(addressee)) {
             const followers = new Collection(await owner.prop('followers'))
             return await followers.members()
           } else {
