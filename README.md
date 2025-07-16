@@ -30,7 +30,7 @@ It is a **headless** server. It includes only a rudimentary Web UI for registrat
 
 For now, you have to clone it to a directory.
 
-```
+```bash
 git clone git@github.com:evanp/onepage.pub.git
 
 cd onepage.pub
@@ -41,7 +41,7 @@ npm install
 
 You should be able to run it with Node.js.
 
-```
+```bash
 node index.mjs
 ```
 
@@ -59,7 +59,7 @@ everyone's links to you.
 - OPP_INVITE_CODE: If this is non-blank, then only users who have this code can register.
 - OPP_BLOCK_LIST: a blocklist file for blocking domains. In Mastodon
 blockfile format. Null by default, which is bad.
-- OPP_ORIGIN: The origin part of URLs, like 'https://host.example:53443'. If this is set, the server will use it for all generated
+- OPP_ORIGIN: The origin part of URLs, like `https://host.example:53443`. If this is set, the server will use it for all generated
 URLs, and listen on http instead of https. This is what you want
 if you're using Kubernetes or another proxy to terminate SSL.
 - OPP_NAME: a name to show for the server. Defaults to the hostname part
@@ -101,7 +101,7 @@ The server implements the expected side effects for the ActivityPub protocol:
 
 The server is still in development. It's not ready for production use. There is a public GitHub project for tracking a 1.0 release at:
 
-https://github.com/users/evanp/projects/4/views/1
+`https://github.com/users/evanp/projects/4/views/1`
 
 ## Maintainers
 
