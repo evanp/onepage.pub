@@ -3599,30 +3599,49 @@ app.get(
     if (hostname !== req.get('host')) {
       throw new createError.NotFound('Hostname does not match')
     }
-    const user = await db.get(
-      'SELECT username, actorId FROM user WHERE username = ?',
-      [username]
-    )
-    if (!user) {
-      throw new createError.NotFound('User not found')
+
+    let jrd = null
+
+    if (username === hostname) { // Server ID
+      jrd = {
+        subject: resource,
+        links: [
+          {
+            rel: 'self',
+            type: 'application/activity+json',
+            href: `https://${hostname}/`
+          }
+        ]
+      }
+    } else {
+      const user = await db.get(
+        'SELECT username, actorId FROM user WHERE username = ?',
+        [username]
+      )
+      if (!user) {
+        throw new createError.NotFound('User not found')
+      }
+      if (!user.username) {
+        throw new createError.NotFound('User not found')
+      }
+      if (!user.actorId) {
+        throw new createError.InternalServerError('Invalid user')
+      }
+
+      jrd = {
+        subject: resource,
+        links: [
+          {
+            rel: 'self',
+            type: 'application/activity+json',
+            href: user.actorId
+          }
+        ]
+      }
     }
-    if (!user.username) {
-      throw new createError.NotFound('User not found')
-    }
-    if (!user.actorId) {
-      throw new createError.InternalServerError('Invalid user')
-    }
+
     res.set('Content-Type', 'application/jrd+json')
-    res.json({
-      subject: resource,
-      links: [
-        {
-          rel: 'self',
-          type: 'application/activity+json',
-          href: user.actorId
-        }
-      ]
-    })
+    res.json(jrd)
   })
 )
 

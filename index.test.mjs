@@ -5540,4 +5540,22 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), '*')
     })
   })
+  describe('Webfinger for server', async () => {
+    it('handles Webfinger requests for the server', async () => {
+      const wf = `acct:localhost:${MAIN_PORT}@localhost:${MAIN_PORT}`
+      const res = await fetch(
+        `https://localhost:${MAIN_PORT}/.well-known/webfinger?resource=${wf}`
+      )
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/jrd+json; charset=utf-8'
+      )
+      const obj = await res.json()
+      assert.strictEqual(obj.subject, wf)
+      assert.strictEqual(obj.links[0].rel, 'self')
+      assert.strictEqual(obj.links[0].type, 'application/activity+json')
+      assert.strictEqual(obj.links[0].href, `https://localhost:${MAIN_PORT}/`)
+    })
+  })
 })
