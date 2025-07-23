@@ -1450,7 +1450,9 @@ describe('onepage.pub', () => {
       assert.equal('Tombstone', deleted.object.type)
     })
     it('has a summaryMap property', async () => {
-      assert(deleted.object?.summaryMap?.en)
+      assert.ok(deleted.object, 'No object')
+      assert.ok(deleted.object.summaryMap, 'No summaryMap')
+      assert.ok(deleted.object?.summaryMap?.en, 'No en in summaryMap')
     })
     it('can fetch the Tombstone', async () => {
       const res = await fetch(deleted.object.id, {
@@ -4994,7 +4996,9 @@ describe('onepage.pub', () => {
     it('can get the implicitly created file', async () => {
       assert.ok(implicitCreate)
       const act = await getObject(implicitCreate, token)
-      const res = await fetch(act.object.url, {
+      assert.strictEqual(typeof act.object.url, 'object')
+      assert.strictEqual(typeof act.object.url.href, 'string')
+      const res = await fetch(act.object.url.href, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -5010,7 +5014,9 @@ describe('onepage.pub', () => {
     it('can get the explicitly created file', async () => {
       assert.ok(explicitCreate)
       const act = await getObject(explicitCreate, token)
-      const res = await fetch(act.object.url, {
+      assert.strictEqual(typeof act.object.url, 'object')
+      assert.strictEqual(typeof act.object.url.href, 'string')
+      const res = await fetch(act.object.url.href, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -5026,14 +5032,18 @@ describe('onepage.pub', () => {
     it("can't get the file without a token", async () => {
       assert.ok(implicitCreate)
       const act = await getObject(implicitCreate, token)
-      const res = await fetch(act.object.url)
+      assert.strictEqual(typeof act.object.url, 'object')
+      assert.strictEqual(typeof act.object.url.href, 'string')
+      const res = await fetch(act.object.url.href)
       assert.strictEqual(res.status, 401)
     })
 
     it("can't get the file with an unauthorized token", async () => {
       assert.ok(implicitCreate)
       const act = await getObject(implicitCreate, token)
-      const res = await fetch(act.object.url, {
+      assert.strictEqual(typeof act.object.url, 'object')
+      assert.strictEqual(typeof act.object.url.href, 'string')
+      const res = await fetch(act.object.url.href, {
         headers: {
           Authorization: `Bearer ${token2}`
         }

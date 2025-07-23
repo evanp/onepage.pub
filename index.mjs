@@ -1073,44 +1073,50 @@ class ActivityObject {
     return false
   }
 
+  async isLinkType () {
+    return ['Link', 'Hashtag', 'Mention'].includes(await this.type())
+  }
+
   async brief () {
-    const object = await this.json()
-    if (!object) {
-      return await this.id()
-    }
-    let brief = {
-      id: await this.id(),
-      type: await this.type(),
-      icon: await this.prop('icon')
-    }
+    let brief = (await this.isLinkType())
+      ? {
+          href: await this.prop('href'),
+          type: await this.type()
+        }
+      : {
+          id: await this.id(),
+          type: await this.type(),
+          icon: await this.prop('icon')
+        }
+
     for (const prop of ['nameMap', 'name', 'summaryMap', 'summary']) {
-      if (prop in object) {
-        brief[prop] = object[prop]
+      if (await this.hasProp(prop)) {
+        brief[prop] = await this.prop(prop)
         break
       }
     }
-    switch (object.type) {
+    switch (await this.type()) {
       case 'Key':
       case 'PublicKey':
       case 'CryptographicKey':
         brief = {
           ...brief,
-          owner: object.owner,
-          publicKeyPem: object.publicKeyPem
+          owner: await this.prop('owner'),
+          publicKeyPem: await this.prop('publicKeyPem')
         }
         break
       case 'Note':
         brief = {
           ...brief,
-          content: object.content,
-          contentMap: object.contentMap
+          content: await this.prop('content'),
+          contentMap: await this.prop('contentMap')
         }
         break
       case 'OrderedCollection':
       case 'Collection':
         brief = {
           ...brief,
-          first: object.first
+          first: await toId(await this.prop('first'))
         }
     }
     return brief
@@ -1190,6 +1196,11 @@ class ActivityObject {
       if (prop in object) {
         if (Array.isArray(object[prop])) {
           object[prop] = await Promise.all(object[prop].map(toBrief))
+        } else if (prop === 'url' && typeof object[prop] === 'string') {
+          object[prop] = {
+            type: 'Link',
+            href: object[prop]
+          }
         } else if (prop === 'object' && (await this.needsExpandedObject())) {
           object[prop] =
             await new ActivityObject(object[prop]).expanded(subject)
@@ -1257,7 +1268,11 @@ class ActivityObject {
 
   async hasProp (prop) {
     const json = await this.json()
-    return prop in json
+    if (!json) {
+      return false
+    } else {
+      return prop in json
+    }
   }
 
   static isRemoteId (id) {
@@ -1710,6 +1725,7 @@ class Activity extends ActivityObject {
             en: `A deleted ${await object.type()} by ${await actorObj.name()}`
           }
         })
+        logger.debug(`deleted object summaryMap.en: ${(await object.prop('summaryMap')).en}`)
         return activity
       },
       Add: async () => {
@@ -4034,8 +4050,11 @@ app.post(
     data.id = await ActivityObject.makeId(data.type)
     data.actor = ownerId
     if (data.object) {
-      data.object.url = makeUrl(`/uploads/${uploaded.relative}`)
-      data.object.mediaType = uploaded.mediaType
+      data.object.url = {
+        href: makeUrl(`/uploads/${uploaded.relative}`),
+        type: 'Link',
+        mediaType: uploaded.mediaType
+      }
     }
 
     const activity = new Activity(data)
