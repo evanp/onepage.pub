@@ -523,7 +523,10 @@ class ActivityObject {
   #owner
   #addressees
   #complete = false
-  constructor (data) {
+  #subject
+  #cache
+  constructor (data, options = {}) {
+    const { subject, cache } = options
     if (!data) {
       throw new Error('No data provided')
     } else if (isString(data)) {
@@ -532,6 +535,8 @@ class ActivityObject {
       this.#json = data
       this.#id = this.#json.id || this.#json['@id'] || null
     }
+    this.#subject = subject
+    this.#cache = cache
   }
 
   static async makeId (type) {
