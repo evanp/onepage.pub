@@ -42,6 +42,7 @@ const ORIGIN =
 const NAME = process.env.OPP_NAME || new URL(ORIGIN).hostname
 const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
 const MAXIMUM_TIME_SKEW = 5 * 60 * 1000 // 5 minutes
+const MAINTENANCE_INTERVAL = 6 * 60 * 60 * 1000 // hourly maintenance
 
 // Ensure the Upload directory exists
 
@@ -235,6 +236,12 @@ class Database {
     await this.run(
       'CREATE TABLE IF NOT EXISTS server (origin VARCHAR(255) PRIMARY KEY, privateKey TEXT, publicKey TEXT)'
     )
+    await this.run(
+      'CREATE TABLE IF NOT EXISTS remotecache (id VARCHAR(255), subject VARCHAR(255), expires DATETIME, data TEXT, complete BOOLEAN, PRIMARY KEY (id, subject))'
+    )
+    await this.run(
+      'CREATE INDEX IF NOT EXISTS idx_remotecache_expires ON remotecache(expires)'
+    )
 
     // Create the public key for this server if it doesn't exist
 
@@ -389,13 +396,7 @@ class HTTPSignature {
     const fragment = url.hash ? url.hash.slice(1) : null
     url.hash = ''
 
-    const ao = (cache)
-      ? await ActivityObject.getKeyById(url.toString())
-      : await ActivityObject.getKeyFromRemote(url.toString())
-
-    if (!ao) {
-      return null
-    }
+    const ao = await ActivityObject.get(url.toString())
 
     let publicKey = null
 
@@ -438,8 +439,8 @@ class HTTPSignature {
     ) {
       const ownerId = await publicKey.prop('owner')
       const owner = await ActivityObject.get(ownerId)
-      await owner.cache(ownerId, [PUBLIC])
-      await publicKey.cache(ownerId, [PUBLIC])
+      await owner.cache()
+      await publicKey.cache()
       return owner
     } else {
       return null
@@ -484,6 +485,7 @@ class HTTPSignature {
       } catch (err) {
         logger.warn(`Error validating signature: ${err.message}`)
         logger.warn(`Signature: ${sigHeader}`)
+        logger.debug(err.stack)
         next(new createError.Unauthorized('Invalid HTTP signature'))
       }
     }
@@ -525,16 +527,34 @@ class ActivityObject {
   #complete = false
   #subject
   #cache
+  static #DEFAULT_EXPIRES = 24 * 60 * 60 * 1000 // one day
   constructor (data, options = {}) {
     const { subject, cache } = options
     if (!data) {
       throw new Error('No data provided')
     } else if (isString(data)) {
       this.#id = data
-    } else {
+    } else if (typeof data === 'object') {
+      if (data instanceof ActivityObject) {
+        throw new Error('ActivityObject constructor with ActivityObject argument')
+      }
+
+      if (Object.keys(data).length === 0) {
+        throw new Error('Empty object in ActivityObject constructor')
+      }
       this.#json = data
       this.#id = this.#json.id || this.#json['@id'] || null
+    } else {
+      throw new Error(`Unrecognized activity object: ${JSON.stringify(data)}`)
     }
+
+    if (subject &&
+        typeof subject === 'object' &&
+        !(subject instanceof ActivityObject) &&
+        Object.keys(subject).length === 0) {
+      throw new Error('Empty object as subject in ActivityObject constructor')
+    }
+
     this.#subject = subject
     this.#cache = cache
   }
@@ -548,98 +568,152 @@ class ActivityObject {
     }
   }
 
-  static async getJSON (id) {
-    if (isPublic(id)) {
-      return PUBLIC_OBJ
-    }
-    const row = await db.get('SELECT data FROM object WHERE id = ?', [id])
-    if (!row) {
-      return null
+  async prop (name) {
+    if (this.#json && name in this.#json) {
+      return this.#json[name]
+    } else if (this.#id && (!this.#json || !this.#complete)) {
+      await this.#getCompleteJSON()
+      return (this.#json) ? this.#json[name] : undefined
     } else {
-      return JSON.parse(row.data)
+      return undefined
     }
   }
 
-  static async get (ref, props = null, subject = null) {
-    if (props && !Array.isArray(props)) {
-      throw new Error(`Invalid props: ${JSON.stringify(props)}`)
+  async setProp (name, value) {
+    if (this.#json) {
+      this.#json[name] = value
+    } else {
+      this.#json = { [name]: value }
     }
-    if (typeof ref === 'string') {
-      return await ActivityObject.getById(ref, subject)
-    } else if (typeof ref === 'object') {
-      if (ref instanceof ActivityObject) {
-        return ref
-      } else if (
-        props &&
-        props.every((prop) =>
-          Array.isArray(prop) ? prop.some((p) => p in ref) : prop in ref
-        )
-      ) {
-        return new ActivityObject(ref)
-      } else if ('id' in ref) {
-        return await ActivityObject.getById(ref.id, subject)
+    if (name === 'id') {
+      this.#id = value
+    }
+  }
+
+  async id () {
+    if (!this.#id) {
+      this.#id = this.#json?.id
+    }
+    return this.#id
+  }
+
+  async type () {
+    return this.prop('type')
+  }
+
+  async name (lang = null) {
+    const [name, nameMap, summary, summaryMap] = await Promise.all([
+      this.prop('name'),
+      this.prop('nameMap'),
+      this.prop('summary'),
+      this.prop('summaryMap')
+    ])
+    if (nameMap && lang in nameMap) {
+      return nameMap[lang]
+    } else if (name) {
+      return name
+    } else if (summaryMap && lang in summaryMap) {
+      return summaryMap[lang]
+    } else if (summary) {
+      return summary
+    }
+  }
+
+  async ensureComplete () {
+    if (!this.#complete) {
+      await this.#getCompleteJSON()
+    }
+    return this.#json && this.#complete
+  }
+
+  async #getCompleteJSON () {
+    if (!this.#id) {
+      logger.debug(JSON.stringify(this.#json))
+      throw new Error("Can't get JSON without an ID")
+    }
+    if (this.#complete) {
+      return
+    }
+    if (isPublic(this.#id)) {
+      this.#json = PUBLIC_OBJ
+      this.#complete = true
+      return
+    }
+    if (ActivityObject.isRemoteId(this.#id)) {
+      await this.#getJSONFromRemoteCache()
+      if (!this.#complete) {
+        await this.#getJSONFromRemote()
+      }
+    } else {
+      await this.#getJSONFromDatabase()
+    }
+    return this.#json
+  }
+
+  async #getJSONFromRemoteCache () {
+    if (!this.#id) {
+      logger.debug(JSON.stringify(this.#json))
+      throw new Error("Can't get JSON without an ID")
+    }
+    if (!ActivityObject.isRemoteId(this.#id)) {
+      throw new Error(`Called remote cache for local object ${this.#id}`)
+    }
+    let [json, complete] = await ActivityObject.getJSONFromRemoteCacheForSubject(this.#id, PUBLIC)
+    if (json) {
+      this.#json = json
+      this.#complete = complete
+    } else if (this.#subject) {
+      [json, complete] = await ActivityObject.getJSONFromRemoteCacheForSubject(
+        this.#id,
+        await toId(this.#subject)
+      )
+      if (json) {
+        this.#json = json
+        this.#complete = complete
+      }
+    }
+  }
+
+  static async getJSONFromRemoteCacheForSubject (dataId, subjectId) {
+    let json
+    let complete = false
+    const row = await db.get(
+      'SELECT data, expires, complete FROM remotecache WHERE id = ? and subject = ?',
+      [dataId, subjectId]
+    )
+    if (row) {
+      if (row.expires > Date.now()) {
+        json = JSON.parse(row.data)
+        complete = row.complete
       } else {
-        throw new Error(`Can't get object from ${JSON.stringify(ref)}`)
+        // Clean up expired cache object when seen
+        await db.run(
+          'DELETE FROM remotecache WHERE id = ? and subject = ?',
+          [dataId, subjectId]
+        )
       }
     }
+    return [json, complete]
   }
 
-  static async getById (id, subject = null) {
-    if (isPublic(id)) {
-      return new ActivityObject(PUBLIC_OBJ)
+  async #getJSONFromDatabase () {
+    if (ActivityObject.isRemoteId(this.#id)) {
+      throw new Error(`Cannot get remote object for ${this.#id}`)
     }
-    const obj = await ActivityObject.getFromDatabase(id, subject)
-    if (obj) {
-      return obj
-    } else if (ActivityObject.isRemoteId(id)) {
-      return await ActivityObject.getFromRemote(id, subject)
-    } else {
-      return null
-    }
-  }
-
-  static async getFromDatabase (id, subject = null) {
-    const row = await db.get('SELECT data FROM object WHERE id = ?', [id])
+    const row = await db.get(
+      'SELECT data FROM object WHERE id = ?',
+      [this.#id]
+    )
     if (!row) {
-      return null
+      this.#json = undefined
     } else {
-      const obj = new ActivityObject(JSON.parse(row.data))
-      obj.#complete = true
-      return obj
+      this.#json = JSON.parse(row.data)
+      this.#complete = true
     }
+    return this.#json
   }
 
-  static async getKeyById (id, subject = null) {
-    if (isPublic(id)) {
-      return new ActivityObject(PUBLIC_OBJ)
-    }
-    const obj = await ActivityObject.getFromDatabase(id, subject)
-    if (obj) {
-      return obj
-    } else if (ActivityObject.isRemoteId(id)) {
-      return await ActivityObject.getKeyFromRemote(id, subject)
-    } else {
-      return null
-    }
-  }
-
-  static async getKeyFromRemote (id, subject = null) {
-    let res = await ActivityObject.#getInternal(id, null, false)
-    if ([401, 403, 404].includes(res.status)) {
-      res = await ActivityObject.#getInternal(id, null, true)
-      if ([403, 404].includes(res.status) && subject) {
-        res = await ActivityObject.#getInternal(id, subject, true)
-      }
-    }
-    return await ActivityObject.#handleResponse(res, id)
-  }
-
-  static async getFromRemote (id, subject = null) {
-    const res = await ActivityObject.#getInternal(id, subject, true)
-    return await ActivityObject.#handleResponse(res, id)
-  }
-
-  static async #getInternal (id, subject, sign) {
+  async #getJSONFromRemote (sign = true) {
     const date = new Date().toUTCString()
     const headers = {
       Date: date,
@@ -647,13 +721,11 @@ class ActivityObject {
     }
     let keyId = null
     let privKey = null
-    if (subject && (await User.isUser(subject))) {
-      const user = await User.fromActorId(await toId(subject))
-      const subjectObj = await ActivityObject.get(
-        subject,
-        ['publicKey'],
-        subject
-      )
+    if (this.#subject && (await User.isUser(this.#subject))) {
+      const user = await User.fromActorId(await toId(this.#subject))
+      const subjectObj = (this.#subject instanceof ActivityObject)
+        ? this.#subject
+        : new ActivityObject(this.#subject)
       keyId = await toId(await subjectObj.prop('publicKey'))
       privKey = user.privateKey
     } else {
@@ -661,28 +733,31 @@ class ActivityObject {
       keyId = server.keyId()
       privKey = server.privateKey()
     }
-    const signature = new HTTPSignature(keyId, privKey, 'GET', id, date)
+    const signature = new HTTPSignature(keyId, privKey, 'GET', this.#id, date)
     headers.Signature = signature.header
-    return await fetch(id, { headers })
-  }
-
-  static async #handleResponse (res, id) {
+    logger.debug(`fetching ${this.#id} with key ID ${keyId}`)
+    const res = await fetch(this.#id, { headers })
     if (![200, 410].includes(res.status)) {
       const message = await res.text()
-      logger.warn(`Error fetching ${id}: ${res.status} ${res.statusText} (${message})`)
-      return null
+      logger.warn(`Error fetching ${this.#id}: ${res.status} ${res.statusText} (${message})`)
+      this.#complete = false
     } else {
-      const json = await res.json()
-      const obj = new ActivityObject(json)
-      if (res.status === 410 && await obj.type() !== 'Tombstone') {
-        logger.warn(`Object ${id} returned 410 but is not a Tombstone`)
+      this.#json = await res.json()
+      this.#complete = true
+      if (res.status === 410 && await this.type() !== 'Tombstone') {
+        logger.warn(`Object ${this.#id} returned 410 but is not a Tombstone`)
         return null
       }
-      const owner = ActivityObject.guessOwner(json)
-      const addressees = ActivityObject.guessAddressees(json)
-      obj.#complete = true
-      await obj.cache(owner, addressees)
+      await this.cache()
+    }
+  }
+
+  static async get (ref, props = null, subject = null) {
+    const obj = new ActivityObject(ref, { subject })
+    if (await obj.ensureComplete()) {
       return obj
+    } else {
+      return null
     }
   }
 
@@ -712,7 +787,7 @@ class ActivityObject {
 
   async json () {
     if (!this.#json) {
-      this.#json = await ActivityObject.getJSON(this.#id)
+      await this.#getCompleteJSON()
     }
     return this.#json
   }
@@ -723,54 +798,6 @@ class ActivityObject {
 
   async _hasJson () {
     return !!this.#json
-  }
-
-  async id () {
-    if (!this.#id) {
-      this.#id = await this.prop('id')
-    }
-    return this.#id
-  }
-
-  async type () {
-    return this.prop('type')
-  }
-
-  async name (lang = null) {
-    const [name, nameMap, summary, summaryMap] = await Promise.all([
-      this.prop('name'),
-      this.prop('nameMap'),
-      this.prop('summary'),
-      this.prop('summaryMap')
-    ])
-    if (nameMap && lang in nameMap) {
-      return nameMap[lang]
-    } else if (name) {
-      return name
-    } else if (summaryMap && lang in summaryMap) {
-      return summaryMap[lang]
-    } else if (summary) {
-      return summary
-    }
-  }
-
-  async prop (name) {
-    const json = await this.json()
-    if (json) {
-      return json[name]
-    } else {
-      return null
-    }
-  }
-
-  async setProp (name, value) {
-    const json = await this.json()
-    if (json) {
-      json[name] = value
-      this.#json = json
-    } else {
-      this.#json = { [name]: value }
-    }
   }
 
   async expand (subject = null) {
@@ -935,31 +962,20 @@ class ActivityObject {
     })
   }
 
-  async cache (owner = null, addressees = null) {
+  async cache (options = {}) {
+    let { expires } = options
+    if (!expires) {
+      expires = Date.now() + ActivityObject.#DEFAULT_EXPIRES
+    }
     const dataId = await this.id()
     const data = await this.json()
-    if (!owner) {
-      owner = ActivityObject.guessOwner(data)
-    }
-    if (!addressees) {
-      addressees = ActivityObject.guessAddressees(data)
-    }
-    const ownerId = (await toId(owner)) || data.id
-    const addresseeIds = await Promise.all(
-      addressees.map((addressee) => toId(addressee))
-    )
+    const subjectId = (this.#subject)
+      ? await toId(this.#subject)
+      : PUBLIC
+
     const qry =
-      'INSERT OR REPLACE INTO object (id, owner, data) VALUES (?, ?, ?)'
-    await db.run(qry, [dataId, ownerId, JSON.stringify(data)])
-    await Promise.all(
-      addresseeIds.map(
-        async (addresseeId) =>
-          await db.run(
-            'INSERT OR IGNORE INTO addressee (objectId, addresseeId) VALUES (?, ?)',
-            [dataId, await toId(addresseeId)]
-          )
-      )
-    )
+      'INSERT OR REPLACE INTO remotecache (id, subject, expires, data, complete) VALUES (?, ?, ?, ?, ?)'
+    await db.run(qry, [dataId, subjectId, expires, JSON.stringify(data), this.#complete])
   }
 
   async patch (patch) {
@@ -1055,9 +1071,9 @@ class ActivityObject {
     }
     // if they're a member of any addressed collection
     for (const addresseeId of addresseeIds) {
-      const obj = await ActivityObject.get(addresseeId)
+      const obj = new ActivityObject(addresseeId)
       if (await obj.isCollection()) {
-        const coll = new Collection(obj.json())
+        const coll = new Collection(await obj.json())
         if (await coll.hasMember(subject)) {
           return true
         }
@@ -1119,10 +1135,13 @@ class ActivityObject {
         break
       case 'OrderedCollection':
       case 'Collection':
-        brief = {
-          ...brief,
-          first: await toId(await this.prop('first'))
+        if (!isPublic(this.#id)) {
+          brief = {
+            ...brief,
+            first: await toId(await this.prop('first'))
+          }
         }
+        break
     }
     return brief
   }
@@ -1177,20 +1196,12 @@ class ActivityObject {
 
   static #arrayProps = ['items', 'orderedItems']
 
-  async expanded (subject = null) {
-    // force a full read
-    const id = await this.id()
-    if (!id) {
-      throw new Error('No id for object being expanded')
-    }
-    const ao = await ActivityObject.getById(id, subject)
-    if (!ao) {
-      throw new Error(`No such object: ${id}`)
-    }
-    const object = await ao.json()
+  async expanded () {
+    await this.ensureComplete()
+    const object = this.#json
     const toBrief = async (value) => {
       if (value) {
-        const obj = new ActivityObject(value)
+        const obj = new ActivityObject(value, { subject: this.#subject })
         return await obj.brief()
       } else {
         return value
@@ -1208,7 +1219,7 @@ class ActivityObject {
           }
         } else if (prop === 'object' && (await this.needsExpandedObject())) {
           object[prop] =
-            await new ActivityObject(object[prop]).expanded(subject)
+            await new ActivityObject(object[prop], { subject: this.#subject }).expanded()
         } else {
           object[prop] = await toBrief(object[prop])
         }
@@ -1281,7 +1292,7 @@ class ActivityObject {
   }
 
   static isRemoteId (id) {
-    return !id.startsWith(ORIGIN)
+    return id && !id.startsWith(ORIGIN)
   }
 
   static async copyAddresseeProps (to, from) {
@@ -1336,13 +1347,13 @@ class Activity extends ActivityObject {
         if (!objectProp) {
           throw new createError.BadRequest('No object followed')
         }
-        const other = await ActivityObject.get(objectProp, null, actorObj)
+        const other = new ActivityObject(objectProp, { subject: actor })
         if (!other) {
           throw new createError.BadRequest(
             `No such object to follow: ${JSON.stringify(objectProp)}`
           )
         }
-        await other.expand(actorObj)
+        await other.ensureComplete()
         const otherId = await other.id()
         const following = new Collection(await actorObj.prop('following'))
         if (await following.hasMember(otherId)) {
@@ -1550,7 +1561,7 @@ class Activity extends ActivityObject {
         if (!activity?.object?.id) {
           throw new createError.BadRequest('No id for object to update')
         }
-        const object = await ActivityObject.getById(
+        const object = await ActivityObject.get(
           activity.object.id,
           actorObj
         )
@@ -2161,7 +2172,7 @@ class Collection extends ActivityObject {
   }
 
   async hasMember (object, subject = null) {
-    await this.expand(subject)
+    await this.ensureComplete()
     const objectId = await toId(object)
     const match = (item) =>
       (isString(item) && item === objectId) ||
@@ -2198,6 +2209,13 @@ class Collection extends ActivityObject {
   }
 
   async prependData (data) {
+    if (!data) {
+      throw new Error('No data to prepend')
+    } else if (Array.isArray(data)) {
+      throw new Error('Cannot prepend an array')
+    } else if (typeof data === 'object' && !data.id) {
+      throw new Error('Cannot prepend data without an id')
+    }
     return await this.prepend(new ActivityObject(data))
   }
 
@@ -2347,7 +2365,7 @@ class Collection extends ActivityObject {
   }
 
   async find (test) {
-    let ref = this.prop('first')
+    let ref = await this.prop('first')
     while (ref) {
       const page = new ActivityObject(ref)
       if (!(await page.isCollectionPage())) {
@@ -2422,7 +2440,7 @@ class RemoteActivity extends Activity {
       addressees = ActivityObject.guessAddressees(await this.json())
     }
 
-    const remoteObj = await ActivityObject.get(remote, ['id'], ownerObj)
+    const remoteObj = remote
     const remoteAppliers = {
       Follow: async () => {
         const object = await ActivityObject.get(
@@ -2461,7 +2479,7 @@ class RemoteActivity extends Activity {
           if (owner && (await owner.id()) !== (await remoteObj.id())) {
             throw new Error('Cannot create something you do not own!')
           }
-          await ao.cache(await remoteObj.id(), addressees)
+          await ao.cache()
           if (await ao.prop('inReplyTo')) {
             const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
             await inReplyTo.expand(ownerObj)
@@ -2488,7 +2506,7 @@ class RemoteActivity extends Activity {
           if (aoOwner && (await aoOwner.id()) !== (await remoteObj.id())) {
             throw new Error('Cannot update something you do not own!')
           }
-          await ao.cache(remote, addressees)
+          await ao.cache()
           if (await ao.prop('inReplyTo')) {
             const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
             await inReplyTo.expand(ownerObj)
@@ -2515,7 +2533,7 @@ class RemoteActivity extends Activity {
           if (aoOwner && (await aoOwner.id()) !== (await remoteObj.id())) {
             throw new Error('Cannot delete something you do not own!')
           }
-          await ao.cache(remote, addressees)
+          await ao.cache()
         }
       },
       Like: async () => {
@@ -3683,7 +3701,7 @@ app.post(
       throw new createError.Unauthorized('Missing read scope')
     }
     const actor = await user.getActor()
-    const obj = await ActivityObject.getFromRemote(id, await actor.id())
+    const obj = await ActivityObject.get(id, { subject: actor })
 
     if (!obj) {
       throw new createError.NotFound('Object not found')
@@ -3718,7 +3736,7 @@ app.get(
         throw new createError.BadRequest('Invalid client_id')
       }
       try {
-        client = await ActivityObject.getFromRemote(req.query.client_id)
+        client = await ActivityObject.get(req.query.client_id)
       } catch (err) {
         throw new createError.BadRequest('Invalid client_id')
       }
@@ -4135,7 +4153,8 @@ app.get(
     ) {
       throw new createError.Forbidden('Missing read scope')
     }
-    const obj = await ActivityObject.getById(full)
+    const subject = req.auth?.subject
+    const obj = await ActivityObject.get(full, null, subject)
     if (!obj) {
       throw new createError.NotFound('Object not found')
     }
@@ -4153,8 +4172,9 @@ app.get(
       if (name in output && Array.isArray(output[name])) {
         const len = output[name].length
         for (let i = len - 1; i >= 0; i--) {
-          const item = new ActivityObject(output[name][i])
+          const item = new ActivityObject(output[name][i], { subject })
           if (!(await item.canRead(req.auth?.subject))) {
+            logger.debug(`Splicing array at ${i}`)
             output[name].splice(i, 1)
           } else {
             output[name][i] = await item.expanded()
@@ -4256,7 +4276,7 @@ app.post(
       if (!req.auth?.subject) {
         throw new createError.Unauthorized('Invalid HTTP signature')
       }
-      const remote = await ActivityObject.getById(req.auth.subject, owner)
+      const remote = await ActivityObject.get(req.auth.subject, owner)
       const remoteId = await remote.id()
       if (!(typeof remoteId === 'string')) {
         throw new createError.InternalServerError(
@@ -4274,7 +4294,7 @@ app.post(
         (await activity.prop('actor')) || (await activity.prop('attributedTo'))
       if (actor) {
         const actorId = await toId(actor)
-        logger.debug(`New remote activity from ${actor}`)
+        logger.debug(`New remote activity from ${actorId}`)
         if (actorId !== remoteId) {
           logger.debug(`Actor ${actorId} does not match remote ${remoteId}`)
           throw new createError.Forbidden(
@@ -4375,6 +4395,32 @@ const fixups = [
   User.updateAllKeys
 ]
 
+const maintenance = [
+  async () => {
+    const ts = Date.now()
+    const { beforeCount } = await db.get(
+      'SELECT count(*) AS beforeCount FROM remotecache WHERE expires < ?',
+      [ts])
+    if (beforeCount === 0) {
+      return 'No stale remote cache objects'
+    } else {
+      await db.run('DELETE FROM remotecache WHERE expires < ?', [Date.now()])
+      const { afterCount } = await db.get(
+        'SELECT count(*) AS afterCount FROM remotecache WHERE expires < ?',
+        [ts])
+      return `Deleted ${beforeCount - afterCount} stale rows from remote cache`
+    }
+  }
+]
+
+function runAllMaintenance () {
+  for (const maint of maintenance) {
+    maint()
+      .then((msg) => logger.info(msg))
+      .catch((err) => logger.error(err))
+  }
+}
+
 // If we're public, run with ORIGIN. Otherwise,
 // run with HTTPS
 
@@ -4393,9 +4439,15 @@ db.init().then(() => {
   server.listen(PORT, () => {
     console.log(`Listening on ${PORT}`)
     for (const fixup of fixups) {
-      fixup().then((result) => {
-        logger.info(result)
-      })
+      fixup()
+        .then((result) => {
+          logger.info(result)
+        })
+        .catch((error) => {
+          logger.error(error)
+        })
     }
+    runAllMaintenance()
+    setInterval(runAllMaintenance, MAINTENANCE_INTERVAL)
   })
 })

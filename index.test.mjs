@@ -362,7 +362,7 @@ async function signRequest (keyId, privateKey, method, url, date, digest = null)
   return header
 }
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
   let client = null
@@ -1015,7 +1015,7 @@ describe('onepage.pub', () => {
     })
   })
 
-  describe('Remote delivery', () => {
+  describe('Remote delivery', { only: true }, () => {
     let actor1 = null
     let token1 = null
     let actor2 = null
@@ -1044,16 +1044,18 @@ describe('onepage.pub', () => {
       const body = await res.text()
       const obj = JSON.parse(body)
       await settle(MAIN_PORT)
-      const inbox = await (
-        await fetch(actor2.inbox, {
-          headers: { Authorization: `Bearer ${token2}` }
-        })
-      ).json()
-      const inboxPage = await (
-        await fetch(inbox.first.id, {
-          headers: { Authorization: `Bearer ${token2}` }
-        })
-      ).json()
+      const inboxRes = await fetch(actor2.inbox, {
+        headers: { Authorization: `Bearer ${token2}` }
+      })
+      assert(inboxRes.ok)
+      const inbox = await inboxRes.json()
+      const inboxPageRes = await fetch(inbox.first.id, {
+        headers: { Authorization: `Bearer ${token2}` }
+      })
+      assert(inboxPageRes.ok)
+      const inboxPage = await inboxPageRes.json()
+      assert(inboxPage)
+      assert(Array.isArray(inboxPage.orderedItems))
       assert(inboxPage.orderedItems.some((act) => act.id === obj.id))
     })
 
