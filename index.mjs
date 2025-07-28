@@ -3714,7 +3714,7 @@ app.post(
       throw new createError.Unauthorized('Missing read scope')
     }
     const actor = await user.getActor()
-    const obj = await ActivityObject.get(id, { subject: actor })
+    const obj = await ActivityObject.get(id, null, actor)
 
     if (!obj) {
       throw new createError.NotFound('Object not found')
