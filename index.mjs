@@ -1105,13 +1105,6 @@ class ActivityObject {
   }
 
   async brief () {
-    if (!this.#json) {
-      if (this.#id) {
-        return { id: this.#id }
-      } else {
-        return undefined
-      }
-    }
     let brief = (await this.isLinkType())
       ? {
           href: await this.prop('href'),
@@ -1213,7 +1206,7 @@ class ActivityObject {
     await this.ensureComplete()
     if (!this.#json) {
       if (this.#id) {
-        return { id: this.#id }
+        return this.#id
       } else {
         return undefined
       }
