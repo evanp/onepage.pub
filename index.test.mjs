@@ -362,7 +362,7 @@ async function signRequest (keyId, privateKey, method, url, date, digest = null)
   return header
 }
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -1015,7 +1015,7 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('Remote delivery', { only: true }, () => {
+  describe('Remote delivery', () => {
     let actor1 = null
     let token1 = null
     let actor2 = null

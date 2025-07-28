@@ -1010,10 +1010,11 @@ class ActivityObject {
       const row = await db.get('SELECT owner FROM object WHERE id = ?', [
         await this.id()
       ])
-      if (!row) {
-        this.#owner = null
+      if (row) {
+        this.#owner = await ActivityObject.get(row.owner, null, this.#subject)
       } else {
-        this.#owner = await ActivityObject.get(row.owner)
+        const ownerId = await ActivityObject.guessOwner(await this.json())
+        this.#owner = new ActivityObject(ownerId, { subject: this.#subject })
       }
     }
     return this.#owner
@@ -1026,9 +1027,14 @@ class ActivityObject {
         'SELECT addresseeId FROM addressee WHERE objectId = ?',
         [id]
       )
-      this.#addressees = await Promise.all(
-        rows.map((row) => ActivityObject.get(row.addresseeId))
-      )
+      if (rows.length > 0) {
+        this.#addressees = await Promise.all(
+          rows.map((row) => ActivityObject.get(row.addresseeId, null, this.#subject))
+        )
+      } else {
+        const addresseeIds = ActivityObject.guessAddressees(await this.json())
+        this.#addressees = addresseeIds.map(id => new ActivityObject(id, { subject: this.#subject }))
+      }
     }
     return this.#addressees
   }
@@ -1099,6 +1105,13 @@ class ActivityObject {
   }
 
   async brief () {
+    if (!this.#json) {
+      if (this.#id) {
+        return { id: this.#id }
+      } else {
+        return undefined
+      }
+    }
     let brief = (await this.isLinkType())
       ? {
           href: await this.prop('href'),
@@ -1198,6 +1211,13 @@ class ActivityObject {
 
   async expanded () {
     await this.ensureComplete()
+    if (!this.#json) {
+      if (this.#id) {
+        return { id: this.#id }
+      } else {
+        return undefined
+      }
+    }
     const object = this.#json
     const toBrief = async (value) => {
       if (value) {
@@ -2058,9 +2078,9 @@ class Activity extends ActivityObject {
             const followers = new Collection(await owner.prop('followers'))
             return await followers.members()
           } else {
-            const obj = new ActivityObject(addressee)
+            const obj = new ActivityObject(addressee, { subject: owner })
             if (await obj.isCollection()) {
-              const coll = new Collection(addressee)
+              const coll = new Collection(addressee, { subject: owner })
               const objOwner = await obj.owner()
               if (coll && (await objOwner.id()) === (await owner.id())) {
                 return await coll.members()
@@ -2093,7 +2113,7 @@ class Activity extends ActivityObject {
         await inbox.prependData(activity)
       } else {
         logger.debug(`Remote delivery for ${activity.id} to ${addressee}`)
-        other = await ActivityObject.get(addressee)
+        other = await ActivityObject.get(addressee, null, owner)
         const inboxProp = await other.prop('inbox')
         if (!inboxProp) {
           logger.warn(`Cannot deliver to ${addressee}: no 'inbox' property`)
@@ -2913,7 +2933,7 @@ class User {
     const outbox = new Collection(await actor.prop('outbox'))
     data.id = await ActivityObject.makeId(data.type)
     data.actor = ownerId
-    const activity = new Activity(data, ownerId)
+    const activity = new Activity(data, { subject: ownerId })
     await activity.apply()
     await activity.save()
     await outbox.prepend(activity)
