@@ -628,7 +628,6 @@ class ActivityObject {
 
   async #getCompleteJSON () {
     if (!this.#id) {
-      logger.debug(JSON.stringify(this.#json))
       throw new Error("Can't get JSON without an ID")
     }
     if (this.#complete) {
@@ -652,7 +651,6 @@ class ActivityObject {
 
   async #getJSONFromRemoteCache () {
     if (!this.#id) {
-      logger.debug(JSON.stringify(this.#json))
       throw new Error("Can't get JSON without an ID")
     }
     if (!ActivityObject.isRemoteId(this.#id)) {
@@ -978,6 +976,13 @@ class ActivityObject {
     await db.run(qry, [dataId, subjectId, expires, JSON.stringify(data), this.#complete])
   }
 
+  async clearCache () {
+    if (!ActivityObject.isRemoteId(this.#id)) {
+      return
+    }
+    await db.run('DELETE FROM remotecache WHERE id = ?', [this.#id])
+  }
+
   async patch (patch) {
     const merged = {
       ...(await this.json()),
@@ -1013,8 +1018,16 @@ class ActivityObject {
       if (row) {
         this.#owner = await ActivityObject.get(row.owner, null, this.#subject)
       } else {
-        const ownerId = await ActivityObject.guessOwner(await this.json())
-        this.#owner = new ActivityObject(ownerId, { subject: this.#subject })
+        let ownerRef
+        for (const prop of ['attributedTo', 'actor', 'owner']) {
+          ownerRef = await this.prop(prop)
+          if (ownerRef) {
+            break
+          }
+        }
+        if (ownerRef) {
+          this.#owner = new ActivityObject(ownerRef, { subject: this.#subject })
+        }
       }
     }
     return this.#owner
@@ -2487,7 +2500,7 @@ class RemoteActivity extends Activity {
       },
       Create: async () => {
         if (await this.prop('object')) {
-          const ao = new ActivityObject(await this.prop('object'))
+          const ao = new ActivityObject(await this.prop('object'), { subject: ownerObj })
           const owner = await ao.owner()
           if (owner && (await owner.id()) !== (await remoteObj.id())) {
             throw new Error('Cannot create something you do not own!')
@@ -2514,12 +2527,13 @@ class RemoteActivity extends Activity {
       },
       Update: async () => {
         if (await this.prop('object')) {
-          const ao = new ActivityObject(await this.prop('object'))
+          const ao = new ActivityObject(await this.prop('object'), { subject: ownerObj })
           const aoOwner = await ao.owner()
           if (aoOwner && (await aoOwner.id()) !== (await remoteObj.id())) {
             throw new Error('Cannot update something you do not own!')
           }
-          await ao.cache()
+          logger.debug(`Clearing cache on update for ${await ao.id()}`)
+          await ao.clearCache()
           if (await ao.prop('inReplyTo')) {
             const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
             await inReplyTo.expand(ownerObj)
@@ -2541,12 +2555,13 @@ class RemoteActivity extends Activity {
       },
       Delete: async () => {
         if (await this.prop('object')) {
-          const ao = new ActivityObject(await this.prop('object'))
+          const ao = new ActivityObject(await this.prop('object'), { subject: ownerObj })
           const aoOwner = await ao.owner()
           if (aoOwner && (await aoOwner.id()) !== (await remoteObj.id())) {
             throw new Error('Cannot delete something you do not own!')
           }
-          await ao.cache()
+          logger.debug(`Clearing cache on delete for ${await ao.id()}`)
+          await ao.clearCache()
         }
       },
       Like: async () => {
@@ -3706,6 +3721,7 @@ app.post(
     if (!id) {
       throw new createError.BadRequest('Missing id')
     }
+    logger.debug(`Getting ${id} in proxyUrl`)
     const user = await User.fromActorId(req.auth?.subject)
     if (!user) {
       throw new createError.InternalServerError('Invalid user')
