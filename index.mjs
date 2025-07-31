@@ -2615,6 +2615,9 @@ class RemoteActivity extends Activity {
               if (!(await target.canWrite(await remoteObj.id()))) {
                 throw new Error('Cannot add to something you do not own!')
               }
+            } else {
+              logger.debug(`Clearing cache on add for ${await target.id()}`)
+              await target.clearCache()
             }
           }
         }
@@ -2640,6 +2643,9 @@ class RemoteActivity extends Activity {
               if (!(await target.canWrite(await remoteObj.id()))) {
                 throw new Error('Cannot remove from something you do not own!')
               }
+            } else {
+              logger.debug(`Clearing cache on remove for ${await target.id()}`)
+              await target.clearCache()
             }
           }
         }
