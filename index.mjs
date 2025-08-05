@@ -2736,21 +2736,19 @@ class RemoteActivity extends Activity {
         if (!objectProp) {
           throw new Error('Nothing undone!')
         }
-        const undone = new ActivityObject(objectProp)
-        // Make sure it's expanded
-        await undone.expand(ownerObj)
+        const undone = new ActivityObject(objectProp, { subject: ownerObj })
         const actorProp = await undone.prop('actor')
         if (!actorProp) {
           throw new Error('No actor!')
         }
-        const undoneActor = new ActivityObject(actorProp)
+        const undoneActor = new ActivityObject(actorProp, { subject: ownerObj })
         if ((await remoteObj.id()) !== (await undoneActor.id())) {
           throw new Error('Not your activity to undo!')
         }
         switch (await undone.type()) {
           case 'Like': {
             const objectProp = await undone.prop('object')
-            const object = new ActivityObject(objectProp)
+            const object = new ActivityObject(objectProp, { subject: ownerObj })
             if (!(await object.canRead(await remoteObj.id()))) {
               throw new Error('Cannot unlike something you cannot read!')
             }
@@ -2778,14 +2776,16 @@ class RemoteActivity extends Activity {
           }
           case 'Follow': {
             const objectProp = await undone.prop('object')
-            const object = new ActivityObject(objectProp)
+            const object = new ActivityObject(objectProp, { subject: ownerObj })
             if (!(await object.canRead(await remoteObj.id()))) {
-              throw new Error('Cannot unshare something you cannot read!')
+              throw new Error('Cannot unfollow something you cannot read!')
             }
             const objectOwner = await object.owner()
             if (await User.isUser(objectOwner)) {
-              await object.expand(ownerObj)
-              const followers = new Collection(await object.prop('followers'))
+              const followers = new Collection(
+                await object.prop('followers'),
+                { subject: ownerObj }
+              )
               await followers.remove(undoneActor)
               const pendingFollowers = new Collection(
                 await object.prop('pendingFollowers')
