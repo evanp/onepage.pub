@@ -734,13 +734,26 @@ class ActivityObject {
     const signature = new HTTPSignature(keyId, privKey, 'GET', this.#id, date)
     headers.Signature = signature.header
     logger.debug(`fetching ${this.#id} with key ID ${keyId}`)
-    const res = await fetch(this.#id, { headers })
+    const u = new URL(this.#id)
+    const base = u.origin + u.pathname + u.search
+    const res = await fetch(base, { headers })
     if (![200, 410].includes(res.status)) {
       const message = await res.text()
       logger.warn(`Error fetching ${this.#id}: ${res.status} ${res.statusText} (${message})`)
       this.#complete = false
     } else {
-      this.#json = await res.json()
+      const json = await res.json()
+      const hash = (u.hash) ? u.hash.slice(1) : null
+      if (!hash || hash.length === 0) {
+        this.#json = json
+      } else if (hash in json) {
+        this.#json = json[hash]
+      } else if (hash === 'main-key') { // Mastodon style
+        this.#json = json.publicKey
+      } else {
+        logger.warn(`Can't resolve fragment ${hash} in ${this.#id}`)
+        return null
+      }
       this.#complete = true
       if (res.status === 410 && await this.type() !== 'Tombstone') {
         logger.warn(`Object ${this.#id} returned 410 but is not a Tombstone`)
