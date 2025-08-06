@@ -4299,7 +4299,7 @@ describe('onepage.pub', () => {
       assert.ok(activity.type.includes('Activity'))
     })
 
-    it('extension type without ducktype properties is not wrapped', async () => {
+    it('extension type without ducktype properties is wrapped', async () => {
       const activity = await doActivity(actor, token, {
         '@context': [
           AS2_CONTEXT,
@@ -4322,7 +4322,7 @@ describe('onepage.pub', () => {
       assert.ok(activity.object.type.includes('Object'))
     })
 
-    it('absent type without ducktype properties is not wrapped', async () => {
+    it('absent type without ducktype properties is wrapped', async () => {
       const activity = await doActivity(actor, token, {
         nameMap: {
           en: 'A chocolate cake'
@@ -4331,17 +4331,20 @@ describe('onepage.pub', () => {
       assert.ok(activity.id)
       assert.strictEqual(activity.type, 'Create')
       assert.strictEqual(activity.object.type, 'Object')
+      assert.strictEqual(activity.object.nameMap.en, 'A chocolate cake')
     })
 
     it('absent type with ducktype properties is not wrapped', async () => {
-      const activity = await doActivity(actor, token, {
-        instrument: {
-          id: 'http://foo.example/object/app',
-          type: 'Application',
-          nameMap: {
-            en: 'MyCoolApp'
-          }
+      const createCollection = await doActivity(actor, token, {
+        type: 'Create',
+        object: {
+          type: 'Collection',
+          name: 'My Stuff'
         }
+      })
+      const collectionId = createCollection.object.id
+      const activity = await doActivity(actor, token, {
+        target: collectionId
       })
       assert.ok(activity.id)
       assert.strictEqual(activity.type, 'Activity')
