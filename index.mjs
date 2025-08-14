@@ -1242,7 +1242,7 @@ class ActivityObject {
     const object = this.#json
     const toBrief = async (value) => {
       if (value) {
-        const obj = await ActivityObject.get(value, null, { subject: this.#subject })
+        const obj = await ActivityObject.get(value, null, this.#subject)
         return await obj.brief()
       } else {
         return value
@@ -2305,7 +2305,7 @@ class Collection extends ActivityObject {
           type: firstJson.type,
           partOf: collection.id,
           next: firstJson.id,
-          attributedTo
+          attributedTo: await toId(attributedTo)
         }
         await ActivityObject.copyAddresseeProps(props, await this.json())
         props[ip] = [objectId]
