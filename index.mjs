@@ -405,15 +405,9 @@ class HTTPSignature {
     if (!fragment) {
       publicKey = ao
     } else if (fragment in (await ao.json())) {
-      publicKey = await ActivityObject.get(await ao.prop(fragment), [
-        'publicKeyPem',
-        'owner'
-      ])
+      publicKey = await ActivityObject.get(await ao.prop(fragment))
     } else if (fragment === 'main-key' && 'publicKey' in (await ao.json())) {
-      publicKey = await ActivityObject.get(await ao.prop('publicKey'), [
-        'publicKeyPem',
-        'owner'
-      ])
+      publicKey = await ActivityObject.get(await ao.prop('publicKey'))
     } else {
       return null
     }
@@ -765,7 +759,7 @@ class ActivityObject {
     }
   }
 
-  static async get (ref, props = null, subject = null) {
+  static async get (ref, subject = null) {
     const obj = new ActivityObject(ref, { subject })
     if (await obj.ensureComplete()) {
       return obj
@@ -1031,7 +1025,7 @@ class ActivityObject {
         await this.id()
       ])
       if (row) {
-        this.#owner = await ActivityObject.get(row.owner, null, this.#subject)
+        this.#owner = await ActivityObject.get(row.owner, this.#subject)
       } else {
         let ownerRef
         for (const prop of ['attributedTo', 'actor', 'owner']) {
@@ -1057,7 +1051,7 @@ class ActivityObject {
       )
       if (rows.length > 0) {
         this.#addressees = await Promise.all(
-          rows.map((row) => ActivityObject.get(row.addresseeId, null, this.#subject))
+          rows.map((row) => ActivityObject.get(row.addresseeId, this.#subject))
         )
       } else {
         const addresseeIds = ActivityObject.guessAddressees(await this.json())
@@ -1242,7 +1236,7 @@ class ActivityObject {
     const object = this.#json
     const toBrief = async (value) => {
       if (value) {
-        const obj = await ActivityObject.get(value, null, this.#subject)
+        const obj = await ActivityObject.get(value, this.#subject)
         return await obj.brief()
       } else {
         return value
@@ -1384,7 +1378,6 @@ class Activity extends ActivityObject {
     const addressees = ActivityObject.guessAddressees(activity)
     const actorObj = await ActivityObject.get(
       actor,
-      ['followers', 'following', 'pendingFollowers', 'pendingFollowing'],
       actor
     )
     const appliers = {
@@ -1447,7 +1440,6 @@ class Activity extends ActivityObject {
         }
         const accepted = await ActivityObject.get(
           objectProp,
-          [['id', '@id'], 'actor', 'type'],
           actorObj
         )
         switch (await accepted.type()) {
@@ -1463,7 +1455,6 @@ class Activity extends ActivityObject {
             }
             const other = await ActivityObject.get(
               await accepted.prop('actor'),
-              [['id', '@id'], 'type', 'pendingFollowing', 'following'],
               actorObj
             )
             const isUser = await User.isUser(other)
@@ -1498,7 +1489,6 @@ class Activity extends ActivityObject {
         }
         const rejected = await ActivityObject.get(
           objectProp,
-          ['id', 'type', 'actor'],
           actorObj
         )
         switch (await rejected.type()) {
@@ -1513,7 +1503,6 @@ class Activity extends ActivityObject {
             }
             const other = await ActivityObject.get(
               await rejected.prop('actor'),
-              ['pendingFollowing'],
               actorObj
             )
             const isUser = await User.isUser(other)
@@ -1589,7 +1578,6 @@ class Activity extends ActivityObject {
           const inReplyToProp = await saved.prop('inReplyTo')
           const parent = await ActivityObject.get(
             inReplyToProp,
-            ['id', 'replies'],
             actorObj
           )
           const parentOwner = await parent.owner()
@@ -1763,7 +1751,6 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           activity.object,
-          ['id', 'type'],
           actorObj
         )
         if (!(await object.id())) {
@@ -1796,7 +1783,6 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           activity.object,
-          ['id', 'type'],
           actorObj
         )
         if (!(await object.id())) {
@@ -1846,7 +1832,6 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           activity.object,
-          ['id', 'type'],
           actorObj
         )
         if (!(await object.id())) {
@@ -1898,7 +1883,6 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           activity.object,
-          ['id', 'type', 'likes'],
           actorObj
         )
         if (!(await object.canRead(await actorObj.id()))) {
@@ -1932,7 +1916,6 @@ class Activity extends ActivityObject {
         const blocked = new Collection(await actorObj.prop('blocked'))
         const other = await ActivityObject.get(
           await this.prop('object'),
-          ['id', 'type', 'followers', 'following'],
           actorObj
         )
         if (await blocked.hasMember(await other.id())) {
@@ -1957,7 +1940,6 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           await this.prop('object'),
-          ['id', 'type', 'shares'],
           actorObj
         )
         const owner = await object.owner()
@@ -1973,7 +1955,6 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           await this.prop('object'),
-          ['object', 'type', 'id'],
           actorObj
         )
         const owner = await object.owner()
@@ -1989,7 +1970,6 @@ class Activity extends ActivityObject {
             }
             const likedObject = await ActivityObject.get(
               await object.prop('object'),
-              ['id', 'type', 'likes'],
               actorObj
             )
             const liked = new Collection(await actorObj.prop('liked'))
@@ -2007,7 +1987,6 @@ class Activity extends ActivityObject {
             }
             const blockedObject = await ActivityObject.get(
               await object.prop('object'),
-              null,
               actorObj
             )
             const blocked = new Collection(await actorObj.prop('blocked'))
@@ -2020,7 +1999,6 @@ class Activity extends ActivityObject {
             }
             const followedObject = await ActivityObject.get(
               await object.prop('object'),
-              ['id', 'type', 'followers'],
               actorObj
             )
             const pendingFollowing = new Collection(
@@ -2059,7 +2037,6 @@ class Activity extends ActivityObject {
             }
             const sharedObject = await ActivityObject.get(
               await object.prop('object'),
-              ['id', 'type', 'shares'],
               actorObj
             )
             const sharedObjectOwner = await sharedObject.owner()
@@ -2130,7 +2107,7 @@ class Activity extends ActivityObject {
     const keyId = await toId(await owner.prop('publicKey'))
 
     const sendTo = async (addressee) => {
-      let other = await ActivityObject.get(addressee, null, owner)
+      let other = await ActivityObject.get(addressee, owner)
       if (await User.isUser(other)) {
         // Local delivery
         await other.expand(owner)
@@ -2139,7 +2116,7 @@ class Activity extends ActivityObject {
         await inbox.prependData(activity)
       } else {
         logger.debug(`Remote delivery for ${activity.id} to ${addressee}`)
-        other = await ActivityObject.get(addressee, null, owner)
+        other = await ActivityObject.get(addressee, owner)
         const inboxProp = await other.prop('inbox')
         if (!inboxProp) {
           logger.warn(`Cannot deliver to ${addressee}: no 'inbox' property`)
@@ -2477,18 +2454,10 @@ class RemoteActivity extends Activity {
 
   async apply (remote = null, addressees = null, ...args) {
     const owner = args[0]
-    const ownerObj = await ActivityObject.get(owner, [
-      'id',
-      'type',
-      'followers',
-      'following',
-      'pendingFollowers',
-      'pendingFollowing'
-    ])
+    const ownerObj = await ActivityObject.get(owner)
     if (!remote) {
       remote = await ActivityObject.get(
         await this.prop('actor'),
-        ['id'],
         ownerObj
       )
     }
@@ -2501,7 +2470,6 @@ class RemoteActivity extends Activity {
       Follow: async () => {
         const object = await ActivityObject.get(
           await this.prop('object'),
-          ['id', 'type'],
           ownerObj
         )
         if ((await object.id()) === (await ownerObj.id())) {
@@ -3766,7 +3734,7 @@ app.post(
       throw new createError.Unauthorized('Missing read scope')
     }
     const actor = await user.getActor()
-    const obj = await ActivityObject.get(id, null, actor)
+    const obj = await ActivityObject.get(id, actor)
 
     if (!obj) {
       throw new createError.NotFound('Object not found')
@@ -4219,7 +4187,7 @@ app.get(
       throw new createError.Forbidden('Missing read scope')
     }
     const subject = req.auth?.subject
-    const obj = await ActivityObject.get(full, null, subject)
+    const obj = await ActivityObject.get(full, subject)
     if (!obj) {
       throw new createError.NotFound('Object not found')
     }
