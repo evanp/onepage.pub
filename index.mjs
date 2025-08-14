@@ -210,6 +210,43 @@ function equalDigests (digest1, digest2) {
   return hash1 === hash2
 }
 
+class Counter {
+  metrics = {}
+
+  set (name, param = null, value = 0) {
+    if (!this.metrics[name]) {
+      this.metrics[name] = {}
+    }
+    if (param) {
+      this.metrics[name][param] = value
+    }
+  }
+
+  add (name, param, delta) {
+    if (!this.metrics[name]) {
+      this.metrics[name] = {}
+    }
+    if (!this.metrics[name][param]) {
+      this.metrics[name][param] = 0
+    }
+    this.metrics[name][param] += delta
+    return this.metrics[name][param]
+  }
+
+  increment (name, param) {
+    return this.add(name, param, 1)
+  }
+
+  toHeader () {
+    return Object.entries(this.metrics)
+      .map(([name, params]) => [
+        name,
+        ...Object.entries(params).map(([param, value]) => `${param}=${value}`)
+      ].join(';'))
+      .join(', ')
+  }
+}
+
 // Classes
 
 class Database {
@@ -3039,6 +3076,15 @@ const app = express()
 const upload = multer({ storage: multer.memoryStorage() })
 
 app.use((req, res, next) => {
+  req.counter = new Counter()
+  req.counter.set('db', 'dur', 0)
+  req.counter.set('db', 'count', 0)
+  req.counter.set('http', 'dur', 0)
+  req.counter.set('http', 'count', 0)
+  next()
+})
+
+app.use((req, res, next) => {
   const oldEnd = res.end
   res.end = function (...args) {
     const subject = req.auth?.subject || '-'
@@ -4244,6 +4290,7 @@ app.get(
       ...output
     }
     res.set('Content-Type', 'application/activity+json')
+    res.set('Server-Timing', req.counter.toHeader())
     res.json(output)
   })
 )

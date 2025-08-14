@@ -362,6 +362,20 @@ async function signRequest (keyId, privateKey, method, url, date, digest = null)
   return header
 }
 
+function parseTiming (header) {
+  const timing = {}
+  for (const metric of header.split(/,\s*/)) {
+    const parts = metric.split(';')
+    const name = parts.shift()
+    timing[name] = {}
+    for (const part of parts) {
+      const [key, value] = part.split('=', 2)
+      timing[name][key] = value
+    }
+  }
+  return timing
+}
+
 describe('onepage.pub', () => {
   let child = null
   let remote = null
@@ -5571,6 +5585,28 @@ describe('onepage.pub', () => {
       assert.strictEqual(obj.links[0].rel, 'self')
       assert.strictEqual(obj.links[0].type, 'application/activity+json')
       assert.strictEqual(obj.links[0].href, `https://localhost:${MAIN_PORT}/`)
+    })
+  })
+  describe('Stats headers', async () => {
+    let actor1 = null
+    before(async () => {
+      [actor1] = await registerActor()
+      await settle(MAIN_PORT)
+    })
+    it('GET actor returns stats', async () => {
+      const res = await fetch(actor1.id, {
+        method: 'HEAD'
+      })
+      assert.ok(res.ok)
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.headers.get('Server-Timing'))
+      const timing = parseTiming(res.headers.get('Server-Timing'))
+      assert.ok(timing.db)
+      assert.ok(timing.db.dur)
+      assert.ok(timing.db.count)
+      assert.ok(timing.http)
+      assert.ok(timing.http.dur)
+      assert.ok(timing.http.count)
     })
   })
 })
