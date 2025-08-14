@@ -796,8 +796,8 @@ class ActivityObject {
     }
   }
 
-  static async get (ref, subject = null) {
-    const obj = new ActivityObject(ref, { subject })
+  static async get (ref, options = {}) {
+    const obj = new ActivityObject(ref, options)
     if (await obj.ensureComplete()) {
       return obj
     } else {
@@ -1062,7 +1062,7 @@ class ActivityObject {
         await this.id()
       ])
       if (row) {
-        this.#owner = await ActivityObject.get(row.owner, this.#subject)
+        this.#owner = await ActivityObject.get(row.owner, { subject: this.#subject })
       } else {
         let ownerRef
         for (const prop of ['attributedTo', 'actor', 'owner']) {
@@ -1088,7 +1088,7 @@ class ActivityObject {
       )
       if (rows.length > 0) {
         this.#addressees = await Promise.all(
-          rows.map((row) => ActivityObject.get(row.addresseeId, this.#subject))
+          rows.map((row) => ActivityObject.get(row.addresseeId, { subject: this.#subject }))
         )
       } else {
         const addresseeIds = ActivityObject.guessAddressees(await this.json())
@@ -1273,7 +1273,7 @@ class ActivityObject {
     const object = this.#json
     const toBrief = async (value) => {
       if (value) {
-        const obj = await ActivityObject.get(value, this.#subject)
+        const obj = await ActivityObject.get(value, { subject: this.#subject })
         return await obj.brief()
       } else {
         return value
@@ -1417,7 +1417,7 @@ class Activity extends ActivityObject {
     const addressees = ActivityObject.guessAddressees(activity)
     const actorObj = await ActivityObject.get(
       actor,
-      actor
+      { subject: actor }
     )
     const appliers = {
       Follow: async () => {
@@ -1479,7 +1479,7 @@ class Activity extends ActivityObject {
         }
         const accepted = await ActivityObject.get(
           objectProp,
-          actorObj
+          { subject: actorObj }
         )
         switch (await accepted.type()) {
           case 'Follow': {
@@ -1494,7 +1494,7 @@ class Activity extends ActivityObject {
             }
             const other = await ActivityObject.get(
               await accepted.prop('actor'),
-              actorObj
+              { subject: actorObj }
             )
             const isUser = await User.isUser(other)
             let pendingFollowing = null
@@ -1528,7 +1528,7 @@ class Activity extends ActivityObject {
         }
         const rejected = await ActivityObject.get(
           objectProp,
-          actorObj
+          { subject: actorObj }
         )
         switch (await rejected.type()) {
           case 'Follow': {
@@ -1542,7 +1542,7 @@ class Activity extends ActivityObject {
             }
             const other = await ActivityObject.get(
               await rejected.prop('actor'),
-              actorObj
+              { subject: actorObj }
             )
             const isUser = await User.isUser(other)
             let pendingFollowing = null
@@ -1617,7 +1617,7 @@ class Activity extends ActivityObject {
           const inReplyToProp = await saved.prop('inReplyTo')
           const parent = await ActivityObject.get(
             inReplyToProp,
-            actorObj
+            { subject: actorObj }
           )
           const parentOwner = await parent.owner()
           if (parentOwner && (await User.isUser(parentOwner))) {
@@ -1636,7 +1636,7 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           activity.object.id,
-          actorObj
+          { subject: actorObj }
         )
         if (!object) {
           throw new createError.BadRequest(
@@ -1790,7 +1790,7 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           activity.object,
-          actorObj
+          { subject: actorObj }
         )
         if (!(await object.id())) {
           throw new createError.BadRequest('No id for object to delete')
@@ -1822,7 +1822,7 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           activity.object,
-          actorObj
+          { subject: actorObj }
         )
         if (!(await object.id())) {
           throw new createError.BadRequest('No id for object to add')
@@ -1871,7 +1871,7 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           activity.object,
-          actorObj
+          { subject: actorObj }
         )
         if (!(await object.id())) {
           throw new createError.BadRequest('No id for object to remove')
@@ -1922,7 +1922,7 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           activity.object,
-          actorObj
+          { subject: actorObj }
         )
         if (!(await object.canRead(await actorObj.id()))) {
           throw new createError.BadRequest(
@@ -1955,7 +1955,7 @@ class Activity extends ActivityObject {
         const blocked = new Collection(await actorObj.prop('blocked'))
         const other = await ActivityObject.get(
           await this.prop('object'),
-          actorObj
+          { subject: actorObj }
         )
         if (await blocked.hasMember(await other.id())) {
           throw new createError.BadRequest('Already blocked!')
@@ -1979,7 +1979,7 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           await this.prop('object'),
-          actorObj
+          { subject: actorObj }
         )
         const owner = await object.owner()
         if (await User.isUser(owner)) {
@@ -1994,7 +1994,7 @@ class Activity extends ActivityObject {
         }
         const object = await ActivityObject.get(
           await this.prop('object'),
-          actorObj
+          { subject: actorObj }
         )
         const owner = await object.owner()
         if ((await owner.id()) !== (await actorObj.id())) {
@@ -2009,7 +2009,7 @@ class Activity extends ActivityObject {
             }
             const likedObject = await ActivityObject.get(
               await object.prop('object'),
-              actorObj
+              { subject: actorObj }
             )
             const liked = new Collection(await actorObj.prop('liked'))
             await liked.remove(likedObject)
@@ -2026,7 +2026,7 @@ class Activity extends ActivityObject {
             }
             const blockedObject = await ActivityObject.get(
               await object.prop('object'),
-              actorObj
+              { subject: actorObj }
             )
             const blocked = new Collection(await actorObj.prop('blocked'))
             await blocked.remove(blockedObject)
@@ -2038,7 +2038,7 @@ class Activity extends ActivityObject {
             }
             const followedObject = await ActivityObject.get(
               await object.prop('object'),
-              actorObj
+              { subject: actorObj }
             )
             const pendingFollowing = new Collection(
               await actorObj.prop('pendingFollowing')
@@ -2076,7 +2076,7 @@ class Activity extends ActivityObject {
             }
             const sharedObject = await ActivityObject.get(
               await object.prop('object'),
-              actorObj
+              { subject: actorObj }
             )
             const sharedObjectOwner = await sharedObject.owner()
             if (await User.isUser(sharedObjectOwner)) {
@@ -2146,7 +2146,7 @@ class Activity extends ActivityObject {
     const keyId = await toId(await owner.prop('publicKey'))
 
     const sendTo = async (addressee) => {
-      let other = await ActivityObject.get(addressee, owner)
+      let other = await ActivityObject.get(addressee, { subject: owner })
       if (await User.isUser(other)) {
         // Local delivery
         await other.expand(owner)
@@ -2155,7 +2155,7 @@ class Activity extends ActivityObject {
         await inbox.prependData(activity)
       } else {
         logger.debug(`Remote delivery for ${activity.id} to ${addressee}`)
-        other = await ActivityObject.get(addressee, owner)
+        other = await ActivityObject.get(addressee, { subject: owner })
         const inboxProp = await other.prop('inbox')
         if (!inboxProp) {
           logger.warn(`Cannot deliver to ${addressee}: no 'inbox' property`)
@@ -2219,8 +2219,8 @@ class Activity extends ActivityObject {
 }
 
 class Collection extends ActivityObject {
-  static async get (id, props = null, actor = null) {
-    const ao = await super.get(id, props, actor)
+  static async get (ref, options = {}) {
+    const ao = await super.get(ref, options)
     if (ao) {
       return Collection.fromActivityObject(ao)
     } else {
@@ -2497,7 +2497,7 @@ class RemoteActivity extends Activity {
     if (!remote) {
       remote = await ActivityObject.get(
         await this.prop('actor'),
-        ownerObj
+        { subject: ownerObj }
       )
     }
     if (!addressees) {
@@ -2509,21 +2509,19 @@ class RemoteActivity extends Activity {
       Follow: async () => {
         const object = await ActivityObject.get(
           await this.prop('object'),
-          ownerObj
+          { subject: ownerObj }
         )
         if ((await object.id()) === (await ownerObj.id())) {
           const followers = await Collection.get(
             await ownerObj.prop('followers'),
-            ['id', ['orderedItems', 'items', 'first']],
-            ownerObj
+            { subject: ownerObj }
           )
           if (await followers.hasMember(remote)) {
             throw new Error('Already a follower')
           }
           const pendingFollowers = await Collection.get(
             await ownerObj.prop('pendingFollowers'),
-            ['id', 'type', ['orderedItems', 'items', 'first']],
-            ownerObj
+            { subject: ownerObj }
           )
           if (await pendingFollowers.hasMember(await this.id())) {
             throw new Error('Already pending')
@@ -3782,7 +3780,7 @@ app.post(
       throw new createError.Unauthorized('Missing read scope')
     }
     const actor = await user.getActor()
-    const obj = await ActivityObject.get(id, actor)
+    const obj = await ActivityObject.get(id, { subject: actor })
 
     if (!obj) {
       throw new createError.NotFound('Object not found')
@@ -4235,7 +4233,7 @@ app.get(
       throw new createError.Forbidden('Missing read scope')
     }
     const subject = req.auth?.subject
-    const obj = await ActivityObject.get(full, subject)
+    const obj = await ActivityObject.get(full, { subject })
     if (!obj) {
       throw new createError.NotFound('Object not found')
     }
@@ -4358,7 +4356,7 @@ app.post(
       if (!req.auth?.subject) {
         throw new createError.Unauthorized('Invalid HTTP signature')
       }
-      const remote = await ActivityObject.get(req.auth.subject, owner)
+      const remote = await ActivityObject.get(req.auth.subject, { subject: owner })
       const remoteId = await remote.id()
       if (!(typeof remoteId === 'string')) {
         throw new createError.InternalServerError(
