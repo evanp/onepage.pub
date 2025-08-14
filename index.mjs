@@ -464,16 +464,19 @@ class HTTPSignature {
       return null
     }
 
+    const startTime = Date.now()
     const verifier = crypto.createVerify('sha256')
     verifier.write(data)
     verifier.end()
+    const verified = verifier.verify(
+      await publicKey.prop('publicKeyPem'),
+      Buffer.from(this.signature, 'base64')
+    )
+    const endTime = Date.now()
+    req.counter.increment('crypto', 'count')
+    req.counter.add('crypto', 'dur', endTime - startTime)
 
-    if (
-      verifier.verify(
-        await publicKey.prop('publicKeyPem'),
-        Buffer.from(this.signature, 'base64')
-      )
-    ) {
+    if (verified) {
       const ownerId = await publicKey.prop('owner')
       const owner = await ActivityObject.get(ownerId, options)
       await owner.cache()
@@ -3132,6 +3135,8 @@ app.use((req, res, next) => {
   req.counter.set('db', 'count', 0)
   req.counter.set('http', 'dur', 0)
   req.counter.set('http', 'count', 0)
+  req.counter.set('crypto', 'dur', 0)
+  req.counter.set('crypto', 'count', 0)
   next()
 })
 
@@ -3141,6 +3146,7 @@ app.use((req, res, next) => {
   next()
 })
 
+// log every request
 app.use((req, res, next) => {
   const oldEnd = res.end
   res.end = function (...args) {
@@ -3203,12 +3209,18 @@ class Server {
     this.#privateKey = privateKey
   }
 
-  static async get () {
+  static async get (counter = null) {
     if (!Server.#singleton) {
       const origin = makeUrl('')
+      const startTime = Date.now()
       const row = await db.get('SELECT * FROM server where origin = ?', [
         origin
       ])
+      const endTime = Date.now()
+      if (counter) {
+        counter.increment('db', 'count')
+        counter.add('db', 'dur', endTime - startTime)
+      }
       if (!row) {
         Server.#singleton = null
       } else {
@@ -3321,28 +3333,38 @@ app.use(passport.session())
 
 app.use(
   wrap(async (req, res, next) => {
-    const server = await Server.get()
-    req.jwtKeyData = server.privateKey()
+    req.server = await Server.get(req.counter)
+    req.jwtKeyData = req.server.privateKey()
     return next()
   })
 )
 
 async function jwtOptional (req, res, next) {
+  const startTime = Date.now()
   const mw = expressjwt({
     credentialsRequired: false,
     secret: req.jwtKeyData,
     algorithms: ['RS256']
   })
-  return mw(req, res, next)
+  return mw(req, res, (err) => {
+    const endTime = Date.now()
+    req.counter.add('crypto', 'dur', endTime - startTime)
+    next(err)
+  })
 }
 
 async function jwtRequired (req, res, next) {
+  const startTime = Date.now()
   const mw = expressjwt({
     credentialsRequired: true,
     secret: req.jwtKeyData,
     algorithms: ['RS256']
   })
-  return mw(req, res, next)
+  return mw(req, res, (err) => {
+    const endTime = Date.now()
+    req.counter.add('crypto', 'dur', endTime - startTime)
+    next(err)
+  })
 }
 
 passport.use(
@@ -3398,7 +3420,7 @@ app.get(
       req.accepts('application/activity+json') ||
       req.accepts('application/ld+json')
     ) {
-      const server = await Server.get()
+      const server = req.server
       res.set('Content-Type', 'application/activity+json')
       res.json(await server.toJSON())
     } else {
@@ -3410,7 +3432,7 @@ app.get(
 app.get(
   '/key',
   wrap(async (req, res) => {
-    const server = await Server.get()
+    const server = req.server
     res.set('Content-Type', 'application/activity+json')
     res.json(await server.getKeyJSON())
   })
