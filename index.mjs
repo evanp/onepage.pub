@@ -4312,11 +4312,16 @@ app.get(
         const len = output[name].length
         for (let i = len - 1; i >= 0; i--) {
           const item = await ActivityObject.get(output[name][i], options)
-          if (!(await item.canRead(req.auth?.subject))) {
-            logger.debug(`Splicing array at ${i}`)
-            output[name].splice(i, 1)
+          if (!item) {
+            // Just set the id
+            output[name][i] = { id: await toId(output[name][i]) }
           } else {
-            output[name][i] = await item.expanded()
+            if (!(await item.canRead(req.auth?.subject))) {
+              logger.debug(`Splicing array at ${i}`)
+              output[name].splice(i, 1)
+            } else {
+              output[name][i] = await item.expanded()
+            }
           }
         }
       }
