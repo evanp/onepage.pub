@@ -1115,7 +1115,7 @@ class ActivityObject {
         await this.id()
       ])
       if (row) {
-        this.#owner = await ActivityObject.get(row.owner, { subject: this.#subject })
+        this.#owner = await ActivityObject.get(row.owner, this.#options())
       } else {
         let ownerRef
         for (const prop of ['attributedTo', 'actor', 'owner']) {
@@ -1125,7 +1125,7 @@ class ActivityObject {
           }
         }
         if (ownerRef) {
-          this.#owner = new ActivityObject(ownerRef, { subject: this.#subject })
+          this.#owner = new ActivityObject(ownerRef, this.#options())
         }
       }
     }
@@ -1141,11 +1141,11 @@ class ActivityObject {
       )
       if (rows.length > 0) {
         this.#addressees = await Promise.all(
-          rows.map((row) => ActivityObject.get(row.addresseeId, { subject: this.#subject }))
+          rows.map((row) => ActivityObject.get(row.addresseeId, this.#options()))
         )
       } else {
         const addresseeIds = ActivityObject.guessAddressees(await this.json())
-        this.#addressees = addresseeIds.map(id => new ActivityObject(id, { subject: this.#subject }))
+        this.#addressees = addresseeIds.map(id => new ActivityObject(id, this.#options()))
       }
     }
     return this.#addressees
