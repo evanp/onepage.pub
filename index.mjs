@@ -1245,6 +1245,7 @@ class ActivityObject {
 
     for (const prop of ActivityObject.#idProps) {
       if (prop in object) {
+        const original = object[prop]
         try {
           if (Array.isArray(object[prop])) {
             object[prop] = await Promise.all(object[prop].map(toBrief))
@@ -1260,8 +1261,9 @@ class ActivityObject {
             object[prop] = await toBrief(object[prop])
           }
         } catch (error) {
-          logger.error(`Error while expanding ${prop} of ${this.#id}: ${JSON.stringify(object[prop])}`)
-          throw error
+          logger.warn(`Error while expanding ${prop} of ${this.#id}: ${JSON.stringify(object[prop])}`)
+          // Leave it unexpanded
+          object[prop] = original
         }
       }
     }
