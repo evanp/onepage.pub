@@ -538,7 +538,9 @@ class ActivityObject {
       if (data instanceof ActivityObject) {
         throw new Error('ActivityObject constructor with ActivityObject argument')
       }
-
+      if (data instanceof Promise) {
+        throw new Error('ActivityObject constructor with Promise as value')
+      }
       if (Object.keys(data).length === 0) {
         throw new Error('Empty object in ActivityObject constructor')
       }
@@ -1240,7 +1242,7 @@ class ActivityObject {
     const object = this.#json
     const toBrief = async (value) => {
       if (value) {
-        const obj = new ActivityObject(value, { subject: this.#subject })
+        const obj = await ActivityObject.get(value, null, { subject: this.#subject })
         return await obj.brief()
       } else {
         return value
@@ -1249,18 +1251,23 @@ class ActivityObject {
 
     for (const prop of ActivityObject.#idProps) {
       if (prop in object) {
-        if (Array.isArray(object[prop])) {
-          object[prop] = await Promise.all(object[prop].map(toBrief))
-        } else if (prop === 'url' && typeof object[prop] === 'string') {
-          object[prop] = {
-            type: 'Link',
-            href: object[prop]
+        try {
+          if (Array.isArray(object[prop])) {
+            object[prop] = await Promise.all(object[prop].map(toBrief))
+          } else if (prop === 'url' && typeof object[prop] === 'string') {
+            object[prop] = {
+              type: 'Link',
+              href: object[prop]
+            }
+          } else if (prop === 'object' && (await this.needsExpandedObject())) {
+            object[prop] =
+              await new ActivityObject(object[prop], { subject: this.#subject }).expanded()
+          } else {
+            object[prop] = await toBrief(object[prop])
           }
-        } else if (prop === 'object' && (await this.needsExpandedObject())) {
-          object[prop] =
-            await new ActivityObject(object[prop], { subject: this.#subject }).expanded()
-        } else {
-          object[prop] = await toBrief(object[prop])
+        } catch (error) {
+          logger.error(`Error while expanding ${prop} of ${this.#id}: ${JSON.stringify(object[prop])}`)
+          throw error
         }
       }
     }
@@ -2259,7 +2266,7 @@ class Collection extends ActivityObject {
   }
 
   async prepend (object) {
-    await this.expand()
+    await this.ensureComplete()
     const collection = await this.json()
     const objectId = await object.id()
     if (collection.orderedItems) {
@@ -2274,7 +2281,7 @@ class Collection extends ActivityObject {
       })
     } else if (collection.first) {
       const first = new ActivityObject(collection.first)
-      await first.expand()
+      await first.ensureComplete()
       const firstJson = await first.json()
       const ip = ['orderedItems', 'items'].find((p) => p in firstJson)
       if (!ip) {
@@ -2286,12 +2293,19 @@ class Collection extends ActivityObject {
         await first.patch(patch)
         await this.patch({ totalItems: collection.totalItems + 1 })
       } else {
-        const owner = await this.owner()
+        const attributedTo = await this.prop('attributedTo')
+        if (!attributedTo) {
+          throw new Error(`No owner for collection ${await this.id()}`)
+        } else if (attributedTo instanceof Promise) {
+          throw new Error('owner is a promise when adding page')
+        } else {
+          logger.debug(`Got owner adding a page: ${JSON.stringify(attributedTo)}`)
+        }
         const props = {
           type: firstJson.type,
           partOf: collection.id,
           next: firstJson.id,
-          attributedTo: owner
+          attributedTo
         }
         await ActivityObject.copyAddresseeProps(props, await this.json())
         props[ip] = [objectId]
@@ -2380,6 +2394,9 @@ class Collection extends ActivityObject {
 
   static async empty (owner, addressees, props = {}, pageProps = {}) {
     const id = await ActivityObject.makeId('OrderedCollection')
+    if (owner instanceof Promise) {
+      throw new Error('Got a promise as an owner')
+    }
     const page = new ActivityObject({
       type: 'OrderedCollectionPage',
       orderedItems: [],
