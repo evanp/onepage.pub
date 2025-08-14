@@ -433,7 +433,8 @@ class HTTPSignature {
     const fragment = url.hash ? url.hash.slice(1) : null
     url.hash = ''
 
-    const ao = await ActivityObject.get(url.toString())
+    const options = { counter: req.counter, cache: req.cache }
+    const ao = await ActivityObject.get(url.toString(), options)
 
     let publicKey = null
 
@@ -442,9 +443,9 @@ class HTTPSignature {
     if (!fragment) {
       publicKey = ao
     } else if (fragment in (await ao.json())) {
-      publicKey = await ActivityObject.get(await ao.prop(fragment))
+      publicKey = await ActivityObject.get(await ao.prop(fragment), options)
     } else if (fragment === 'main-key' && 'publicKey' in (await ao.json())) {
-      publicKey = await ActivityObject.get(await ao.prop('publicKey'))
+      publicKey = await ActivityObject.get(await ao.prop('publicKey'), options)
     } else {
       return null
     }
@@ -469,7 +470,7 @@ class HTTPSignature {
       )
     ) {
       const ownerId = await publicKey.prop('owner')
-      const owner = await ActivityObject.get(ownerId)
+      const owner = await ActivityObject.get(ownerId, options)
       await owner.cache()
       await publicKey.cache()
       return owner
@@ -3129,6 +3130,12 @@ app.use((req, res, next) => {
   next()
 })
 
+// per-request ActivityObject cache
+app.use((req, res, next) => {
+  req.cache = {}
+  next()
+})
+
 app.use((req, res, next) => {
   const oldEnd = res.end
   res.end = function (...args) {
@@ -4273,7 +4280,7 @@ app.get(
   wrap(async (req, res) => {
     const full = makeUrl(req.originalUrl)
     const counter = req.counter
-    const cache = {}
+    const cache = req.cache
     counter.set('cache', 'dur', 0)
     counter.set('cache', 'hit', 0)
     counter.set('cache', 'miss', 0)
