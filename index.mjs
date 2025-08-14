@@ -1339,8 +1339,8 @@ class ActivityObject {
               href: object[prop]
             }
           } else if (prop === 'object' && (await this.needsExpandedObject())) {
-            object[prop] =
-              await new ActivityObject(object[prop], { subject: this.#subject }).expanded()
+            const obj = await ActivityObject.get(object[prop], this.#options())
+            object[prop] = await obj.expanded()
           } else {
             object[prop] = await toBrief(object[prop])
           }
