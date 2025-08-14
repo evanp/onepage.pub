@@ -3860,8 +3860,10 @@ app.post(
     if (!req.auth.scope || !req.auth.scope.split(' ').includes('read')) {
       throw new createError.Unauthorized('Missing read scope')
     }
-    const actor = await user.getActor()
-    const obj = await ActivityObject.get(id, { subject: actor })
+    const options = { cache: req.cache, counter: req.counter }
+    const actor = await ActivityObject.get(req.auth?.subject, options)
+    options.subject = actor
+    const obj = await ActivityObject.get(id, options)
 
     if (!obj) {
       throw new createError.NotFound('Object not found')
@@ -3869,6 +3871,7 @@ app.post(
 
     res.status((await obj.type() === 'Tombstone') ? 410 : 200)
     res.set('Content-Type', 'application/activity+json')
+    res.set('Server-Timing', req.counter.toHeader())
     res.json(await obj.json())
   })
 )
