@@ -558,9 +558,10 @@ class ActivityObject {
   #complete = false
   #subject
   #cache
+  #counter
   static #DEFAULT_EXPIRES = 24 * 60 * 60 * 1000 // one day
   constructor (data, options = {}) {
-    const { subject, cache } = options
+    const { subject, cache, counter } = options
     if (!data) {
       throw new Error('No data provided')
     } else if (isString(data)) {
@@ -590,6 +591,15 @@ class ActivityObject {
 
     this.#subject = subject
     this.#cache = cache
+    this.#counter = counter
+  }
+
+  #options () {
+    return {
+      subject: this.#subject,
+      cache: this.#cache,
+      counter: this.#counter
+    }
   }
 
   static async makeId (type) {
@@ -689,12 +699,12 @@ class ActivityObject {
     if (!ActivityObject.isRemoteId(this.#id)) {
       throw new Error(`Called remote cache for local object ${this.#id}`)
     }
-    let [json, complete] = await ActivityObject.getJSONFromRemoteCacheForSubject(this.#id, PUBLIC)
+    let [json, complete] = await this.getJSONFromRemoteCacheForSubject(this.#id, PUBLIC)
     if (json) {
       this.#json = json
       this.#complete = complete
     } else if (this.#subject) {
-      [json, complete] = await ActivityObject.getJSONFromRemoteCacheForSubject(
+      [json, complete] = await this.getJSONFromRemoteCacheForSubject(
         this.#id,
         await toId(this.#subject)
       )
@@ -705,13 +715,19 @@ class ActivityObject {
     }
   }
 
-  static async getJSONFromRemoteCacheForSubject (dataId, subjectId) {
+  async getJSONFromRemoteCacheForSubject (dataId, subjectId) {
     let json
     let complete = false
+    const startTime = Date.now()
     const row = await db.get(
       'SELECT data, expires, complete FROM remotecache WHERE id = ? and subject = ?',
       [dataId, subjectId]
     )
+    const endTime = Date.now()
+    if (this.#counter) {
+      this.#counter.add('db', 'dur', endTime - startTime)
+      this.#counter.increment('db', 'count')
+    }
     if (row) {
       if (row.expires > Date.now()) {
         json = JSON.parse(row.data)
@@ -731,10 +747,16 @@ class ActivityObject {
     if (ActivityObject.isRemoteId(this.#id)) {
       throw new Error(`Cannot get remote object for ${this.#id}`)
     }
+    const startTime = Date.now()
     const row = await db.get(
       'SELECT data FROM object WHERE id = ?',
       [this.#id]
     )
+    const endTime = Date.now()
+    if (this.#counter) {
+      this.#counter.add('db', 'dur', endTime - startTime)
+      this.#counter.increment('db', 'count')
+    }
     if (!row) {
       this.#json = undefined
     } else {
@@ -769,7 +791,13 @@ class ActivityObject {
     logger.debug(`fetching ${this.#id} with key ID ${keyId}`)
     const u = new URL(this.#id)
     const base = u.origin + u.pathname + u.search
+    const startTime = Date.now()
     const res = await fetch(base, { headers })
+    const endTime = Date.now()
+    if (this.#counter) {
+      this.#counter.add('http', 'dur', endTime - startTime)
+      this.#counter.increment('http', 'count')
+    }
     if (![200, 410].includes(res.status)) {
       const message = await res.text()
       logger.warn(`Error fetching ${this.#id}: ${res.status} ${res.statusText} (${message})`)
@@ -797,8 +825,24 @@ class ActivityObject {
   }
 
   static async get (ref, options = {}) {
+    if (options.cache) {
+      const id = await toId(ref)
+      if (id in options.cache) {
+        if (options.counter) {
+          options.counter.increment('cache', 'hit')
+        }
+        return options.cache[id]
+      } else {
+        if (options.counter) {
+          options.counter.increment('cache', 'miss')
+        }
+      }
+    }
     const obj = new ActivityObject(ref, options)
     if (await obj.ensureComplete()) {
+      if (options.cache) {
+        options.cache[obj.#id] = obj
+      }
       return obj
     } else {
       return null
@@ -1273,7 +1317,10 @@ class ActivityObject {
     const object = this.#json
     const toBrief = async (value) => {
       if (value) {
-        const obj = await ActivityObject.get(value, { subject: this.#subject })
+        const obj = await ActivityObject.get(
+          value,
+          this.#options()
+        )
         return await obj.brief()
       } else {
         return value
@@ -4225,6 +4272,11 @@ app.get(
   HTTPSignature.authenticate,
   wrap(async (req, res) => {
     const full = makeUrl(req.originalUrl)
+    const counter = req.counter
+    const cache = {}
+    counter.set('cache', 'dur', 0)
+    counter.set('cache', 'hit', 0)
+    counter.set('cache', 'miss', 0)
     if (
       req.auth &&
       req.auth.scope &&
@@ -4233,7 +4285,8 @@ app.get(
       throw new createError.Forbidden('Missing read scope')
     }
     const subject = req.auth?.subject
-    const obj = await ActivityObject.get(full, { subject })
+    const options = { subject, counter, cache }
+    const obj = await ActivityObject.get(full, options)
     if (!obj) {
       throw new createError.NotFound('Object not found')
     }
@@ -4251,7 +4304,7 @@ app.get(
       if (name in output && Array.isArray(output[name])) {
         const len = output[name].length
         for (let i = len - 1; i >= 0; i--) {
-          const item = new ActivityObject(output[name][i], { subject })
+          const item = await ActivityObject.get(output[name][i], options)
           if (!(await item.canRead(req.auth?.subject))) {
             logger.debug(`Splicing array at ${i}`)
             output[name].splice(i, 1)

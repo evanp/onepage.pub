@@ -5589,15 +5589,89 @@ describe('onepage.pub', () => {
   })
   describe('Stats headers', async () => {
     let actor1 = null
+    let token1 = null
+    let actor2 = null
+    let token2 = null
     before(async () => {
-      [actor1] = await registerActor()
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(REMOTE_PORT)
       await settle(MAIN_PORT)
+      await settle(REMOTE_PORT)
+      const follow = await doActivity(actor2, token2, {
+        to: actor1.id,
+        type: 'Follow',
+        object: actor1.id
+      })
+      await settle(REMOTE_PORT)
+      await settle(MAIN_PORT)
+      await doActivity(actor1, token1, {
+        to: actor2.id,
+        type: 'Accept',
+        object: follow.id
+      })
+      await settle(MAIN_PORT)
+      await settle(REMOTE_PORT)
+      for (let i = 0; i < 50; i++) {
+        await doActivity(actor1, token1, {
+          to: actor1.followers,
+          type: 'IntransitiveActivity'
+        })
+      }
+      await settle(MAIN_PORT)
+      await settle(REMOTE_PORT)
     })
     it('GET actor returns stats', async () => {
-      const res = await fetch(actor1.id, {
-        method: 'HEAD'
+      const res = await fetch(actor1.id)
+      assert.ok(res.ok)
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.headers.get('Server-Timing'))
+      const timing = parseTiming(res.headers.get('Server-Timing'))
+      assert.ok(timing.db)
+      assert.ok(timing.db.dur)
+      assert.ok(timing.db.count)
+      assert.ok(timing.http)
+      assert.ok(timing.http.dur)
+      assert.ok(timing.http.count)
+    })
+    it('GET inbox page returns stats', async () => {
+      let res
+      res = await fetch(actor1.inbox, {
+        headers: {
+          Authorization: `Bearer ${token1}`
+        }
       })
       assert.ok(res.ok)
+      const inbox = await res.json()
+      res = await fetch(inbox.first.id, {
+        headers: {
+          Authorization: `Bearer ${token1}`
+        }
+      })
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.headers.get('Server-Timing'))
+      const timing = parseTiming(res.headers.get('Server-Timing'))
+      assert.ok(timing.db)
+      assert.ok(timing.db.dur)
+      assert.ok(timing.db.count)
+      assert.ok(timing.http)
+      assert.ok(timing.http.dur)
+      assert.ok(timing.http.count)
+    })
+
+    it('GET remote inbox page returns stats', async () => {
+      let res
+      res = await fetch(actor2.inbox, {
+        headers: {
+          Authorization: `Bearer ${token2}`
+        }
+      })
+      assert.ok(res.ok)
+      const inbox = await res.json()
+      res = await fetch(inbox.first.id, {
+        headers: {
+          Authorization: `Bearer ${token2}`
+        }
+      })
       assert.strictEqual(res.status, 200)
       assert.ok(res.headers.get('Server-Timing'))
       const timing = parseTiming(res.headers.get('Server-Timing'))
