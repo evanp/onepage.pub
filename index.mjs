@@ -436,6 +436,11 @@ class HTTPSignature {
     const options = { counter: req.counter, cache: req.cache }
     const ao = await ActivityObject.get(url.toString(), options)
 
+    if (!ao) {
+      logger.warn(`Could not retrieve key id ${url.toString()}`)
+      return null
+    }
+
     let publicKey = null
 
     // Mastodon uses 'main-key' instead of 'publicKey'
