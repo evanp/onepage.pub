@@ -3066,6 +3066,9 @@ class User {
       for (const prop of props) {
         const coll = await ActivityObject.get(await actor.prop(prop), { subject: actor })
         count += await User.updateCollection(user, coll, actor, PUBLIC)
+      }
+      for (const prop of props) {
+        const coll = await ActivityObject.get(await actor.prop(prop), { subject: actor })
         let pageRef = await coll.prop('first')
         while (pageRef) {
           const page = await ActivityObject.get(pageRef, { subject: actor })
@@ -3090,7 +3093,10 @@ class User {
 
   static async updateCollection (user, coll, actor, to) {
     const patch = {}
-    if (!await coll.prop('attributedTo')) {
+    const at = await coll.prop('attributedTo')
+    if (!at ||
+      (typeof at === 'object' && Object.keys(at).length === 0) ||
+      await toId(at) !== await toId(actor)) {
       patch.attributedTo = await actor.id()
     }
     if (to && !await coll.prop('to')) {
@@ -3099,8 +3105,7 @@ class User {
       patch.to = null
     }
     if (Object.keys(patch).length > 0) {
-      logger.info('Updating user collection to correct permissions',
-        { collection: await coll.id(), actor: await actor.id(), ...patch })
+      logger.info(`Updating user collection ${await coll.id()} for ${await actor.id()} to correct permissions`)
       await user.internalUpdate(
         coll,
         patch,
@@ -3114,21 +3119,25 @@ class User {
   }
 
   async internalUpdate (ao, patch, to, actor) {
-    await ao.patch(patch)
-    const data = {
-      id: ActivityObject.makeId('Update'),
-      to: to || undefined,
-      type: 'Update',
-      object: await ao.id(),
-      actor: await actor.id()
+    try {
+      await ao.patch(patch)
+      const data = {
+        id: await ActivityObject.makeId('Update'),
+        to: to || undefined,
+        type: 'Update',
+        object: await ao.id(),
+        actor: await actor.id()
+      }
+      const activity = new Activity(data, { subject: actor })
+      await activity.save()
+      const outbox = await Collection.get(await actor.prop('outbox'))
+      await outbox.prepend(activity)
+      const inbox = await Collection.get(await actor.prop('inbox'))
+      await inbox.prepend(activity)
+      pq.add(activity.distribute())
+    } catch (err) {
+      logger.error(err)
     }
-    const activity = new Activity(data, { subject: actor })
-    await activity.save()
-    const outbox = await Collection.get(await actor.prop('outbox'))
-    await outbox.prepend(activity)
-    const inbox = await Collection.get(await actor.prop('inbox'))
-    await inbox.prepend(activity)
-    pq.add(activity.distribute())
   }
 
   async doActivity (data) {
