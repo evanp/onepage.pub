@@ -4345,24 +4345,19 @@ app.get(
       }
     }
     let output = await obj.expanded()
-    for (const name of ['items', 'orderedItems']) {
-      if (name in output && Array.isArray(output[name])) {
-        const len = output[name].length
-        for (let i = len - 1; i >= 0; i--) {
-          const item = await ActivityObject.get(output[name][i], options)
-          if (!item) {
-            // Just set the id
-            output[name][i] = { id: await toId(output[name][i]) }
-          } else {
-            if (!(await item.canRead(req.auth?.subject))) {
-              logger.debug(`Splicing array at ${i}`)
-              output[name].splice(i, 1)
-            } else {
-              output[name][i] = await item.expanded()
-            }
-          }
+    const name = ['items', 'orderedItems'].find(prop =>
+      prop in output && Array.isArray(output[prop]))
+    if (name) {
+      output[name] = (await Promise.all(output[name].map(async (value) => {
+        const item = await ActivityObject.get(value, options)
+        if (!item) {
+          return { id: await toId(value) }
+        } else if (!(await item.canRead(req.auth?.subject))) {
+          return null
+        } else {
+          return await item.expanded()
         }
-      }
+      }))).filter(Boolean)
     }
     if (await User.isUser(obj)) {
       output.endpoints = standardEndpoints()
