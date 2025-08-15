@@ -3144,7 +3144,7 @@ app.use((req, res, next) => {
     const endTime = Date.now()
     req.counter.add('app', 'dur', endTime - startTime)
     res.setHeader('Server-Timing', req.counter.toHeader())
-    return oldWriteHead.call(this, statusCode, statusMessage, headers);
+    return oldWriteHead.call(this, statusCode, statusMessage, headers)
   }
   next()
 })
