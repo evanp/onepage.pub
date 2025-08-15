@@ -3124,9 +3124,9 @@ class User {
     }
     const activity = new Activity(data, { subject: actor })
     await activity.save()
-    const outbox = Collection.get(await actor.prop('outbox'))
+    const outbox = await Collection.get(await actor.prop('outbox'))
     await outbox.prepend(activity)
-    const inbox = new Collection(await actor.prop('inbox'))
+    const inbox = await Collection.get(await actor.prop('inbox'))
     await inbox.prepend(activity)
     pq.add(activity.distribute())
   }
