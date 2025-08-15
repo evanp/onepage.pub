@@ -3137,6 +3137,15 @@ app.use((req, res, next) => {
   req.counter.set('http', 'count', 0)
   req.counter.set('crypto', 'dur', 0)
   req.counter.set('crypto', 'count', 0)
+  req.counter.set('app', 'dur', 0)
+  const startTime = Date.now()
+  const oldWriteHead = res.writeHead
+  res.writeHead = function (statusCode, statusMessage, headers) {
+    const endTime = Date.now()
+    req.counter.add('app', 'dur', endTime - startTime)
+    res.setHeader('Server-Timing', req.counter.toHeader())
+    return oldWriteHead.call(this, statusCode, statusMessage, headers);
+  }
   next()
 })
 
@@ -3871,7 +3880,6 @@ app.post(
 
     res.status((await obj.type() === 'Tombstone') ? 410 : 200)
     res.set('Content-Type', 'application/activity+json')
-    res.set('Server-Timing', req.counter.toHeader())
     res.json(await obj.json())
   })
 )
@@ -4383,7 +4391,6 @@ app.get(
       ...output
     }
     res.set('Content-Type', 'application/activity+json')
-    res.set('Server-Timing', req.counter.toHeader())
     res.json(output)
   })
 )
