@@ -739,7 +739,13 @@ class ActivityObject {
     }
     if (row) {
       if (row.expires > Date.now()) {
+        const parseStartTime = Date.now()
         json = JSON.parse(row.data)
+        const parseEndTime = Date.now()
+        if (this.#counter) {
+          this.#counter.add('json', 'dur', parseEndTime - parseStartTime)
+          this.#counter.increment('json', 'count')
+        }
         complete = row.complete
       } else {
         // Clean up expired cache object when seen
@@ -769,7 +775,13 @@ class ActivityObject {
     if (!row) {
       this.#json = undefined
     } else {
+      const parseStartTime = Date.now()
       this.#json = JSON.parse(row.data)
+      const parseEndTime = Date.now()
+      if (this.#counter) {
+        this.#counter.add('json', 'dur', parseEndTime - parseStartTime)
+        this.#counter.increment('json', 'count')
+      }
       this.#complete = true
     }
     return this.#json
@@ -795,8 +807,14 @@ class ActivityObject {
       keyId = server.keyId()
       privKey = server.privateKey()
     }
+    const signStartTime = Date.now()
     const signature = new HTTPSignature(keyId, privKey, 'GET', this.#id, date)
     headers.Signature = signature.header
+    const signEndTime = Date.now()
+    if (this.#counter) {
+      this.#counter.add('crypto', 'dur', signEndTime - signStartTime)
+      this.#counter.increment('crypto', 'count')
+    }
     logger.debug(`fetching ${this.#id} with key ID ${keyId}`)
     const u = new URL(this.#id)
     const base = u.origin + u.pathname + u.search
@@ -812,7 +830,13 @@ class ActivityObject {
       logger.warn(`Error fetching ${this.#id}: ${res.status} ${res.statusText} (${message})`)
       this.#complete = false
     } else {
+      const parseStartTime = Date.now()
       const json = await res.json()
+      const parseEndTime = Date.now()
+      if (this.#counter) {
+        this.#counter.add('json', 'dur', parseEndTime - parseStartTime)
+        this.#counter.increment('json', 'count')
+      }
       const hash = (u.hash) ? u.hash.slice(1) : null
       if (!hash || hash.length === 0) {
         this.#json = json
@@ -3137,6 +3161,8 @@ app.use((req, res, next) => {
   req.counter.set('http', 'count', 0)
   req.counter.set('crypto', 'dur', 0)
   req.counter.set('crypto', 'count', 0)
+  req.counter.set('json', 'dur', 0)
+  req.counter.set('json', 'count', 0)
   req.counter.set('app', 'dur', 0)
   const startTime = Date.now()
   const oldWriteHead = res.writeHead
