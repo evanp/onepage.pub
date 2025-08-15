@@ -3099,8 +3099,10 @@ class User {
       patch.to = null
     }
     if (Object.keys(patch).length > 0) {
+      logger.info('Updating user collection to correct permissions',
+        { collection: await coll.id(), actor: await actor.id(), ...patch })
       await user.doActivity({
-        to,
+        to: to || undefined,
         type: 'Update',
         object: {
           id: await coll.id(),
