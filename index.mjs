@@ -3056,6 +3056,63 @@ class User {
     }
   }
 
+  static async updateAllCollections () {
+    const rows = await db.all('SELECT * FROM user')
+    let count = 0
+    for (const row of rows) {
+      const user = await User.fromRow(row)
+      const actor = await ActivityObject.get(user.actorId)
+      const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
+      for (const prop of props) {
+        const coll = await ActivityObject.get(await actor.prop(prop))
+        count += await User.updateCollection(user, coll, actor, PUBLIC)
+        let pageRef = await coll.prop('first')
+        while (pageRef) {
+          const page = await ActivityObject.get(pageRef)
+          count += await User.updateCollection(user, page, actor, (prop === 'inbox') ? null : PUBLIC)
+          pageRef = await page.prop('next')
+        }
+      }
+      const priv = ['blocked', 'pendingFollowing', 'pendingFollowers']
+      for (const prop of priv) {
+        const coll = await ActivityObject.get(await actor.prop(prop))
+        count += await User.updateCollection(user, coll, actor, null)
+        let pageRef = await coll.prop('first')
+        while (pageRef) {
+          const page = await ActivityObject.get(pageRef)
+          count += await User.updateCollection(user, page, actor, null)
+          pageRef = await page.prop('next')
+        }
+      }
+    }
+    logger.info(`Updated ${count} collections and collection pages`)
+  }
+
+  static async updateCollection (user, coll, actor, to) {
+    const patch = {}
+    if (!await coll.prop('attributedTo')) {
+      patch.attributedTo = await actor.id()
+    }
+    if (to && !await coll.prop('to')) {
+      patch.to = to
+    } else if (!to && await coll.prop('to')) {
+      patch.to = null
+    }
+    if (Object.keys(patch).length > 0) {
+      await user.doActivity({
+        to,
+        type: 'Update',
+        object: {
+          id: await coll.id(),
+          ...patch
+        }
+      })
+      return 1
+    } else {
+      return 0
+    }
+  }
+
   async doActivity (data) {
     const actor = await this.getActor()
     const ownerId = await actor.id()
@@ -4595,7 +4652,8 @@ process.on('exit', (code) => {
 })
 
 const fixups = [
-  User.updateAllKeys
+  User.updateAllKeys,
+  User.updateAllCollections
 ]
 
 const maintenance = [
