@@ -1336,7 +1336,7 @@ class ActivityObject {
       }
     }
 
-    for (const prop of ActivityObject.#idProps) {
+    await Promise.all(ActivityObject.#idProps.map(async (prop) => {
       if (prop in object) {
         const original = object[prop]
         try {
@@ -1359,7 +1359,7 @@ class ActivityObject {
           object[prop] = original
         }
       }
-    }
+    }))
 
     // Fix for PKCS1 format public keys
     if ('publicKeyPem' in object) {
