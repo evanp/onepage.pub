@@ -3915,47 +3915,70 @@ app.get(
     if (!resource) {
       throw new createError.BadRequest('Missing resource')
     }
-    if (!resource.startsWith('acct:')) {
-      throw new createError.BadRequest('Resource must start with acct:')
-    }
-    if (!resource.includes('@')) {
-      throw new createError.BadRequest('Resource must contain @')
-    }
-    const [username, hostname] = resource.substr('acct:'.length).split('@')
-    if (hostname !== req.get('host')) {
-      throw new createError.NotFound('Hostname does not match')
-    }
-
-    let jrd = null
-
-    if (username === hostname) { // Server ID
-      jrd = {
-        subject: resource,
-        links: [
-          {
-            rel: 'self',
-            type: 'application/activity+json',
-            href: `https://${hostname}/`
-          }
-        ]
+    let jrd
+    if (resource.startsWith('acct:')) {
+      if (!resource.includes('@')) {
+        throw new createError.BadRequest('Resource must contain @')
       }
-    } else {
-      const user = await db.get(
-        'SELECT username, actorId FROM user WHERE username = ?',
-        [username]
-      )
+      const [username, hostname] = resource.substr('acct:'.length).split('@')
+      if (hostname !== req.get('host')) {
+        throw new createError.NotFound('Hostname does not match')
+      }
+
+      if (username === hostname) { // Server ID
+        jrd = {
+          subject: resource,
+          links: [
+            {
+              rel: 'self',
+              type: 'application/activity+json',
+              href: `https://${hostname}/`
+            }
+          ]
+        }
+      } else {
+        const user = await db.get(
+          'SELECT username, actorId FROM user WHERE username = ?',
+          [username]
+        )
+        if (!user) {
+          throw new createError.NotFound('User not found')
+        }
+        if (!user.username) {
+          throw new createError.NotFound('User not found')
+        }
+        if (!user.actorId) {
+          throw new createError.InternalServerError('Invalid user')
+        }
+
+        jrd = {
+          subject: resource,
+          links: [
+            {
+              rel: 'self',
+              type: 'application/activity+json',
+              href: user.actorId
+            }
+          ]
+        }
+      }
+    } else if (resource.startsWith('https:')) {
+      let url
+      try {
+        url = URL.parse(resource)
+      } catch (error) {
+        throw new createError.BadRequest('URL parse error')
+      }
+      if (url.host !== req.get('host')) {
+        throw new createError.BadRequest('Hostname mismatch')
+      }
+      const user = await User.fromActorId(resource)
       if (!user) {
         throw new createError.NotFound('User not found')
       }
-      if (!user.username) {
-        throw new createError.NotFound('User not found')
-      }
-      if (!user.actorId) {
-        throw new createError.InternalServerError('Invalid user')
-      }
 
       jrd = {
-        subject: resource,
+        subject: `acct:${user.username}@${req.get('host')}`,
         links: [
           {
             rel: 'self',
@@ -3964,6 +3987,8 @@ app.get(
           }
         ]
       }
+    } else {
+      throw new createError.BadRequest('Unsupported protocol')
     }
 
     res.set('Content-Type', 'application/jrd+json')

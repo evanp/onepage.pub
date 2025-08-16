@@ -5900,4 +5900,30 @@ describe('onepage.pub', () => {
       assert.ok(timing.http.count)
     })
   })
+  describe('Webfinger for actor ids', () => {
+    let actor = null
+    before(async () => {
+      [actor] = await registerActor();
+    })
+    it('can get information about a user', async () => {
+      const res = await fetch(
+        `https://localhost:${MAIN_PORT}/.well-known/webfinger?resource=${actor.id}`
+      )
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(
+        res.headers.get('Content-Type'),
+        'application/jrd+json; charset=utf-8'
+      )
+      const obj = await res.json()
+      assert.strictEqual(
+        obj.subject,
+        `acct:${actor.preferredUsername}@localhost:${MAIN_PORT}`
+      )
+      assert.strictEqual(obj.links[0].rel, 'self')
+      assert.strictEqual(obj.links[0].type, 'application/activity+json')
+      assert(
+        obj.links[0].href = actor.id
+      )
+    })
+  })
 })
