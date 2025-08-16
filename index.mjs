@@ -433,7 +433,12 @@ class HTTPSignature {
     const fragment = url.hash ? url.hash.slice(1) : null
     url.hash = ''
 
-    const options = { counter: req.counter, cache: req.cache }
+    let options
+    if (cache) {
+      options = { counter: req.counter, cache: req.cache }
+    } else {
+      options = { counter: req.counter, skipRemoteCache: true }
+    }
     const ao = await ActivityObject.get(url.toString(), options)
 
     if (!ao) {
@@ -568,9 +573,10 @@ class ActivityObject {
   #subject
   #cache
   #counter
+  #skipRemoteCache
   static #DEFAULT_EXPIRES = 24 * 60 * 60 * 1000 // one day
   constructor (data, options = {}) {
-    const { subject, cache, counter } = options
+    const { subject, cache, counter, skipRemoteCache } = options
     if (!data) {
       throw new Error('No data provided')
     } else if (isString(data)) {
@@ -601,6 +607,7 @@ class ActivityObject {
     this.#subject = subject
     this.#cache = cache
     this.#counter = counter
+    this.#skipRemoteCache = skipRemoteCache
   }
 
   #options () {
@@ -691,7 +698,9 @@ class ActivityObject {
       return
     }
     if (ActivityObject.isRemoteId(this.#id)) {
-      await this.#getJSONFromRemoteCache()
+      if (!this.#skipRemoteCache) {
+        await this.#getJSONFromRemoteCache()
+      }
       if (!this.#complete) {
         await this.#getJSONFromRemote()
       }

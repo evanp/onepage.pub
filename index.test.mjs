@@ -4911,6 +4911,223 @@ describe('onepage.pub', () => {
     })
   })
 
+  describe('HTTP Signature with key rotation', async () => {
+    let actor = null
+    let peer = null
+    let pair = null
+    const keyId = `https://localhost:${FIFTH_PORT}/actor#main-key`
+    let clientActor = null
+    let clientNote1 = null
+    let clientNote2 = null
+    let clientActivity1 = null
+    let clientActivity2 = null
+
+    before(async () => {
+      [actor] = await registerActor()
+      pair = await generateKeyPair('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      })
+      clientActor = {
+        id: `https://localhost:${FIFTH_PORT}/actor`,
+        type: 'Person',
+        preferredUsername: 'peer',
+        publicKey: {
+          id: `https://localhost:${FIFTH_PORT}/actor#main-key`,
+          owner: `https://localhost:${FIFTH_PORT}/actor`,
+          publicKeyPem: pair.publicKey
+        },
+        published: '2023-09-20T00:00:00Z'
+      }
+      clientNote1 = {
+        id: `https://localhost:${FIFTH_PORT}/note/1`,
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, World!'
+        },
+        published: '2023-09-20T00:00:00Z'
+      }
+      clientNote2 = {
+        id: `https://localhost:${FIFTH_PORT}/note/2`,
+        type: 'Note',
+        contentMap: {
+          en: 'Hello, World!'
+        },
+        published: '2023-09-20T00:00:01Z'
+      }
+      clientActivity1 = {
+        id: `https://localhost:${FIFTH_PORT}/activity/1`,
+        actor: {
+          id: clientActor.id,
+          type: clientActor.type,
+          preferredUsername: clientActor.preferredUsername
+        },
+        type: 'Create',
+        to: [actor.id],
+        object: clientNote1
+      }
+      clientActivity2 = {
+        id: `https://localhost:${FIFTH_PORT}/activity/2`,
+        actor: {
+          id: clientActor.id,
+          type: clientActor.type,
+          preferredUsername: clientActor.preferredUsername
+        },
+        type: 'Create',
+        to: [actor.id],
+        object: clientNote2
+      }
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          if (req.url === '/actor') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...clientActor
+              })
+            )
+          } else if (req.url === '/note/1') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...clientNote1
+              })
+            )
+          } else if (req.url === '/note/2') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...clientNote2
+              })
+            )
+          } else if (req.url === '/activity/1') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...clientActivity1
+              })
+            )
+          } else if (req.url === '/activity/2') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...clientActivity2
+              })
+            )
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
+        }
+      )
+      peer.listen(FIFTH_PORT)
+    })
+
+    after(async () => {
+      peer.close()
+    })
+
+    it('Can send a signed request', async () => {
+      const inbox = actor.inbox
+      const date = new Date().toUTCString()
+      const body = JSON.stringify({
+        '@context': AS2_CONTEXT,
+        ...clientActivity1
+      })
+      const hash = crypto.createHash('sha256')
+      hash.update(body)
+      const digest = `sha-256=${hash.digest('base64')}`
+
+      const header = await signRequest(
+        keyId,
+        pair.privateKey,
+        'POST',
+        inbox,
+        date,
+        digest
+      )
+      const res = await fetch(inbox, {
+        method: 'POST',
+        headers: {
+          'Content-Type': AS2_MEDIA_TYPE,
+          Signature: header,
+          Date: date,
+          Digest: digest
+        },
+        body
+      })
+      const resBody = await res.text()
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`
+      )
+    })
+
+    it('Can send a signed request with a rotated key', async () => {
+      pair = await generateKeyPair('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      })
+      clientActor.publicKey.publicKeyPem = pair.publicKey
+      const inbox = actor.inbox
+      const date = new Date().toUTCString()
+      const body = JSON.stringify({
+        '@context': AS2_CONTEXT,
+        ...clientActivity2
+      })
+      const hash = crypto.createHash('sha256')
+      hash.update(body)
+      const digest = `sha-256=${hash.digest('base64')}`
+
+      const header = await signRequest(
+        keyId,
+        pair.privateKey,
+        'POST',
+        inbox,
+        date,
+        digest
+      )
+      const res = await fetch(inbox, {
+        method: 'POST',
+        headers: {
+          'Content-Type': AS2_MEDIA_TYPE,
+          Signature: header,
+          Date: date,
+          Digest: digest
+        },
+        body
+      })
+      const resBody = await res.text()
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`
+      )
+    })
+  })
+
   describe('Upload files', () => {
     let actor = null
     let token = null
