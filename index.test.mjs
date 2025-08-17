@@ -5903,7 +5903,7 @@ describe('onepage.pub', () => {
   describe('Webfinger for actor ids', () => {
     let actor = null
     before(async () => {
-      [actor] = await registerActor();
+      [actor] = await registerActor()
     })
     it('can get information about a user', async () => {
       const res = await fetch(
