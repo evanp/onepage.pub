@@ -119,6 +119,10 @@ const base64URLEncode = (str) =>
     .replace(/\//g, '_')
     .replace(/=/g, '')
 
+function deepCopy (value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
 async function toId (value) {
   if (typeof value === 'undefined') {
     return null
@@ -1363,12 +1367,12 @@ class ActivityObject {
         return undefined
       }
     }
-    const object = this.#json
+    const object = deepCopy(this.#json)
     const toBrief = async (value) => {
       if (!value) {
         return value
       } else if (ActivityObject.isLinkType(value)) {
-        return value
+        return deepCopy(value)
       } else {
         const obj = await ActivityObject.get(
           value,
@@ -1393,7 +1397,7 @@ class ActivityObject {
         } catch (error) {
           logger.warn(`Error while expanding ${prop} of ${this.#id}: ${JSON.stringify(object[prop])}`)
           // Leave it unexpanded
-          object[prop] = original
+          object[prop] = deepCopy(original)
         }
       }
     }))
