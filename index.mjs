@@ -3284,6 +3284,9 @@ app.use((req, res, next) => {
 // per-request ActivityObject cache
 app.use((req, res, next) => {
   req.cache = {}
+  req.counter.set('cache', 'dur', 0)
+  req.counter.set('cache', 'hit', 0)
+  req.counter.set('cache', 'miss', 0)
   next()
 })
 
@@ -4476,9 +4479,6 @@ app.get(
     const full = makeUrl(req.originalUrl)
     const counter = req.counter
     const cache = req.cache
-    counter.set('cache', 'dur', 0)
-    counter.set('cache', 'hit', 0)
-    counter.set('cache', 'miss', 0)
     if (
       req.auth &&
       req.auth.scope &&
