@@ -5926,4 +5926,83 @@ describe('onepage.pub', () => {
       )
     })
   })
+  describe('Link type', () => {
+    let actor1 = null
+    let token1 = null
+    let create = null
+    let image = null
+    let create2 = null
+    let image2 = null
+    before(async () => {
+      [actor1, token1] = await registerActor()
+    })
+
+    it('can create an object with a Link as `url`', async () => {
+      create = await doActivity(actor1, token1, {
+        type: 'Create',
+        to: 'as:Public',
+        object: {
+          type: 'Image',
+          name: 'My picture',
+          url: {
+            type: 'Link',
+            mediaType: 'image/png',
+            href: 'https://example.com/images/mypicture.png'
+          }
+        }
+      })
+      image = create.object
+      assert.equal(typeof image.url, 'object')
+      assert.equal(image.url.type, 'Link')
+      assert.equal(image.url.mediaType, 'image/png')
+      assert.equal(image.url.href, 'https://example.com/images/mypicture.png')
+    })
+    it('can retrieve an object with a Link as `url`', async () => {
+      const fetched = await getObject(image.id, token1)
+      assert.equal(typeof fetched.url, 'object')
+      assert.equal(fetched.url.type, 'Link')
+      assert.equal(fetched.url.mediaType, 'image/png')
+      assert.equal(fetched.url.href, 'https://example.com/images/mypicture.png')
+    })
+    it('can create an object with an array of Link objects as `url`', async () => {
+      create2 = await doActivity(actor1, token1, {
+        type: 'Create',
+        to: 'as:Public',
+        object: {
+          type: 'Image',
+          name: 'My picture',
+          url: [{
+            type: 'Link',
+            mediaType: 'image/webp',
+            href: 'https://example.com/images/mypicture.webp'
+          },
+          {
+            type: 'Link',
+            mediaType: 'image/jpeg',
+            href: 'https://example.com/images/mypicture.jpeg'
+          }]
+        }
+      })
+      image2 = create2.object
+      assert.ok(Array.isArray(image2.url))
+      assert.strictEqual(image2.url.length, 2)
+      assert.equal(image2.url[0].type, 'Link')
+      assert.equal(image2.url[0].mediaType, 'image/webp')
+      assert.equal(image2.url[0].href, 'https://example.com/images/mypicture.webp')
+      assert.equal(image2.url[1].type, 'Link')
+      assert.equal(image2.url[1].mediaType, 'image/jpeg')
+      assert.equal(image2.url[1].href, 'https://example.com/images/mypicture.jpeg')
+    })
+    it('can retrieve an object with a Link as `url`', async () => {
+      const fetched = await getObject(image2.id, token1)
+      assert.ok(Array.isArray(fetched.url))
+      assert.strictEqual(fetched.url.length, 2)
+      assert.equal(fetched.url[0].type, 'Link')
+      assert.equal(fetched.url[0].mediaType, 'image/webp')
+      assert.equal(fetched.url[0].href, 'https://example.com/images/mypicture.webp')
+      assert.equal(fetched.url[1].type, 'Link')
+      assert.equal(fetched.url[1].mediaType, 'image/jpeg')
+      assert.equal(fetched.url[1].href, 'https://example.com/images/mypicture.jpeg')
+    })
+  })
 })
