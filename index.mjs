@@ -1245,8 +1245,12 @@ class ActivityObject {
     return false
   }
 
+  static isLinkType (ref) {
+    return (typeof ref === 'object' && ['Link', 'Hashtag', 'Mention'].includes(ref.type))
+  }
+
   async isLinkType () {
-    return ['Link', 'Hashtag', 'Mention'].includes(await this.type())
+    return ActivityObject.isLinkType(await this.json())
   }
 
   async brief () {
@@ -1341,7 +1345,10 @@ class ActivityObject {
     'subject',
     'tag',
     'target',
-    'to',
+    'to'
+  ]
+
+  static #linkProps = [
     'url'
   ]
 
@@ -1358,14 +1365,16 @@ class ActivityObject {
     }
     const object = this.#json
     const toBrief = async (value) => {
-      if (value) {
+      if (!value) {
+        return value
+      } else if (ActivityObject.isLinkType(value)) {
+        return value
+      } else {
         const obj = await ActivityObject.get(
           value,
           this.#options()
         )
         return await obj.brief()
-      } else {
-        return value
       }
     }
 
@@ -1375,11 +1384,6 @@ class ActivityObject {
         try {
           if (Array.isArray(object[prop])) {
             object[prop] = await Promise.all(object[prop].map(toBrief))
-          } else if (prop === 'url' && typeof object[prop] === 'string') {
-            object[prop] = {
-              type: 'Link',
-              href: object[prop]
-            }
           } else if (prop === 'object' && (await this.needsExpandedObject())) {
             const obj = await ActivityObject.get(object[prop], this.#options())
             object[prop] = await obj.expanded()
@@ -1390,6 +1394,15 @@ class ActivityObject {
           logger.warn(`Error while expanding ${prop} of ${this.#id}: ${JSON.stringify(object[prop])}`)
           // Leave it unexpanded
           object[prop] = original
+        }
+      }
+    }))
+
+    await Promise.all(ActivityObject.#linkProps.map(async (prop) => {
+      if (typeof object[prop] === 'string') {
+        object[prop] = {
+          type: 'Link',
+          href: object[prop]
         }
       }
     }))

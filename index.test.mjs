@@ -5926,83 +5926,217 @@ describe('onepage.pub', () => {
       )
     })
   })
-  describe('Link type', () => {
+  describe('Link types', () => {
     let actor1 = null
     let token1 = null
-    let create = null
-    let image = null
-    let create2 = null
-    let image2 = null
+    let actor2 = null
+    let token2 = null
+    let actor3 = null
     before(async () => {
-      [actor1, token1] = await registerActor()
+      [actor1, token1] = await registerActor();
+      [actor2, token2] = await registerActor(REMOTE_PORT);
+      [actor3] = await registerActor()
+      await settle(MAIN_PORT)
+      await settle(REMOTE_PORT)
+      const follow = await doActivity(actor2, token2, {
+        type: 'Follow',
+        to: actor1.id,
+        cc: PUBLIC,
+        object: actor1.id
+      })
+      await settle(MAIN_PORT)
+      await settle(REMOTE_PORT)
+      await doActivity(actor1, token1, {
+        type: 'Accept',
+        to: actor2.id,
+        cc: PUBLIC,
+        object: follow.id
+      })
+      await settle(MAIN_PORT)
+      await settle(REMOTE_PORT)
     })
 
-    it('can create an object with a Link as `url`', async () => {
-      create = await doActivity(actor1, token1, {
-        type: 'Create',
-        to: 'as:Public',
-        object: {
-          type: 'Image',
-          name: 'My picture',
-          url: {
-            type: 'Link',
-            mediaType: 'image/png',
-            href: 'https://example.com/images/mypicture.png'
-          }
-        }
+    async function testType (desc, src, testFn) {
+      let activity
+      let object
+      it('can create ' + desc, async () => {
+        activity = await doActivity(actor1, token1, {
+          type: 'Create',
+          to: PUBLIC,
+          object: (typeof src === 'function') ? src() : src
+        })
+        object = activity.object
+        testFn(object)
       })
-      image = create.object
-      assert.equal(typeof image.url, 'object')
-      assert.equal(image.url.type, 'Link')
-      assert.equal(image.url.mediaType, 'image/png')
-      assert.equal(image.url.href, 'https://example.com/images/mypicture.png')
-    })
-    it('can retrieve an object with a Link as `url`', async () => {
-      const fetched = await getObject(image.id, token1)
-      assert.equal(typeof fetched.url, 'object')
-      assert.equal(fetched.url.type, 'Link')
-      assert.equal(fetched.url.mediaType, 'image/png')
-      assert.equal(fetched.url.href, 'https://example.com/images/mypicture.png')
-    })
-    it('can create an object with an array of Link objects as `url`', async () => {
-      create2 = await doActivity(actor1, token1, {
-        type: 'Create',
-        to: 'as:Public',
-        object: {
-          type: 'Image',
-          name: 'My picture',
-          url: [{
-            type: 'Link',
-            mediaType: 'image/webp',
-            href: 'https://example.com/images/mypicture.webp'
+      it('can retrieve ' + desc, async () => {
+        const fetched = await getObject(object.id, token1)
+        testFn(fetched)
+      })
+      it('can retrieve from the outbox ' + desc, async () => {
+        await settle(MAIN_PORT)
+        const outbox = await getObject(actor1.outbox, token1)
+        const outboxPage = await getObject(outbox.first.id, token1)
+        const foundActivity = outboxPage.orderedItems.find(item => item.id === activity.id)
+        const found = foundActivity.object
+        testFn(found)
+      })
+      it('can retrieve from the remote inbox ' + desc, async () => {
+        await settle(REMOTE_PORT)
+        const inbox = await getObject(actor2.inbox, token2)
+        const inboxPage = await getObject(inbox.first.id, token2)
+        const foundActivity = inboxPage.orderedItems.find(
+          item => item.id === activity.id
+        )
+        const found = foundActivity.object
+        testFn(found)
+      })
+      it('can retrieve from the remote proxy ' + desc, async () => {
+        await settle(REMOTE_PORT)
+        const proxied = await getProxy(object.id, actor2, token2)
+        testFn(proxied)
+      })
+    }
+
+    testType('image with Link as url',
+      {
+        type: 'Image',
+        name: 'My image',
+        url: {
+          type: 'Link',
+          mediaType: 'image/png',
+          href: 'https://example.com/images/mypicture.png'
+        }
+      },
+      (object) => {
+        assert.equal(typeof object.url, 'object')
+        assert.equal(object.url.type, 'Link')
+        assert.equal(object.url.mediaType, 'image/png')
+        assert.equal(object.url.href, 'https://example.com/images/mypicture.png')
+      }
+    )
+    testType('image with array of Link as url',
+      {
+        type: 'Image',
+        name: 'My image',
+        url: [{
+          type: 'Link',
+          mediaType: 'image/webp',
+          href: 'https://example.com/images/mypicture.webp'
+        },
+        {
+          type: 'Link',
+          mediaType: 'image/jpeg',
+          href: 'https://example.com/images/mypicture.jpeg'
+        }]
+      },
+      (object) => {
+        assert.ok(Array.isArray(object.url))
+        assert.strictEqual(object.url.length, 2)
+        assert.equal(typeof object.url[0], 'object')
+        assert.equal(object.url[0].type, 'Link')
+        assert.equal(object.url[0].mediaType, 'image/webp')
+        assert.equal(object.url[0].href, 'https://example.com/images/mypicture.webp')
+        assert.equal(typeof object.url[1], 'object')
+        assert.equal(object.url[1].type, 'Link')
+        assert.equal(object.url[1].mediaType, 'image/jpeg')
+        assert.equal(object.url[1].href, 'https://example.com/images/mypicture.jpeg')
+      })
+
+    testType('note with Hashtag as tag',
+      {
+        type: 'Note',
+        content: 'Hello, world! <a href="https://example.com/tag/greeting">#greeting</a>',
+        tag: {
+          type: 'Hashtag',
+          name: '#greeting',
+          href: 'https://example.com/tag/greeting'
+        }
+      },
+      (object) => {
+        assert.equal(typeof object.tag, 'object')
+        assert.equal(object.tag.type, 'Hashtag')
+        assert.equal(object.tag.name, '#greeting')
+        assert.equal(object.tag.href, 'https://example.com/tag/greeting')
+      }
+    )
+    testType('note with array of Hashtag as tag',
+      {
+        type: 'Note',
+        content: 'Hello, world! <a href="https://example.com/tag/greeting">#greeting</a> <a href="https://example.com/tag/global">#global</a>',
+        tag: [
+          {
+            type: 'Hashtag',
+            name: '#greeting',
+            href: 'https://example.com/tag/greeting'
           },
           {
-            type: 'Link',
-            mediaType: 'image/jpeg',
-            href: 'https://example.com/images/mypicture.jpeg'
-          }]
-        }
+            type: 'Hashtag',
+            name: '#global',
+            href: 'https://example.com/tag/global'
+          }
+        ]
+      },
+      (object) => {
+        assert.ok(Array.isArray(object.tag))
+        assert.strictEqual(object.tag.length, 2)
+        assert.equal(typeof object.tag[0], 'object')
+        assert.equal(object.tag[0].type, 'Hashtag')
+        assert.equal(object.tag[0].name, '#greeting')
+        assert.equal(object.tag[0].href, 'https://example.com/tag/greeting')
+        assert.equal(typeof object.tag[1], 'object')
+        assert.equal(object.tag[1].type, 'Hashtag')
+        assert.equal(object.tag[1].name, '#global')
+        assert.equal(object.tag[1].href, 'https://example.com/tag/global')
       })
-      image2 = create2.object
-      assert.ok(Array.isArray(image2.url))
-      assert.strictEqual(image2.url.length, 2)
-      assert.equal(image2.url[0].type, 'Link')
-      assert.equal(image2.url[0].mediaType, 'image/webp')
-      assert.equal(image2.url[0].href, 'https://example.com/images/mypicture.webp')
-      assert.equal(image2.url[1].type, 'Link')
-      assert.equal(image2.url[1].mediaType, 'image/jpeg')
-      assert.equal(image2.url[1].href, 'https://example.com/images/mypicture.jpeg')
-    })
-    it('can retrieve an object with a Link as `url`', async () => {
-      const fetched = await getObject(image2.id, token1)
-      assert.ok(Array.isArray(fetched.url))
-      assert.strictEqual(fetched.url.length, 2)
-      assert.equal(fetched.url[0].type, 'Link')
-      assert.equal(fetched.url[0].mediaType, 'image/webp')
-      assert.equal(fetched.url[0].href, 'https://example.com/images/mypicture.webp')
-      assert.equal(fetched.url[1].type, 'Link')
-      assert.equal(fetched.url[1].mediaType, 'image/jpeg')
-      assert.equal(fetched.url[1].href, 'https://example.com/images/mypicture.jpeg')
-    })
+    testType('note with Mention as tag',
+      () => {
+        return {
+          type: 'Note',
+          content: `Hello, <a href="${actor2.id}">${actor2.preferredUsername}</a>`,
+          tag: {
+            type: 'Mention',
+            name: actor2.preferredUsername,
+            href: actor2.id
+          }
+        }
+      },
+      (object) => {
+        assert.equal(typeof object.tag, 'object')
+        assert.equal(object.tag.type, 'Mention')
+        assert.equal(object.tag.name, actor2.preferredUsername)
+        assert.equal(object.tag.href, actor2.id)
+      }
+    )
+    testType('note with array of Mention as tag',
+      () => {
+        return {
+          type: 'Note',
+          content: `Hello, <a href="${actor2.id}>${actor2.preferredUsername}</a>` + ` and <a href="${actor3.id}>${actor3.preferredUsername}</a>`,
+          tag: [
+            {
+              type: 'Mention',
+              name: actor2.preferredUsername,
+              href: actor2.id
+            },
+            {
+              type: 'Mention',
+              name: actor3.preferredUsername,
+              href: actor3.id
+            }
+          ]
+        }
+      },
+      (object) => {
+        assert.ok(Array.isArray(object.tag))
+        assert.strictEqual(object.tag.length, 2)
+        assert.equal(typeof object.tag[0], 'object')
+        assert.equal(object.tag[0].type, 'Mention')
+        assert.equal(object.tag[0].name, actor2.preferredUsername)
+        assert.equal(object.tag[0].href, actor2.id)
+        assert.equal(typeof object.tag[1], 'object')
+        assert.equal(object.tag[1].type, 'Mention')
+        assert.equal(object.tag[1].name, actor3.preferredUsername)
+        assert.equal(object.tag[1].href, actor3.id)
+      })
   })
 })
