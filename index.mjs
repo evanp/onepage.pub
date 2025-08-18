@@ -4876,20 +4876,26 @@ const server = process.env.OPP_ORIGIN
     app
   )
 
-db.init().then(() => {
-  logger.info('Database initialized')
-  server.listen(PORT, () => {
-    console.log(`Listening on ${PORT}`)
-    for (const fixup of fixups) {
-      fixup()
-        .then((result) => {
-          logger.info(result)
-        })
-        .catch((error) => {
-          logger.error(error)
-        })
-    }
-    runAllMaintenance()
-    setInterval(runAllMaintenance, MAINTENANCE_INTERVAL)
+db.init()
+  .then(() => {
+    logger.info('Database initialized')
+    server.listen(PORT, () => {
+      console.log(`Listening on ${PORT}`)
+      for (const fixup of fixups) {
+        fixup()
+          .then((result) => {
+            logger.info(result)
+          })
+          .catch((error) => {
+            logger.error(error)
+          })
+      }
+      runAllMaintenance()
+      setInterval(runAllMaintenance, MAINTENANCE_INTERVAL)
+    })
   })
-})
+  .catch((err) => {
+    logger.error('Database initialization failed')
+    logger.error(err)
+    logger.info('Shutting down')
+  })
