@@ -262,7 +262,6 @@ class Counter {
 class Database {
   #path = null
   #db = null
-  #stmts = new Map()
   constructor (path) {
     this.#path = path
     this.#db = new sqlite3.Database(this.#path)
@@ -325,14 +324,8 @@ class Database {
 
   async run (...params) {
     logger.silly('run() SQL: ' + params[0], params.slice(1))
-    const qry = params[0]
-    let stmt = this.#stmts.get(qry)
-    if (!stmt) {
-      stmt = this.#db.prepare(qry)
-      this.#stmts.set(qry, stmt)
-    }
     return new Promise((resolve, reject) => {
-      stmt.run(...params.slice(1), (err, results) => {
+      this.#db.run(...params, (err, results) => {
         if (err) {
           reject(err)
         } else {
@@ -344,14 +337,8 @@ class Database {
 
   async get (...params) {
     logger.silly('get() SQL: ' + params[0], params.slice(1))
-    const qry = params[0]
-    let stmt = this.#stmts.get(qry)
-    if (!stmt) {
-      stmt = this.#db.prepare(qry)
-      this.#stmts.set(qry, stmt)
-    }
     return new Promise((resolve, reject) => {
-      stmt.get(...params.slice(1), (err, results) => {
+      this.#db.get(...params, (err, results) => {
         if (err) {
           reject(err)
         } else {
@@ -363,14 +350,8 @@ class Database {
 
   async all (...params) {
     logger.silly('all() SQL: ' + params[0], params.slice(1))
-    const qry = params[0]
-    let stmt = this.#stmts.get(qry)
-    if (!stmt) {
-      stmt = this.#db.prepare(qry)
-      this.#stmts.set(qry, stmt)
-    }
     return new Promise((resolve, reject) => {
-      stmt.all(...params.slice(1), (err, results) => {
+      this.#db.all(...params, (err, results) => {
         if (err) {
           reject(err)
         } else {
@@ -381,9 +362,6 @@ class Database {
   }
 
   async close () {
-    for (const stmt of this.#stmts.values()) {
-      stmt.finalize()
-    }
     return new Promise((resolve, reject) => {
       this.#db.close((err) => {
         if (err) {
