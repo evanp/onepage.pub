@@ -289,6 +289,30 @@ class Database {
     await this.run(
       'CREATE INDEX IF NOT EXISTS idx_remotecache_expires ON remotecache(expires)'
     )
+    await this.run(
+      'CREATE TABLE IF NOT EXISTS addressee_2 (objectId VARCHAR(255), addresseeId VARCHAR(255), PRIMARY KEY (objectId, addresseeId), FOREIGN KEY (objectId) REFERENCES object(id))'
+    )
+    await this.run(
+      'CREATE INDEX IF NOT EXISTS idx_addressee_2_objectId ON addressee_2(objectId)'
+    )
+    await this.run(
+      'INSERT OR IGNORE INTO addressee_2 SELECT * FROM addressee'
+    )
+    await this.run(
+      'DELETE FROM addressee'
+    )
+    await this.run(
+      'CREATE TABLE IF NOT EXISTS upload_2 (relative VARCHAR(255) PRIMARY KEY, mediaType VARCHAR(255), objectId VARCHAR(255), FOREIGN KEY (objectId) REFERENCES object(id))'
+    )
+    await this.run(
+      'CREATE INDEX IF NOT EXISTS idx_upload_2_objectId ON upload_2(objectId)'
+    )
+    await this.run(
+      'INSERT OR IGNORE INTO upload_2 SELECT * FROM upload'
+    )
+    await this.run(
+      'DELETE FROM upload'
+    )
 
     // Create the public key for this server if it doesn't exist
 
@@ -980,7 +1004,7 @@ class ActivityObject {
     ])
     await Promise.all(
       addresseeIds.map((addresseeId) =>
-        db.run('INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)', [
+        db.run('INSERT INTO addressee_2 (objectId, addresseeId) VALUES (?, ?)', [
           data.id,
           addresseeId
         ])
@@ -1179,7 +1203,7 @@ class ActivityObject {
     if (!this.#addressees) {
       const id = await this.id()
       const rows = await db.all(
-        'SELECT addresseeId FROM addressee WHERE objectId = ?',
+        'SELECT addresseeId FROM addressee_2 WHERE objectId = ?',
         [id]
       )
       if (rows.length > 0) {
@@ -1508,7 +1532,7 @@ class ActivityObject {
       }
     }
     await db.run(
-      'INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)',
+      'INSERT INTO addressee_2 (objectId, addresseeId) VALUES (?, ?)',
       [await this.id(), id]
     )
   }
@@ -2595,7 +2619,7 @@ class RemoteActivity extends Activity {
     ])
     await Promise.all(
       addresseeIds.map((addresseeId) =>
-        db.run('INSERT INTO addressee (objectId, addresseeId) VALUES (?, ?)', [
+        db.run('INSERT INTO addressee_2 (objectId, addresseeId) VALUES (?, ?)', [
           dataId,
           addresseeId
         ])
@@ -3198,7 +3222,7 @@ class Upload {
   }
 
   static async fromRelative (relative) {
-    const row = await db.get('SELECT * FROM upload WHERE relative = ?', [
+    const row = await db.get('SELECT * FROM upload_2 WHERE relative = ?', [
       relative
     ])
     if (!row) {
@@ -3235,7 +3259,7 @@ class Upload {
     }
     await fsp.writeFile(this.path(), this.buffer)
     await db.run(
-      'INSERT INTO upload (relative, mediaType, objectId) VALUES (?, ?, ?)',
+      'INSERT INTO upload_2 (relative, mediaType, objectId) VALUES (?, ?, ?)',
       [this.relative, this.mediaType, this.objectId]
     )
   }
