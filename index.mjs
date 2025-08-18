@@ -41,6 +41,7 @@ const ORIGIN =
   (PORT === 443 ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || new URL(ORIGIN).hostname
 const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
+const SQLITE3_CACHE = parseInt(process.env.OPP_SQLITE3_CACHE) || 32768
 const MAXIMUM_TIME_SKEW = 5 * 60 * 1000 // 5 minutes
 const MAINTENANCE_INTERVAL = 6 * 60 * 60 * 1000 // hourly maintenance
 
@@ -269,6 +270,15 @@ class Database {
   }
 
   async init () {
+    // Set up SQLite for best performance (hopefully)
+    await this.run('PRAGMA journal_mode=WAL')
+    await this.run('PRAGMA synchronous=NORMAL')
+    await this.run('PRAGMA wal_autocheckpoint=1000')
+    await this.run('PRAGMA busy_timeout=5000')
+    await this.run('PRAGMA temp_store=MEMORY')
+    await this.run(`PRAGMA cache_size=-${SQLITE3_CACHE}`)
+    await this.run('PRAGMA optimize')
+
     await this.run(
       'CREATE TABLE IF NOT EXISTS user (username VARCHAR(255) PRIMARY KEY, passwordHash VARCHAR(255), actorId VARCHAR(255), privateKey TEXT)'
     )
