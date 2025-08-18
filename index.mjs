@@ -249,6 +249,12 @@ class Counter {
       ].join(';'))
       .join(', ')
   }
+
+  get (name, param) {
+    return (this.metrics[name])
+      ? this.metrics[name][param]
+      : undefined
+  }
 }
 
 // Classes
@@ -3237,11 +3243,19 @@ class Upload {
 
 // Server
 
+const { combine, timestamp, errors, splat, printf } = winston.format
+
 const logger = winston.createLogger({
   level: LOG_LEVEL,
-  format: winston.format.printf((info) => {
-    return `${new Date().toISOString()} ${info.level}: ${info.message}`
-  }),
+  format: combine(
+    timestamp(),
+    errors({ stack: true }),
+    splat(),
+    printf(({ timestamp, level, message, stack, ...rest }) => {
+      const meta = Object.keys(rest).length ? ` ${JSON.stringify(rest)}` : ''
+      return `${timestamp} ${level}: ${stack || message}${meta}`
+    })
+  ),
   transports: [new winston.transports.Console()]
 })
 
@@ -3299,7 +3313,11 @@ app.use((req, res, next) => {
   const oldEnd = res.end
   res.end = function (...args) {
     const subject = req.auth?.subject || '-'
-    logger.info(`${res.statusCode} ${req.method} ${req.url} (${subject})`)
+    const duration = req.counter.get('app', 'dur')
+    logger.info(
+      `${res.statusCode} ${req.method} ${req.url}`,
+      { subject, duration }
+    )
     oldEnd.apply(this, args)
   }
   next()
