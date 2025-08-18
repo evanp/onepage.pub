@@ -3323,7 +3323,9 @@ app.use((req, res, next) => {
   next()
 })
 
-app.use(cors())
+app.use(cors({
+  maxAge: 86400
+}))
 
 app.use(
   express.json({
