@@ -41,7 +41,7 @@ const ORIGIN =
   (PORT === 443 ? `https://${HOSTNAME}` : `https://${HOSTNAME}:${PORT}`)
 const NAME = process.env.OPP_NAME || new URL(ORIGIN).hostname
 const UPLOAD_DIR = process.env.OPP_UPLOAD_DIR || path.join(tmpdir(), nanoid())
-const SQLITE3_CACHE = parseInt(process.env.OPP_SQLITE3_CACHE) || 32768
+const SQLITE3_CACHE = parseInt(process.env.OPP_SQLITE3_CACHE) || 16384
 const MAXIMUM_TIME_SKEW = 5 * 60 * 1000 // 5 minutes
 const MAINTENANCE_INTERVAL = 6 * 60 * 60 * 1000 // hourly maintenance
 
