@@ -340,13 +340,11 @@ class Database {
   async run (...params) {
     logger.silly('run() SQL: ' + params[0], params.slice(1))
     const qry = params[0]
-    let stmt = this.#stmts.get(qry)
-    if (!stmt) {
-      stmt = this.#db.prepare(qry)
-      this.#stmts.set(qry, stmt)
-    }
+    const stmt = this.getStmt(qry)
     return new Promise((resolve, reject) => {
       stmt.run(...params.slice(1), (err, results) => {
+        stmt.reset()
+        this.releaseStmt(stmt, qry)
         if (err) {
           reject(err)
         } else {
@@ -359,10 +357,11 @@ class Database {
   async get (...params) {
     logger.silly('get() SQL: ' + params[0], params.slice(1))
     const qry = params[0]
-    const stmt = this.#db.prepare(qry)
+    const stmt = this.getStmt(qry)
     return new Promise((resolve, reject) => {
       stmt.get(...params.slice(1), (err, results) => {
-        stmt.finalize()
+        stmt.reset()
+        this.releaseStmt(stmt, qry)
         if (err) {
           reject(err)
         } else {
@@ -375,10 +374,11 @@ class Database {
   async all (...params) {
     logger.silly('all() SQL: ' + params[0], params.slice(1))
     const qry = params[0]
-    const stmt = this.#db.prepare(qry)
+    const stmt = this.getStmt(qry)
     return new Promise((resolve, reject) => {
       stmt.all(...params.slice(1), (err, results) => {
-        stmt.finalize()
+        stmt.reset()
+        this.releaseStmt(stmt, qry)
         if (err) {
           reject(err)
         } else {
@@ -389,8 +389,10 @@ class Database {
   }
 
   async close () {
-    for (const stmt of this.#stmts.values()) {
-      stmt.finalize()
+    for (const stmts of this.#stmts.values()) {
+      for (const stmt of stmts) {
+        stmt.finalize()
+      }
     }
     return new Promise((resolve, reject) => {
       this.#db.close((err) => {
@@ -409,6 +411,27 @@ class Database {
       return !!value
     } catch (err) {
       return false
+    }
+  }
+
+  getStmt (qry) {
+    const stmts = this.#stmts.get(qry)
+    let stmt
+    if (Array.isArray(stmts) && stmts.length > 0) {
+      stmt = stmts.shift()
+    } else {
+      stmt = this.#db.prepare(qry)
+    }
+    return stmt
+  }
+
+  releaseStmt (stmt, qry) {
+    let stmts = this.#stmts.get(qry)
+    if (Array.isArray(stmts)) {
+      stmts.push(stmt)
+    } else {
+      stmts = [stmt]
+      this.#stmts.set(qry, stmts)
     }
   }
 }
