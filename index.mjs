@@ -314,6 +314,9 @@ class Database {
     await this.run(
       'DELETE FROM upload'
     )
+    await this.run(
+      'CREATE INDEX IF NOT EXISTS idx_user_actorId ON user(actorId)'
+    )
 
     // Create the public key for this server if it doesn't exist
 
