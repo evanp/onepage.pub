@@ -359,13 +359,10 @@ class Database {
   async get (...params) {
     logger.silly('get() SQL: ' + params[0], params.slice(1))
     const qry = params[0]
-    let stmt = this.#stmts.get(qry)
-    if (!stmt) {
-      stmt = this.#db.prepare(qry)
-      this.#stmts.set(qry, stmt)
-    }
+    const stmt = this.#db.prepare(qry)
     return new Promise((resolve, reject) => {
       stmt.get(...params.slice(1), (err, results) => {
+        stmt.finalize()
         if (err) {
           reject(err)
         } else {
@@ -378,13 +375,10 @@ class Database {
   async all (...params) {
     logger.silly('all() SQL: ' + params[0], params.slice(1))
     const qry = params[0]
-    let stmt = this.#stmts.get(qry)
-    if (!stmt) {
-      stmt = this.#db.prepare(qry)
-      this.#stmts.set(qry, stmt)
-    }
+    const stmt = this.#db.prepare(qry)
     return new Promise((resolve, reject) => {
       stmt.all(...params.slice(1), (err, results) => {
+        stmt.finalize()
         if (err) {
           reject(err)
         } else {
