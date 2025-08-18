@@ -328,20 +328,6 @@ class Database {
       'CREATE INDEX IF NOT EXISTS idx_user_actorId ON user(actorId)'
     )
 
-    await this.run(
-      `INSERT OR IGNORE INTO remotecache (id, subject, expires, data, complete)
-       SELECT o.id, a2.addresseeId, ?, o.data, TRUE
-       FROM object o JOIN addressee_2 a2 ON o.id = a2.objectId
-       WHERE o.id NOT LIKE ?`, [Date.now() + 30 * 24 * 60 * 60 * 1000, `${ORIGIN}%`]
-    )
-
-    await this.run(
-      'DELETE FROM addressee_2 WHERE objectId NOT LIKE ?', [`${ORIGIN}%`]
-    )
-
-    await this.run(
-      'DELETE FROM object WHERE id NOT LIKE ?', [`${ORIGIN}%`]
-    )
     // Create the public key for this server if it doesn't exist
 
     await Server.ensureKey()
@@ -4834,7 +4820,27 @@ process.on('exit', (code) => {
 
 const fixups = [
   User.updateAllKeys,
-  User.updateAllCollections
+  User.updateAllCollections,
+  async () => {
+    // We used to store remote data in the same table as local data
+    // This moves the remote data to the cache table
+    logger.info('Copying remote data from object to remotecache')
+    const affected = await db.run(
+      `INSERT OR IGNORE INTO remotecache (id, subject, expires, data, complete)
+       SELECT o.id, a2.addresseeId, ?, o.data, TRUE
+       FROM object o JOIN addressee_2 a2 ON o.id = a2.objectId
+       WHERE o.id NOT LIKE ?`, [Date.now() + 30 * 24 * 60 * 60 * 1000, `${ORIGIN}%`]
+    )
+    logger.info(`Rows affected: ${affected}`)
+    logger.info('Deleting addressee_2 rows for remote data')
+    await db.run(
+      'DELETE FROM addressee_2 WHERE EXISTS (select id from remotecache rc where rc.id = addressee_2.objectId)'
+    )
+    logger.info('Deleting object rows for remote data')
+    await db.run(
+      'DELETE FROM object WHERE EXISTS (select id from remotecache rc where rc.id = object.id)'
+    )
+  }
 ]
 
 const maintenance = [
