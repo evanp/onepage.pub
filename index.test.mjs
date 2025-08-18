@@ -17,6 +17,7 @@ const CLIENT_PORT = 54938 // Mn
 const THIRD_PORT = 55845 // Fe
 const FOURTH_PORT = 58933 // Co
 const FIFTH_PORT = 58693 // Ni
+const BAD_PORT = 63546 // Cu
 
 const CLIENT_ID = `https://localhost:${CLIENT_PORT}/client`
 const REDIRECT_URI = `https://localhost:${CLIENT_PORT}/oauth/callback`
@@ -6138,5 +6139,21 @@ describe('onepage.pub', () => {
         assert.equal(object.tag[1].name, actor3.preferredUsername)
         assert.equal(object.tag[1].href, actor3.id)
       })
+  })
+  describe('Cache bad fetches', async () => {
+    let actor1
+    let token1
+    const badId = `http://localhost:${BAD_PORT}/object/znpNn5glv8_x8gCQ1iRXq`
+    before(async () => {
+      [actor1, token1] = await registerActor()
+    })
+    it('fails for a bad id', async () => {
+      const results = await getProxy(badId, actor1, token1)
+      assert.ok(!results)
+    })
+    it('fails again for the same id', async () => {
+      const results = await getProxy(badId, actor1, token1)
+      assert.ok(!results)
+    })
   })
 })

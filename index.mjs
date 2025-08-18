@@ -327,6 +327,9 @@ class Database {
     await this.run(
       'CREATE INDEX IF NOT EXISTS idx_user_actorId ON user(actorId)'
     )
+    await this.run(
+      'CREATE TABLE IF NOT EXISTS remote_failure (url VARCHAR(255), subject VARCHAR(255), status int, expires DATETIME, PRIMARY KEY (url, subject))'
+    )
 
     // Create the public key for this server if it doesn't exist
 
@@ -661,6 +664,7 @@ class ActivityObject {
   #counter
   #skipRemoteCache
   static #DEFAULT_EXPIRES = 24 * 60 * 60 * 1000 // one day
+  static #FAILURE_EXPIRES = 1 * 60 * 60 * 1000 // one hour
   constructor (data, options = {}) {
     const { subject, cache, counter, skipRemoteCache } = options
     if (!data) {
@@ -921,8 +925,13 @@ class ActivityObject {
       keyId = server.keyId()
       privKey = server.privateKey()
     }
+    const u = new URL(this.#id)
+    const base = u.origin + u.pathname + u.search
+    if (await this.failedBefore(base)) {
+      return null
+    }
     const signStartTime = Date.now()
-    const signature = new HTTPSignature(keyId, privKey, 'GET', this.#id, date)
+    const signature = new HTTPSignature(keyId, privKey, 'GET', base, date)
     headers.Signature = signature.header
     const signEndTime = Date.now()
     if (this.#counter) {
@@ -930,10 +939,14 @@ class ActivityObject {
       this.#counter.increment('crypto', 'count')
     }
     logger.debug(`fetching ${this.#id} with key ID ${keyId}`)
-    const u = new URL(this.#id)
-    const base = u.origin + u.pathname + u.search
     const startTime = Date.now()
-    const res = await fetch(base, { headers })
+    let res
+    try {
+      res = await fetch(base, { headers })
+    } catch (err) {
+      await this.rememberFailure(base, 0)
+      return null
+    }
     const endTime = Date.now()
     if (this.#counter) {
       this.#counter.add('http', 'dur', endTime - startTime)
@@ -942,7 +955,9 @@ class ActivityObject {
     if (![200, 410].includes(res.status)) {
       const message = await res.text()
       logger.warn(`Error fetching ${this.#id}: ${res.status} ${res.statusText} (${message})`)
+      await this.rememberFailure(base, res.status)
       this.#complete = false
+      return null
     } else {
       const parseStartTime = Date.now()
       const json = await res.json()
@@ -969,6 +984,32 @@ class ActivityObject {
       }
       await this.cache()
     }
+  }
+
+  async rememberFailure (url, status) {
+    logger.info(`Logging failure status ${status} for url ${url} with subject ${await toId(this.#subject)}`)
+    await db.run('INSERT OR REPLACE INTO remote_failure (url, subject, status, expires) VALUES (?, ?, ?, ?)',
+      [url, await toId(this.#subject), status || 0,
+        Date.now() + ActivityObject.#FAILURE_EXPIRES]
+    )
+  }
+
+  async failedBefore (url, status) {
+    const row = await db.get(
+      'SELECT expires FROM remote_failure WHERE url = ? AND subject = ?',
+      [url, await toId(this.#subject)]
+    )
+    if (!row) {
+      return false
+    }
+    if (row.expires > Date.now()) {
+      return true
+    }
+    await db.run(
+      'DELETE FROM remote_failure WHERE url = ? AND subject = ?',
+      [url, await toId(this.#subject)]
+    )
+    return false
   }
 
   static async get (ref, options = {}) {
@@ -4166,6 +4207,9 @@ app.get(
       } catch (err) {
         throw new createError.BadRequest('Invalid client_id')
       }
+      if (!client) {
+        throw new createError.BadRequest('Invalid client_id')
+      }
       if (!req.query.redirect_uri) {
         throw new createError.BadRequest('Missing redirect_uri')
       }
@@ -4855,6 +4899,21 @@ const maintenance = [
       await db.run('DELETE FROM remotecache WHERE expires < ?', [Date.now()])
       const { afterCount } = await db.get(
         'SELECT count(*) AS afterCount FROM remotecache WHERE expires < ?',
+        [ts])
+      return `Deleted ${beforeCount - afterCount} stale rows from remote cache`
+    }
+  },
+  async () => {
+    const ts = Date.now()
+    const { beforeCount } = await db.get(
+      'SELECT count(*) AS beforeCount FROM remote_failure WHERE expires < ?',
+      [ts])
+    if (beforeCount === 0) {
+      return 'No stale remote failure objects'
+    } else {
+      await db.run('DELETE FROM remote_failure WHERE expires < ?', [Date.now()])
+      const { afterCount } = await db.get(
+        'SELECT count(*) AS afterCount FROM remote_failure WHERE expires < ?',
         [ts])
       return `Deleted ${beforeCount - afterCount} stale rows from remote cache`
     }
