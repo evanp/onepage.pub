@@ -675,6 +675,25 @@ class ActivityObject {
     }
   }
 
+  async firstOf (names) {
+    if (this.#json) {
+      for (const name of names) {
+        if (name in this.#json) {
+          return [name, this.#json[name]]
+        }
+      }
+    }
+    if (this.#id && (!this.#json || !this.#complete)) {
+      await this.#getCompleteJSON()
+      for (const name of names) {
+        if (name in this.#json) {
+          return [name, this.#json[name]]
+        }
+      }
+    }
+    return [undefined, undefined]
+  }
+
   async setProp (name, value) {
     if (this.#json) {
       this.#json[name] = value
@@ -1302,11 +1321,9 @@ class ActivityObject {
           icon: await this.prop('icon')
         }
 
-    for (const prop of ['nameMap', 'name', 'summaryMap', 'summary']) {
-      if (await this.hasProp(prop)) {
-        brief[prop] = await this.prop(prop)
-        break
-      }
+    const [prop, value] = await this.firstOf(['nameMap', 'name', 'summaryMap', 'summary'])
+    if (prop) {
+      brief[prop] = value
     }
     switch (await this.type()) {
       case 'Key':
