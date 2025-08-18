@@ -33,7 +33,7 @@
     "lint": "standard",
     "lint:fix": "standard --fix"
   },
-  "version": "0.15.0",
+  "version": "0.15.1",
   "engine": {
     "node": ">=20.0.0"
   }
