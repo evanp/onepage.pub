@@ -2620,31 +2620,7 @@ class Collection extends ActivityObject {
 
 class RemoteActivity extends Activity {
   async save (owner = null, addressees = null) {
-    const data = await this.json()
-    if (!owner) {
-      owner = ActivityObject.guessOwner(data)
-    }
-    if (!addressees) {
-      addressees = ActivityObject.guessAddressees(data)
-    }
-    const dataId = await this.id()
-    const ownerId = (await toId(owner)) || dataId
-    const addresseeIds = await Promise.all(
-      addressees.map((addressee) => toId(addressee))
-    )
-    await db.run('INSERT INTO object (id, owner, data) VALUES (?, ?, ?)', [
-      await dataId,
-      ownerId,
-      JSON.stringify(data)
-    ])
-    await Promise.all(
-      addresseeIds.map((addresseeId) =>
-        db.run('INSERT INTO addressee_2 (objectId, addresseeId) VALUES (?, ?)', [
-          dataId,
-          addresseeId
-        ])
-      )
-    )
+    throw new Error("Can't save a remote object")
   }
 
   async apply (remote = null, addressees = null, ...args) {
@@ -4709,9 +4685,7 @@ app.post(
         activity.setActor(remote)
       }
       await activity.apply(null, null, await owner.json())
-      await activity.save(remote)
-      // Since it was delivered here, owner is an implicit addressee
-      await activity.ensureAddressee(owner)
+      await activity.cache()
       const inbox = new Collection(await owner.prop('inbox'))
       await inbox.prepend(activity)
       res.status(202)
