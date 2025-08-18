@@ -928,6 +928,7 @@ class ActivityObject {
     const u = new URL(this.#id)
     const base = u.origin + u.pathname + u.search
     if (await this.failedBefore(base)) {
+      logger.info(`Skipping fetch of ${base} for ${await this.#subject}`)
       return null
     }
     const signStartTime = Date.now()
@@ -987,17 +988,19 @@ class ActivityObject {
   }
 
   async rememberFailure (url, status) {
-    logger.info(`Logging failure status ${status} for url ${url} with subject ${await toId(this.#subject)}`)
+    const subject = (await toId(this.#subject)) || (await Server.get()).id()
+    logger.info(`Logging failure status ${status} for url ${url} with subject ${subject}`)
     await db.run('INSERT OR REPLACE INTO remote_failure (url, subject, status, expires) VALUES (?, ?, ?, ?)',
-      [url, await toId(this.#subject), status || 0,
+      [url, subject, status || 0,
         Date.now() + ActivityObject.#FAILURE_EXPIRES]
     )
   }
 
-  async failedBefore (url, status) {
+  async failedBefore (url) {
+    const subject = (await toId(this.#subject)) || (await Server.get()).id()
     const row = await db.get(
       'SELECT expires FROM remote_failure WHERE url = ? AND subject = ?',
-      [url, await toId(this.#subject)]
+      [url, subject]
     )
     if (!row) {
       return false
@@ -1007,7 +1010,7 @@ class ActivityObject {
     }
     await db.run(
       'DELETE FROM remote_failure WHERE url = ? AND subject = ?',
-      [url, await toId(this.#subject)]
+      [url, subject]
     )
     return false
   }
@@ -3514,6 +3517,10 @@ class Server {
 
   keyId () {
     return makeUrl('key')
+  }
+
+  id () {
+    return this.#origin
   }
 
   toJSON () {
