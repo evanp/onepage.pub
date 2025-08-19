@@ -3709,7 +3709,7 @@ app.get(
       res.set('Content-Type', 'application/activity+json')
       res.json(await server.toJSON())
     } else {
-      const acceptHeader = req.headers.get('Accept')
+      const acceptHeader = req.get('Accept')
       logger.warn(`Cannot satisfy Accept header requirements: ${acceptHeader}`)
       res.status(406).send('Not Acceptable')
     }
