@@ -12,7 +12,7 @@
     "express-session": "^1.18.2",
     "http-errors": "^2.0.0",
     "jsonwebtoken": "^9.0.2",
-    "mime": "^4.0.7",
+    "mime": "^4.1.0",
     "multer": "^2.0.2",
     "nanoid": "^5.1.5",
     "passport": "^0.7.0",
