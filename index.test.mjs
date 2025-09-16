@@ -377,6 +377,19 @@ function parseTiming (header) {
   return timing
 }
 
+function parseAuthenticateHeader (header) {
+  return header.split(/,\s*(?=\w+=")/).reduce((acc, part, i) => {
+    if (i === 0 && part.indexOf(' ') !== -1) {
+      const [scheme, rest] = part.split(/\s+/, 2)
+      acc.scheme = scheme
+      part = rest
+    }
+    const m = /(\w+)="([^"]*)"/.exec(part)
+    if (m) acc[m[1]] = m[2]
+    return acc
+  }, {})
+}
+
 describe('onepage.pub', () => {
   let child = null
   let remote = null
@@ -3785,9 +3798,11 @@ describe('onepage.pub', () => {
         }
       })
       assert.strictEqual(res.status, 401)
-      const body = await res.json()
-      assert.strictEqual(body.error, 'invalid_token')
-      assert(body.error_description)
+      const authHeader = res.headers.get('WWW-Authenticate')
+      assert.ok(authHeader)
+      const auth = parseAuthenticateHeader(authHeader)
+      assert.strictEqual(auth.error, 'invalid_token')
+      assert.ok(auth.error_description)
     })
     it('cannot use the authorization code to write', async () => {
       const status = await failActivity(actor, code, {
@@ -3806,9 +3821,11 @@ describe('onepage.pub', () => {
         body: querystring.stringify({ id: note.id })
       })
       assert.strictEqual(res.status, 401)
-      const body = await res.json()
-      assert.strictEqual(body.error, 'invalid_token')
-      assert(body.error_description)
+      const authHeader = res.headers.get('WWW-Authenticate')
+      assert.ok(authHeader)
+      const auth = parseAuthenticateHeader(authHeader)
+      assert.strictEqual(auth.error, 'invalid_token')
+      assert.ok(auth.error_description)
     })
   })
 
@@ -3843,9 +3860,11 @@ describe('onepage.pub', () => {
         }
       })
       assert.strictEqual(res.status, 401)
-      const body = await res.json()
-      assert.strictEqual(body.error, 'invalid_token')
-      assert(body.error_description)
+      const authHeader = res.headers.get('WWW-Authenticate')
+      assert.ok(authHeader)
+      const auth = parseAuthenticateHeader(authHeader)
+      assert.strictEqual(auth.error, 'invalid_token')
+      assert.ok(auth.error_description)
     })
     it('cannot use the authorization code to write', async () => {
       const status = await failActivity(actor, refreshToken, {
@@ -3864,9 +3883,11 @@ describe('onepage.pub', () => {
         body: querystring.stringify({ id: note.id })
       })
       assert.strictEqual(res.status, 401)
-      const body = await res.json()
-      assert.strictEqual(body.error, 'invalid_token')
-      assert(body.error_description)
+      const authHeader = res.headers.get('WWW-Authenticate')
+      assert.ok(authHeader)
+      const auth = parseAuthenticateHeader(authHeader)
+      assert.strictEqual(auth.error, 'invalid_token')
+      assert.ok(auth.error_description)
     })
   })
 
@@ -6154,6 +6175,40 @@ describe('onepage.pub', () => {
     it('fails again for the same id', async () => {
       const results = await getProxy(badId, actor1, token1)
       assert.ok(!results)
+    })
+  })
+  describe('Problem details for errors', async () => {
+    it('returns problem details for a missing route', async () => {
+      const url = `https://localhost:${MAIN_PORT}/foo/bar/baz`
+      const res = await fetch(url)
+      assert.strictEqual(res.status, 404)
+      const contentType = res.headers.get('Content-Type').split(';')[0].trim()
+      assert.strictEqual(contentType, 'application/problem+json')
+      const body = await res.json()
+      assert.ok(body)
+      assert.strictEqual(typeof body, 'object')
+      assert.notEqual(body, null)
+      assert.strictEqual(body.type, 'about:blank')
+      assert.strictEqual(body.title, 'Not Found')
+      assert.strictEqual(body.status, 404)
+      assert.ok(body.detail)
+      assert.ok(!body.instance)
+    })
+    it('returns problem details for a failed object lookup', async () => {
+      const url = `https://localhost:${MAIN_PORT}/note/doesnotexist`
+      const res = await fetch(url)
+      assert.strictEqual(res.status, 404)
+      const contentType = res.headers.get('Content-Type').split(';')[0].trim()
+      assert.strictEqual(contentType, 'application/problem+json')
+      const body = await res.json()
+      assert.ok(body)
+      assert.strictEqual(typeof body, 'object')
+      assert.notEqual(body, null)
+      assert.strictEqual(body.type, 'about:blank')
+      assert.strictEqual(body.title, 'Not Found')
+      assert.strictEqual(body.status, 404)
+      assert.ok(body.detail)
+      assert.ok(!body.instance)
     })
   })
 })

@@ -23,6 +23,7 @@ import mime from 'mime'
 import path from 'node:path'
 import { tmpdir } from 'node:os'
 import cors from 'cors'
+import statuses from 'statuses'
 
 // Configuration
 
@@ -4797,7 +4798,12 @@ app.post(
   })
 )
 
+app.use((req, res, next) => {
+  throw new createError.NotFound('No such route')
+})
+
 app.use((err, req, res, next) => {
+  let type, status, title, detail
   if (createError.isHttpError(err)) {
     if (err.statusCode >= 500) {
       logger.error(`Error status ${err.statusCode}: `, err)
@@ -4806,26 +4812,29 @@ app.use((err, req, res, next) => {
       logger.warn(`Error ${err.statusCode} processing ${req.url}: ${err.message}`)
       logger.debug(err.stack)
     }
-    res.status(err.statusCode)
-    if (res.expose) {
-      res.json({ message: err.message })
-    } else {
-      res.json({ message: err.message })
-    }
-  } else if (err.name === 'UnauthorizedError') {
-    res.set('Content-Type', 'application/json')
-    res.status(401)
-    res.json({ error_description: err.message, error: 'invalid_token' })
-  } else if (err.name === 'JWTTypeError') {
-    res.set('Content-Type', 'application/json')
-    res.status(401)
-    res.json({ error_description: err.message, error: 'invalid_token' })
+    status = err.statusCode
+    detail = err.message
+  } else if (['UnauthorizedError', 'JWTTypeError'].includes(err.name)) {
+    status = 401
+    detail = err.message
+    res.set(
+      'WWW-Authenticate',
+      'Bearer error="invalid_token", error_description="Not a valid access token"'
+    )
   } else {
     logger.error('Error status 500: ', err)
     logger.debug(err.stack)
-    res.status(500)
-    res.json({ message: err.message })
+    status = 500
+    detail = err.message
   }
+  res.status(status)
+  res.set('Content-Type', 'application/problem+json')
+  res.json({
+    type: type || 'about:blank',
+    title: title || statuses(status),
+    status,
+    detail
+  })
 })
 
 process.on('unhandledRejection', (err) => {

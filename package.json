@@ -3,7 +3,7 @@
     "@popperjs/core": "^2.11.8",
     "bcrypt": "^6.0.0",
     "bootstrap": "^5.3.8",
-    "config": "^4.1.0",
+    "config": "^4.1.1",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "express": "^4.21.2",
@@ -19,6 +19,7 @@
     "passport-local": "^1.0.0",
     "passport-oauth2": "^1.8.0",
     "sqlite3": "^5.1.7",
+    "statuses": "^2.0.2",
     "supertest": "^7.1.4",
     "winston": "^3.17.0"
   },
@@ -33,7 +34,7 @@
     "lint": "standard",
     "lint:fix": "standard --fix"
   },
-  "version": "0.15.10",
+  "version": "0.16.0",
   "engine": {
     "node": ">=20.0.0"
   }
