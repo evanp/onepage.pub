@@ -14,7 +14,7 @@
     "jsonwebtoken": "^9.0.2",
     "mime": "^4.1.0",
     "multer": "^2.0.2",
-    "nanoid": "^5.1.5",
+    "nanoid": "^5.1.6",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "passport-oauth2": "^1.8.0",
