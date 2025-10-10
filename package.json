@@ -21,7 +21,7 @@
     "sqlite3": "^5.1.7",
     "statuses": "^2.0.2",
     "supertest": "^7.1.4",
-    "winston": "^3.17.0"
+    "winston": "^3.18.3"
   },
   "devDependencies": {
     "standard": "^17.1.2"
