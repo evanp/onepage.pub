@@ -6342,9 +6342,16 @@ describe('onepage.pub', { only: true }, () => {
       'has ActivityPub universal client ID flag on actor',
       { only: true },
       async () => {
-        const actorObj = await getObject(actor.id)
-        assert.strictEqual(actorObj.universalClientID, true)
+        assert.strictEqual(actor.universalClientID, true)
       }
     )
+    it('has the oauth @context on the actor', { only: true }, () => {
+      assert(actor['@context'])
+      assert(
+        actor['@context'].includes(
+          'https://purl.archive.org/socialweb/oauth/1.1'
+        )
+      )
+    })
   })
 })

@@ -77,6 +77,7 @@ const BLOCKED_CONTEXT = 'https://purl.archive.org/socialweb/blocked'
 const PENDING_CONTEXT = 'https://purl.archive.org/socialweb/pending'
 const WEBFINGER_CONTEXT = 'https://purl.archive.org/socialweb/webfinger'
 const MISCELLANY_CONTEXT = 'https://purl.archive.org/socialweb/miscellany'
+const OAUTH_CONTEXT = 'https://purl.archive.org/socialweb/oauth/1.1'
 
 const CONTEXT = [
   AS_CONTEXT,
@@ -84,7 +85,8 @@ const CONTEXT = [
   BLOCKED_CONTEXT,
   PENDING_CONTEXT,
   WEBFINGER_CONTEXT,
-  MISCELLANY_CONTEXT
+  MISCELLANY_CONTEXT,
+  OAUTH_CONTEXT
 ]
 
 const LD_MEDIA_TYPE = 'application/ld+json'
