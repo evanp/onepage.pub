@@ -4156,6 +4156,22 @@ app.get(
   })
 )
 
+app.get(
+  '/.well-known/oauth-authorization-server',
+  wrap(async (req, res) => {
+    res.status(200)
+    res.json({
+      issuer: ORIGIN,
+      authorization_endpoint: makeUrl('endpoint/oauth/authorize'),
+      token_endpoint: makeUrl('endpoint/oauth/token'),
+      scopes_supported: ['read', 'write'],
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
+      code_challenge_methods_supported: ['S256']
+    })
+  })
+)
+
 app.post(
   '/endpoint/proxyUrl',
   jwtRequired,

@@ -390,6 +390,8 @@ function parseAuthenticateHeader (header) {
   }, {})
 }
 
+// Start tests
+
 describe('onepage.pub', () => {
   let child = null
   let remote = null
@@ -6209,6 +6211,38 @@ describe('onepage.pub', () => {
       assert.strictEqual(body.status, 404)
       assert.ok(body.detail)
       assert.ok(!body.instance)
+    })
+  })
+  describe('OAuth discovery endpoint', async () => {
+    it('returns an OAuth discovery document', async () => {
+      const url = `https://localhost:${MAIN_PORT}/.well-known/oauth-authorization-server`
+      const res = await fetch(url)
+      assert.strictEqual(res.status, 200)
+      const contentType = res.headers.get('Content-Type').split(';')[0].trim()
+      assert.strictEqual(contentType, 'application/json')
+      const body = await res.json()
+      assert.ok(body)
+      assert.strictEqual(typeof body, 'object')
+      assert.notEqual(body, null)
+      assert.strictEqual(body.issuer, `https://localhost:${MAIN_PORT}`)
+      assert.strictEqual(
+        body.authorization_endpoint,
+        `https://localhost:${MAIN_PORT}/endpoint/oauth/authorize`
+      )
+      assert.strictEqual(
+        body.token_endpoint,
+        `https://localhost:${MAIN_PORT}/endpoint/oauth/token`
+      )
+      assert.ok(Array.isArray(body.scopes_supported))
+      assert.ok(body.scopes_supported.includes('read'))
+      assert.ok(body.scopes_supported.includes('write'))
+      assert.ok(Array.isArray(body.response_types_supported))
+      assert.ok(body.response_types_supported.includes('code'))
+      assert.ok(Array.isArray(body.grant_types_supported))
+      assert.ok(body.grant_types_supported.includes('authorization_code'))
+      assert.ok(body.grant_types_supported.includes('refresh_token'))
+      assert.ok(Array.isArray(body.code_challenge_methods_supported))
+      assert.ok(body.code_challenge_methods_supported.includes('S256'))
     })
   })
 })
