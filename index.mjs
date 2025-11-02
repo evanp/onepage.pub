@@ -103,6 +103,13 @@ const PUBLIC_OBJ = {
 }
 const MAX_PAGE_SIZE = 20
 
+// OAuth properties
+
+const GRANT_TYPES_SUPPORTED = ['authorization_code', 'refresh_token']
+const SCOPES_SUPPORTED = ['read', 'write']
+const RESPONSE_TYPES_SUPPORTED = ['code']
+const TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED = ['none']
+
 // Functions
 
 const jwtsign = promisify(jwt.sign)
@@ -214,6 +221,10 @@ function equalDigests (digest1, digest2) {
     return false
   }
   return hash1 === hash2
+}
+
+function notIncluded (arr1, arr2) {
+  return arr1.some(item => !arr2.includes(item))
 }
 
 class Counter {
@@ -4164,10 +4175,12 @@ app.get(
       issuer: ORIGIN,
       authorization_endpoint: makeUrl('endpoint/oauth/authorize'),
       token_endpoint: makeUrl('endpoint/oauth/token'),
-      scopes_supported: ['read', 'write'],
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      code_challenge_methods_supported: ['S256']
+      registration_endpoint: makeUrl('endpoint/oauth/registration'),
+      scopes_supported: SCOPES_SUPPORTED,
+      response_types_supported: RESPONSE_TYPES_SUPPORTED,
+      grant_types_supported: GRANT_TYPES_SUPPORTED,
+      code_challenge_methods_supported: ['S256'],
+      token_endpoint_auth_methods_supported: TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED
     })
   })
 )
@@ -4505,6 +4518,94 @@ app.post(
         scope: fields.scope,
         expires_in: 86400,
         refresh_token: newRefreshToken
+      })
+    }
+  })
+)
+
+class InvalidRedirectURIError extends Error {}
+class InvalidClientMetadataError extends Error {}
+
+app.post(
+  '/endpoint/oauth/registration',
+  wrap(async (req, res) => {
+    try {
+      const contentTypeHeader = req.get('Content-Type')
+      if (!contentTypeHeader) {
+        throw new InvalidClientMetadataError('Invalid Content-Type')
+      }
+      const mediaType = contentTypeHeader.split(';')[0].trim()
+      if (mediaType !== 'application/json') {
+        throw new InvalidClientMetadataError('Invalid Content-Type')
+      }
+      const body = req.body
+      if (
+        !Array.isArray(body.redirect_uris) ||
+        body.redirect_uris.length === 0) {
+        throw new InvalidRedirectURIError('redirect_uris required')
+      }
+      body.redirect_uris.forEach((redirectUri) => {
+        let url = null
+        try {
+          url = new URL(redirectUri)
+        } catch (err) {
+          throw new InvalidRedirectURIError(
+            `${redirectUri} is not a valid URL`
+          )
+        }
+        if (url.protocol !== 'https:') {
+          throw new InvalidRedirectURIError(
+            `${redirectUri} is not an HTTPS URL`
+          )
+        }
+      })
+      if (Array.isArray(body.grant_types) &&
+        notIncluded(body.grant_types, GRANT_TYPES_SUPPORTED)) {
+        throw new InvalidClientMetadataError(`Unsupported grant type (only ${JSON.stringify(GRANT_TYPES_SUPPORTED)} supported)`)
+      }
+      if (Array.isArray(body.response_types) &&
+        notIncluded(body.response_types, RESPONSE_TYPES_SUPPORTED)) {
+        throw new InvalidClientMetadataError(`Unsupported response type (only ${JSON.stringify(RESPONSE_TYPES_SUPPORTED)} supported)`)
+      }
+      if (Array.isArray(body.scope) &&
+        notIncluded(body.scope, SCOPES_SUPPORTED)) {
+        throw new InvalidClientMetadataError(`Unsupported scope (only ${JSON.stringify(SCOPES_SUPPORTED)} supported)`)
+      }
+      if (body.token_endpoint_auth_method &&
+        !TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED.includes(body.token_endpoint_auth_method)) {
+        throw new InvalidClientMetadataError(`Unsupported token endpoint auth method (only ${JSON.stringify(TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED)} supported)`)
+      }
+      const server = await Server.get()
+      const client = new ActivityObject({
+        '@context': CONTEXT,
+        name: body.client_name,
+        redirectURI:
+          (body.redirect_uris.length === 1)
+            ? body.redirect_uris[0]
+            : body.redirect_uris,
+        attributedTo: await server.id(),
+        to: PUBLIC
+      })
+      await client.save()
+      res.status(201)
+      res.json({
+        client_id: await client.id(),
+        redirect_uris: body.redirect_uris,
+        client_name: body.client_name
+      })
+    } catch (err) {
+      let errorType = null
+      if (err instanceof InvalidClientMetadataError) {
+        errorType = 'invalid_client_metadata'
+      } else if (err instanceof InvalidRedirectURIError) {
+        errorType = 'invalid_redirect_uri'
+      } else {
+        throw err
+      }
+      res.status(400)
+      res.json({
+        error: errorType,
+        error_description: err.message
       })
     }
   })

@@ -27,6 +27,9 @@ const AS2_CONTEXT = 'https://www.w3.org/ns/activitystreams'
 const AS2_MEDIA_TYPE = 'application/activity+json; charset=utf-8'
 const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public'
 
+const SOFTWARE_ID = 'F3457B50-719D-45FE-8B8E-C64FE7E6B4E8'
+const SOFTWARE_VERSION = '1.2.3'
+
 const generateKeyPair = promisify(crypto.generateKeyPair)
 
 const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
@@ -6243,6 +6246,71 @@ describe('onepage.pub', () => {
       assert.ok(body.grant_types_supported.includes('refresh_token'))
       assert.ok(Array.isArray(body.code_challenge_methods_supported))
       assert.ok(body.code_challenge_methods_supported.includes('S256'))
+      assert.ok(Array.isArray(body.token_endpoint_auth_methods_supported))
+      assert.ok(body.token_endpoint_auth_methods_supported.includes('none'))
+    })
+  })
+  describe('OAuth client registration endpoint', async () => {
+    let clientId = null
+    it(
+      'has client registration endpoint in OAuth discovery document',
+      async () => {
+        const url = `https://localhost:${MAIN_PORT}/.well-known/oauth-authorization-server`
+        const res = await fetch(url)
+        assert.strictEqual(res.status, 200)
+        const contentType = res.headers.get('Content-Type').split(';')[0].trim()
+        assert.strictEqual(contentType, 'application/json')
+        const body = await res.json()
+        assert.ok(body)
+        assert.strictEqual(typeof body, 'object')
+        assert.notEqual(body, null)
+        assert.strictEqual(
+          body.registration_endpoint,
+          `https://localhost:${MAIN_PORT}/endpoint/oauth/registration`
+        )
+      }
+    )
+    it('can register a new OAuth client', async () => {
+      const url = `https://localhost:${MAIN_PORT}/endpoint/oauth/registration`
+      const args = {
+        redirect_uris: [REDIRECT_URI],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        scope: ['read', 'write'],
+        client_name: defaultClient.nameMap.en,
+        token_endpoint_auth_method: 'none',
+        software_id: SOFTWARE_ID,
+        software_version: SOFTWARE_VERSION
+      }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify(args)
+      })
+      const bodyText = await res.text()
+      assert.strictEqual(res.status, 201, `Error registering client: ${bodyText}`)
+      const contentType = res.headers.get('Content-Type').split(';')[0].trim()
+      assert.strictEqual(contentType, 'application/json')
+      const body = JSON.parse(bodyText)
+      assert.ok(body.client_id)
+      assert.doesNotThrow(() => URL.parse(body.client_id))
+      clientId = body.client_id
+    })
+    it('returns an Application ActivityPub id', async () => {
+      assert.ok(clientId)
+      const res = await fetch(clientId, {
+        headers: {
+          Accept: AS2_MEDIA_TYPE
+        }
+      })
+      assert.strictEqual(res.status, 200)
+      const body = await res.json()
+      assert.strictEqual(body.id, clientId)
+      assert.strictEqual(body.name, defaultClient.nameMap.en)
+      assert.strictEqual(body.redirectURI, REDIRECT_URI)
     })
   })
 })
