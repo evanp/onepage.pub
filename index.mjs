@@ -77,6 +77,7 @@ const BLOCKED_CONTEXT = 'https://purl.archive.org/socialweb/blocked'
 const PENDING_CONTEXT = 'https://purl.archive.org/socialweb/pending'
 const WEBFINGER_CONTEXT = 'https://purl.archive.org/socialweb/webfinger'
 const MISCELLANY_CONTEXT = 'https://purl.archive.org/socialweb/miscellany'
+
 const CONTEXT = [
   AS_CONTEXT,
   SEC_CONTEXT,
@@ -4180,7 +4181,8 @@ app.get(
       response_types_supported: RESPONSE_TYPES_SUPPORTED,
       grant_types_supported: GRANT_TYPES_SUPPORTED,
       code_challenge_methods_supported: ['S256'],
-      token_endpoint_auth_methods_supported: TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED
+      token_endpoint_auth_methods_supported: TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
+      activitypub_universal_client_id: true
     })
   })
 )
@@ -4798,6 +4800,8 @@ app.get(
         const hostPart = new URL(ORIGIN).host
         output.webfinger = `${username}@${hostPart}`
       }
+
+      output.universalClientID = true
     }
     if (output.type === 'Tombstone') {
       res.status(410)

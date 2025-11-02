@@ -395,7 +395,7 @@ function parseAuthenticateHeader (header) {
 
 // Start tests
 
-describe('onepage.pub', () => {
+describe('onepage.pub', { only: true }, () => {
   let child = null
   let remote = null
   let client = null
@@ -6312,5 +6312,39 @@ describe('onepage.pub', () => {
       assert.strictEqual(body.name, defaultClient.nameMap.en)
       assert.strictEqual(body.redirectURI, REDIRECT_URI)
     })
+  })
+
+  describe('ActivityPub universal client ID', { only: true }, async () => {
+    let actor = null
+    before(async () => {
+      [actor] = await registerActor()
+    })
+    it(
+      'has ActivityPub universal client ID flag in OAuth discovery document',
+      { only: true },
+      async () => {
+        const url = `https://localhost:${MAIN_PORT}/.well-known/oauth-authorization-server`
+        const res = await fetch(url)
+        assert.strictEqual(res.status, 200)
+        const contentType = res.headers.get('Content-Type').split(';')[0].trim()
+        assert.strictEqual(contentType, 'application/json')
+        const body = await res.json()
+        assert.ok(body)
+        assert.strictEqual(typeof body, 'object')
+        assert.notEqual(body, null)
+        assert.strictEqual(
+          body.activitypub_universal_client_id,
+          true
+        )
+      }
+    )
+    it(
+      'has ActivityPub universal client ID flag on actor',
+      { only: true },
+      async () => {
+        const actorObj = await getObject(actor.id)
+        assert.strictEqual(actorObj.universalClientID, true)
+      }
+    )
   })
 })
