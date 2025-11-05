@@ -1315,7 +1315,7 @@ class ActivityObject {
       const row = await db.get('SELECT owner FROM object WHERE id = ?', [
         await this.id()
       ])
-      if (row) {
+      if (row && row.owner) {
         this.#owner = await ActivityObject.get(row.owner, this.#options())
       } else {
         let ownerRef
