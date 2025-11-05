@@ -1262,6 +1262,10 @@ class ActivityObject {
       expires = Date.now() + ActivityObject.#DEFAULT_EXPIRES
     }
     const dataId = await this.id()
+    if (!ActivityObject.isRemoteId(dataId)) {
+      logger.warn('Skipping cache for local object', { dataId })
+      return
+    }
     const data = await this.json()
     const subjectId = (this.#subject)
       ? await toId(this.#subject)
@@ -5007,7 +5011,7 @@ const fixups = [
   async () => {
     // We used to store remote data in the same table as local data
     // This moves the remote data to the cache table
-    logger.info('Copying remote data from object to remotecache')
+    logger.info('Copying addressed remote data from object to remotecache')
     const affected = await db.run(
       `INSERT OR IGNORE INTO remotecache (id, subject, expires, data, complete)
        SELECT o.id, a2.addresseeId, ?, o.data, TRUE
@@ -5021,7 +5025,7 @@ const fixups = [
     )
     logger.info('Deleting object rows for remote data')
     await db.run(
-      'DELETE FROM object WHERE EXISTS (select id from remotecache rc where rc.id = object.id)'
+      'DELETE FROM object WHERE EXISTS (select id from remotecache rc where rc.id = object.id) and object.id NOT LIKE ?', [`${ORIGIN}%`]
     )
   }
 ]
