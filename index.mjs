@@ -3205,13 +3205,14 @@ class User {
   static async updateAllUsers () {
     const rows = await db.all('select actorId from user')
     for (const row of rows) {
-      const actor = await ActivityObject.get(row.actorId)
+      const actorId = row.actorId
+      const actor = await ActivityObject.get(actorId)
       if (!actor.attributedTo) {
-        logger.info('Adding attributedTo to actor', { id: actor.id })
-        await actor.patch({ attributedTo: actor.id })
+        logger.info('Adding attributedTo to actor', { id: actorId })
+        await actor.patch({ attributedTo: actorId })
       }
       if (!actor.to) {
-        logger.info('Adding to to actor', { id: actor.id })
+        logger.info('Adding to to actor', { id: actorId })
         await actor.patch({ to: PUBLIC })
       }
     }
