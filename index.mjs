@@ -3200,6 +3200,23 @@ class User {
     return User.fromRow(row)
   }
 
+  // Make sure all our actors are self-owned and publicly viewable
+
+  static async updateAllUsers () {
+    const rows = await db.all('select actorId from user')
+    for (const row of rows) {
+      const actor = await ActivityObject.get(row.actorId)
+      if (!actor.attributedTo) {
+        logger.info('Adding attributedTo to actor', { id: actor.id })
+        await actor.patch({ attributedTo: actor.id })
+      }
+      if (!actor.to) {
+        logger.info('Adding to to actor', { id: actor.id })
+        await actor.patch({ to: PUBLIC })
+      }
+    }
+  }
+
   static async updateAllKeys () {
     // TODO: change this to use a cursor
     const rows = await db.all(
@@ -5006,6 +5023,7 @@ process.on('exit', (code) => {
 })
 
 const fixups = [
+  User.updateAllUsers,
   User.updateAllKeys,
   User.updateAllCollections,
   async () => {
