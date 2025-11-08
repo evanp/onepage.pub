@@ -395,7 +395,7 @@ function parseAuthenticateHeader (header) {
 
 // Start tests
 
-describe('onepage.pub', { only: true }, () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -4636,10 +4636,13 @@ describe('onepage.pub', { only: true }, () => {
       })
       assert.ok(
         res.status >= 400 && res.status < 500,
-        `Bad status code ${res.status}`
+        `Bad status code ${res.status}: ${await res.text()}`
       )
     })
     it('refuses client ID that does not have a matching redirectURI', async () => {
+      const res0 = await fetch(`https://localhost:${FOURTH_PORT}/client`)
+      const json0 = await res0.json()
+      assert.notEqual(json0.redirectURI, REDIRECT_URI)
       const qs = querystring.stringify({
         response_type: responseType,
         client_id: `https://localhost:${FOURTH_PORT}/client`,
@@ -4654,7 +4657,7 @@ describe('onepage.pub', { only: true }, () => {
       })
       assert.ok(
         res.status >= 400 && res.status < 500,
-        `Bad status code ${res.status}`
+        `Bad status code ${res.status}: ${await res.text()}`
       )
     })
   })
@@ -6353,29 +6356,126 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('OAuth Client ID Metadata Document (CIMD)', { only: true }, async () => {
-    let actor = null
+  describe('OAuth Client ID Metadata Document (CIMD)', async () => {
+    let disco = null
+    let cookie = null
+    let cimdServer = null
+    const CIMD_ID = `https://localhost:${THIRD_PORT}/client`
+    const CIMD_REDIRECT_URI = `https://localhost:${THIRD_PORT}/oauth/callback`
     before(async () => {
-      [actor] = await registerActor()
+      [, , cookie] = await registerActor()
+      const cimdClient = {
+        client_id: CIMD_ID,
+        redirect_uris: [CIMD_REDIRECT_URI],
+        token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        client_name: 'Test scripts for onepage.pub',
+        client_uri: `https://localhost:${THIRD_PORT}/`,
+        logo_uri: `https://localhost:${THIRD_PORT}/logo.png`,
+        software_id: SOFTWARE_ID,
+        software_version: SOFTWARE_VERSION
+      }
+      cimdServer = await startClientServer(
+        THIRD_PORT,
+        JSON.stringify(cimdClient),
+        'application/json'
+      )
+    })
+    after(async () => {
+      cimdServer.close()
+    })
+    it('can get CIMD client ID', async () => {
+      const res = await fetch(CIMD_ID)
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.headers.get('Content-Type'), 'application/json')
+      const body = await res.json()
+      assert.strictEqual(typeof body, 'object')
+      assert.notEqual(body, null)
+      assert.strictEqual(body.client_id, CIMD_ID)
     })
     it(
       'has CIMD flag in OAuth discovery document',
-      { only: true },
+
       async () => {
         const url = `https://localhost:${MAIN_PORT}/.well-known/oauth-authorization-server`
         const res = await fetch(url)
         assert.strictEqual(res.status, 200)
         const contentType = res.headers.get('Content-Type').split(';')[0].trim()
         assert.strictEqual(contentType, 'application/json')
-        const body = await res.json()
-        assert.ok(body)
-        assert.strictEqual(typeof body, 'object')
-        assert.notEqual(body, null)
+        disco = await res.json()
+        assert.ok(disco)
+        assert.strictEqual(typeof disco, 'object')
+        assert.notEqual(disco, null)
         assert.strictEqual(
-          body.client_id_metadata_document_supported,
+          disco.client_id_metadata_document_supported,
           true
         )
       }
     )
+    it('Can authorize a client with CIMD', async () => {
+      let code = null
+      let csrfToken = null
+      const scope = 'read write'
+      const state = 'teststate'
+      const codeVerifier = base64URLEncode(crypto.randomBytes(32))
+      const hash = crypto.createHash('sha256').update(codeVerifier).digest()
+      const codeChallenge = base64URLEncode(hash)
+
+      const authz = disco.authorization_endpoint
+
+      const responseType = 'code'
+      const qs = querystring.stringify({
+        response_type: responseType,
+        client_id: CIMD_ID,
+        redirect_uri: CIMD_REDIRECT_URI,
+        scope,
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge
+      })
+      const res = await fetch(`${authz}?${qs}`, {
+        headers: { Cookie: cookie }
+      })
+      const body = await res.text()
+      assert.strictEqual(res.status, 200)
+      assert(body.includes('<form'))
+      assert(body.includes('submit'))
+      csrfToken = body.match(/name="csrf_token" value="(.+?)"/)[1]
+
+      const res2 = await fetch(authz, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Cookie: cookie
+        },
+        body: querystring.stringify({
+          csrf_token: csrfToken,
+          client_id: CIMD_ID,
+          redirect_uri: CIMD_REDIRECT_URI,
+          scope,
+          state,
+          code_challenge: codeChallenge
+        }),
+        redirect: 'manual'
+      })
+      const body2 = await res2.text()
+      assert.strictEqual(
+        res2.status,
+        302,
+        `Bad status code ${res2.status}: ${body2}`
+      )
+      assert.ok(res2.headers.get('Location'))
+      const location = res2.headers.get('Location')
+      assert.strictEqual(
+        location.substring(0, CIMD_REDIRECT_URI.length),
+        CIMD_REDIRECT_URI
+      )
+      const locUrl = new URL(location)
+      code = locUrl.searchParams.get('code')
+      assert.ok(code)
+      const state2 = locUrl.searchParams.get('state')
+      assert.strictEqual(state2, state)
+    })
   })
 })

@@ -4256,43 +4256,111 @@ app.get(
       if (!req.query.client_id) {
         throw new createError.BadRequest('Missing client_id')
       }
+      const clientId = req.query.client_id
       let clientIdUrl = null
       let client = null
       try {
-        clientIdUrl = new URL(req.query.client_id)
+        clientIdUrl = new URL(clientId)
       } catch {
+        logger.warn('Invalid client ID URL format', { clientId })
         throw new createError.BadRequest('Invalid client_id')
       }
       if (clientIdUrl.protocol !== 'https:') {
+        logger.warn('Invalid client ID protocol', { clientId })
         throw new createError.BadRequest('Invalid client_id')
       }
-      try {
-        client = await ActivityObject.get(req.query.client_id)
-      } catch (err) {
-        throw new createError.BadRequest('Invalid client_id')
+      if (ActivityObject.isRemoteId(clientId)) {
+        let res = null
+        try {
+          res = await fetch(clientId, {
+            headers: { Accept: ACCEPT_HEADER }
+          })
+        } catch (err) {
+          logger.warn(
+            'Cannot fetch client ID',
+            { clientId, error: err.message }
+          )
+          throw new createError.BadRequest('Invalid client_id')
+        }
+        if (!res.ok) {
+          logger.warn(
+            'Bad status code fetching client ID',
+            { clientId, statusCode: res.statusCode }
+          )
+          throw new createError.BadRequest('Invalid client_id')
+        }
+        let json = null
+        try {
+          json = await res.json()
+        } catch (err) {
+          logger.warn('Could not get client as JSON', { clientId, err })
+          throw new createError.BadRequest('Invalid client_id')
+        }
+        if (json.client_id) {
+          client = await clientFromCimd(json)
+        } else if (json.id) {
+          client = new ActivityObject(json)
+        } else {
+          logger.warn('Unrecognised client JSON', { clientId, json })
+          throw new createError.BadRequest('Invalid client_id')
+        }
+      } else {
+        try {
+          client = await ActivityObject.get(clientId)
+        } catch (err) {
+          logger.warn(
+            'Error getting client',
+            { clientId, error: err.message }
+          )
+          throw new createError.BadRequest('Invalid client_id')
+        }
       }
       if (!client) {
+        logger.warn(
+          'No client object returned',
+          { clientId }
+        )
         throw new createError.BadRequest('Invalid client_id')
       }
       if (!req.query.redirect_uri) {
         throw new createError.BadRequest('Missing redirect_uri')
       }
       if (req.query.redirect_uri !== (await client.prop('redirectURI'))) {
+        logger.warn(
+          'Redirect URI mismatch',
+          {
+            queryParam: req.query.redirect_uri,
+            clientProp: await client.prop('redirectURI')
+          }
+        )
         throw new createError.BadRequest('Invalid redirect_uri')
       }
       if (!req.query.response_type || req.query.response_type !== 'code') {
+        logger.warn(
+          'missing or invalid response_type',
+          {
+            clientId,
+            responseType: req.query.response_type
+          }
+        )
         throw new createError.BadRequest('Missing or invalid response_type')
       }
       if (!req.query.scope) {
+        logger.warn('missing scope', { clientId })
         throw new createError.BadRequest('Missing scope')
       }
       if (!req.query.code_challenge) {
+        logger.warn('missing code_challenge', { clientId })
         throw new createError.BadRequest('Missing code_challenge')
       }
       if (
         !req.query.code_challenge_method ||
         req.query.code_challenge_method !== 'S256'
       ) {
+        logger.warn('bad code_challenge_method', {
+          clientId,
+          method: req.query.code_challenge_method
+        })
         throw new createError.BadRequest('Unsupported code challenge value')
       }
 
@@ -4315,7 +4383,7 @@ app.get(
       <p>
         This app is asking to authorize access to your account.
         <ul>
-          <li>Client ID: ${req.query.client_id}</li>
+          <li>Client ID: ${clientId}</li>
           <li>Name: ${name
             ? url
               ? `<a target="_blank" href="${url}">${name}</a>`
@@ -4335,7 +4403,7 @@ app.get(
       </p>
       <form method="POST" action="/endpoint/oauth/authorize">
       <input type="hidden" name="csrf_token" value="${req.session.csrfToken}" />
-      <input type="hidden" name="client_id" value="${req.query.client_id}" />
+      <input type="hidden" name="client_id" value="${clientId}" />
       <input type="hidden" name="redirect_uri" value="${req.query.redirect_uri
           }" />
       <input type="hidden" name="scope" value="${req.query.scope}" />
@@ -4553,6 +4621,60 @@ app.post(
 class InvalidRedirectURIError extends Error {}
 class InvalidClientMetadataError extends Error {}
 
+async function clientFromCimd (body) {
+  if (
+    !Array.isArray(body.redirect_uris) ||
+    body.redirect_uris.length === 0) {
+    throw new InvalidRedirectURIError('redirect_uris required')
+  }
+  body.redirect_uris.forEach((redirectUri) => {
+    let url = null
+    try {
+      url = new URL(redirectUri)
+    } catch (err) {
+      throw new InvalidRedirectURIError(
+        `${redirectUri} is not a valid URL`
+      )
+    }
+    if (url.protocol !== 'https:') {
+      throw new InvalidRedirectURIError(
+        `${redirectUri} is not an HTTPS URL`
+      )
+    }
+  })
+  if (Array.isArray(body.grant_types) &&
+    notIncluded(body.grant_types, GRANT_TYPES_SUPPORTED)) {
+    throw new InvalidClientMetadataError(`Unsupported grant type (only ${JSON.stringify(GRANT_TYPES_SUPPORTED)} supported)`)
+  }
+  if (Array.isArray(body.response_types) &&
+    notIncluded(body.response_types, RESPONSE_TYPES_SUPPORTED)) {
+    throw new InvalidClientMetadataError(`Unsupported response type (only ${JSON.stringify(RESPONSE_TYPES_SUPPORTED)} supported)`)
+  }
+  if (Array.isArray(body.scope) &&
+    notIncluded(body.scope, SCOPES_SUPPORTED)) {
+    throw new InvalidClientMetadataError(`Unsupported scope (only ${JSON.stringify(SCOPES_SUPPORTED)} supported)`)
+  }
+  if (body.token_endpoint_auth_method &&
+    !TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED.includes(body.token_endpoint_auth_method)) {
+    throw new InvalidClientMetadataError(`Unsupported token endpoint auth method (only ${JSON.stringify(TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED)} supported)`)
+  }
+
+  const server = await Server.get()
+
+  const client = new ActivityObject({
+    '@context': CONTEXT,
+    name: body.client_name,
+    redirectURI:
+      (body.redirect_uris.length === 1)
+        ? body.redirect_uris[0]
+        : body.redirect_uris,
+    attributedTo: await server.id(),
+    to: PUBLIC
+  })
+
+  return client
+}
+
 app.post(
   '/endpoint/oauth/registration',
   wrap(async (req, res) => {
@@ -4566,53 +4688,7 @@ app.post(
         throw new InvalidClientMetadataError('Invalid Content-Type')
       }
       const body = req.body
-      if (
-        !Array.isArray(body.redirect_uris) ||
-        body.redirect_uris.length === 0) {
-        throw new InvalidRedirectURIError('redirect_uris required')
-      }
-      body.redirect_uris.forEach((redirectUri) => {
-        let url = null
-        try {
-          url = new URL(redirectUri)
-        } catch (err) {
-          throw new InvalidRedirectURIError(
-            `${redirectUri} is not a valid URL`
-          )
-        }
-        if (url.protocol !== 'https:') {
-          throw new InvalidRedirectURIError(
-            `${redirectUri} is not an HTTPS URL`
-          )
-        }
-      })
-      if (Array.isArray(body.grant_types) &&
-        notIncluded(body.grant_types, GRANT_TYPES_SUPPORTED)) {
-        throw new InvalidClientMetadataError(`Unsupported grant type (only ${JSON.stringify(GRANT_TYPES_SUPPORTED)} supported)`)
-      }
-      if (Array.isArray(body.response_types) &&
-        notIncluded(body.response_types, RESPONSE_TYPES_SUPPORTED)) {
-        throw new InvalidClientMetadataError(`Unsupported response type (only ${JSON.stringify(RESPONSE_TYPES_SUPPORTED)} supported)`)
-      }
-      if (Array.isArray(body.scope) &&
-        notIncluded(body.scope, SCOPES_SUPPORTED)) {
-        throw new InvalidClientMetadataError(`Unsupported scope (only ${JSON.stringify(SCOPES_SUPPORTED)} supported)`)
-      }
-      if (body.token_endpoint_auth_method &&
-        !TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED.includes(body.token_endpoint_auth_method)) {
-        throw new InvalidClientMetadataError(`Unsupported token endpoint auth method (only ${JSON.stringify(TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED)} supported)`)
-      }
-      const server = await Server.get()
-      const client = new ActivityObject({
-        '@context': CONTEXT,
-        name: body.client_name,
-        redirectURI:
-          (body.redirect_uris.length === 1)
-            ? body.redirect_uris[0]
-            : body.redirect_uris,
-        attributedTo: await server.id(),
-        to: PUBLIC
-      })
+      const client = await clientFromCimd(body)
       await client.save()
       res.status(201)
       res.json({
