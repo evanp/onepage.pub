@@ -6314,14 +6314,13 @@ describe('onepage.pub', { only: true }, () => {
     })
   })
 
-  describe('ActivityPub universal client ID', { only: true }, async () => {
+  describe('ActivityPub universal client ID', async () => {
     let actor = null
     before(async () => {
       [actor] = await registerActor()
     })
     it(
       'has ActivityPub universal client ID flag in OAuth discovery document',
-      { only: true },
       async () => {
         const url = `https://localhost:${MAIN_PORT}/.well-known/oauth-authorization-server`
         const res = await fetch(url)
@@ -6340,12 +6339,11 @@ describe('onepage.pub', { only: true }, () => {
     )
     it(
       'has ActivityPub universal client ID flag on actor',
-      { only: true },
       async () => {
         assert.strictEqual(actor.universalClientID, true)
       }
     )
-    it('has the oauth @context on the actor', { only: true }, () => {
+    it('has the oauth @context on the actor', () => {
       assert(actor['@context'])
       assert(
         actor['@context'].includes(
@@ -6353,5 +6351,31 @@ describe('onepage.pub', { only: true }, () => {
         )
       )
     })
+  })
+
+  describe('OAuth Client ID Metadata Document (CIMD)', { only: true }, async () => {
+    let actor = null
+    before(async () => {
+      [actor] = await registerActor()
+    })
+    it(
+      'has CIMD flag in OAuth discovery document',
+      { only: true },
+      async () => {
+        const url = `https://localhost:${MAIN_PORT}/.well-known/oauth-authorization-server`
+        const res = await fetch(url)
+        assert.strictEqual(res.status, 200)
+        const contentType = res.headers.get('Content-Type').split(';')[0].trim()
+        assert.strictEqual(contentType, 'application/json')
+        const body = await res.json()
+        assert.ok(body)
+        assert.strictEqual(typeof body, 'object')
+        assert.notEqual(body, null)
+        assert.strictEqual(
+          body.client_id_metadata_document_supported,
+          true
+        )
+      }
+    )
   })
 })

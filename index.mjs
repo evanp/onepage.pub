@@ -4206,7 +4206,8 @@ app.get(
       grant_types_supported: GRANT_TYPES_SUPPORTED,
       code_challenge_methods_supported: ['S256'],
       token_endpoint_auth_methods_supported: TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
-      activitypub_universal_client_id: true
+      activitypub_universal_client_id: true,
+      client_id_metadata_document_supported: true
     })
   })
 )
