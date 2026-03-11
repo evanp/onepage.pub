@@ -1,7 +1,11 @@
 {
   "name": "onepage.pub",
   "description": "ActivityPub server implemented in a single JavaScript file",
-  "keywords": ["activitypub", "fediverse", "server"],
+  "keywords": [
+    "activitypub",
+    "fediverse",
+    "server"
+  ],
   "homepage": "https://onepage.pub/",
   "bugs": {
     "url": "https://github.com/evanp/onepage.pub/issues"
@@ -51,7 +55,7 @@
     "lint": "standard",
     "lint:fix": "standard --fix"
   },
-  "version": "0.19.0",
+  "version": "0.19.1",
   "engine": {
     "node": ">=20.0.0"
   }
