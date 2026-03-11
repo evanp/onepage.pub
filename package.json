@@ -1,4 +1,21 @@
 {
+  "name": "onepage.pub",
+  "description": "ActivityPub server implemented in a single JavaScript file",
+  "keywords": ["activitypub", "fediverse", "server"],
+  "homepage": "https://onepage.pub/",
+  "bugs": {
+    "url": "https://github.com/evanp/onepage.pub/issues"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Evan Prodromou",
+    "url": "https://evanp.me/"
+  },
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evanp/onepage.pub.git"
+  },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
     "bcrypt": "^6.0.0",
