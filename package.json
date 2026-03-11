@@ -34,7 +34,7 @@
     "http-errors": "^2.0.1",
     "jsonwebtoken": "^9.0.2",
     "mime": "^4.1.0",
-    "multer": "^2.0.2",
+    "multer": "^2.1.1",
     "nanoid": "^5.1.6",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
