@@ -4621,6 +4621,28 @@ app.post(
 class InvalidRedirectURIError extends Error {}
 class InvalidClientMetadataError extends Error {}
 
+const BAD_REDIRECT_PROTOCOLS = [
+  'javascript',
+  'data',
+  'vbscript',
+  'file',
+  'ftp',
+  'ftps',
+  'sftp',
+  'smtp',
+  'imap',
+  'pop3',
+  'ldap',
+  'ldaps',
+  'mailto',
+  'tel',
+  'sms',
+  'geo',
+  'magnet'
+]
+
+const LOOPBACKS = ['127.0.0.1', '[::1]']
+
 async function clientFromCimd (body) {
   if (
     !Array.isArray(body.redirect_uris) ||
@@ -4636,9 +4658,19 @@ async function clientFromCimd (body) {
         `${redirectUri} is not a valid URL`
       )
     }
-    if (url.protocol !== 'https:') {
+    if (url.fragment && url.fragment.length > 0) {
       throw new InvalidRedirectURIError(
-        `${redirectUri} is not an HTTPS URL`
+        `${redirectUri} has a fragment`
+      )
+    }
+    if (url.protocol === 'http' && LOOPBACKS.includes(url.hostname)) {
+      throw new InvalidRedirectURIError(
+        `${redirectUri} is an HTTP public URL`
+      )
+    }
+    if (BAD_REDIRECT_PROTOCOLS.includes(url.protocol)) {
+      throw new InvalidRedirectURIError(
+        `${redirectUri} uses an inappropriate protocol`
       )
     }
   })
