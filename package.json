@@ -6,11 +6,11 @@
     "config": "^4.1.1",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
+    "express": "^4.22.1",
     "express-async-handler": "^1.2.0",
     "express-jwt": "^8.5.1",
     "express-session": "^1.18.2",
-    "http-errors": "^2.0.0",
+    "http-errors": "^2.0.1",
     "jsonwebtoken": "^9.0.2",
     "mime": "^4.1.0",
     "multer": "^2.0.2",
@@ -21,7 +21,7 @@
     "sqlite3": "^5.1.7",
     "statuses": "^2.0.2",
     "supertest": "^7.1.4",
-    "winston": "^3.18.3"
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "standard": "^17.1.2"
