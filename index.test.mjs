@@ -6478,4 +6478,163 @@ describe('onepage.pub', () => {
       assert.strictEqual(state2, state)
     })
   })
+
+  describe('Remote Create with unfetchable inReplyTo', () => {
+    let actor = null
+    let token = null
+    let peer = null
+    let pair = null
+    const keyId = `https://localhost:${FIFTH_PORT}/actor#main-key`
+    let remoteActor = null
+    let remoteNote = null
+    let remoteActivity = null
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      pair = await generateKeyPair('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      })
+      remoteActor = {
+        id: `https://localhost:${FIFTH_PORT}/actor`,
+        type: 'Person',
+        preferredUsername: 'replier',
+        publicKey: {
+          id: keyId,
+          owner: `https://localhost:${FIFTH_PORT}/actor`,
+          publicKeyPem: pair.publicKey
+        },
+        published: '2023-09-20T00:00:00Z'
+      }
+      remoteNote = {
+        id: `https://localhost:${FIFTH_PORT}/note`,
+        type: 'Note',
+        attributedTo: remoteActor.id,
+        contentMap: {
+          en: 'A reply to a note that cannot be fetched'
+        },
+        inReplyTo: `https://localhost:${BAD_PORT}/user/nonexistent/note/1`,
+        published: '2023-09-20T00:00:00Z'
+      }
+      remoteActivity = {
+        id: `https://localhost:${FIFTH_PORT}/activity`,
+        type: 'Create',
+        actor: remoteActor.id,
+        to: [actor.id],
+        object: remoteNote
+      }
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          if (req.url === '/actor') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...remoteActor
+              })
+            )
+          } else if (req.url === '/note') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...remoteNote
+              })
+            )
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
+        }
+      )
+      peer.listen(FIFTH_PORT)
+    })
+
+    after(async () => {
+      peer.close()
+    })
+
+    it('can deliver a reply to an unfetchable note', async () => {
+      const inbox = actor.inbox
+      const date = new Date().toUTCString()
+      const body = JSON.stringify({
+        '@context': AS2_CONTEXT,
+        ...remoteActivity
+      })
+      const hash = crypto.createHash('sha256')
+      hash.update(body)
+      const digest = `sha-256=${hash.digest('base64')}`
+
+      const header = await signRequest(
+        keyId,
+        pair.privateKey,
+        'POST',
+        inbox,
+        date,
+        digest
+      )
+      const res = await fetch(inbox, {
+        method: 'POST',
+        headers: {
+          'Content-Type': AS2_MEDIA_TYPE,
+          Signature: header,
+          Date: date,
+          Digest: digest
+        },
+        body
+      })
+      const resBody = await res.text()
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`
+      )
+    })
+
+    it("appears in the addressee's inbox", async () => {
+      assert(await isInStream(actor.inbox, remoteActivity, token))
+    })
+  })
+
+  describe('Local reply to an unfetchable note', () => {
+    let actor = null
+    let token = null
+    let createReply = null
+
+    before(async () => {
+      [actor, token] = await registerActor()
+    })
+
+    it('can post a reply to an unfetchable note', async () => {
+      createReply = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: [actor.followers],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'A reply to a note that cannot be fetched'
+          },
+          inReplyTo: `https://localhost:${BAD_PORT}/user/nonexistent/note/2`
+        }
+      })
+      assert.ok(createReply)
+      assert.ok(createReply.object)
+      assert.ok(createReply.object.id)
+    })
+
+    it("appears in the actor's outbox", async () => {
+      assert(await isInStream(actor.outbox, createReply, token))
+    })
+  })
 })

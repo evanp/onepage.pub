@@ -1524,7 +1524,7 @@ class ActivityObject {
     await this.ensureComplete()
     if (!this.#json) {
       if (this.#id) {
-        return this.#id
+        return { id: this.#id }
       } else {
         return undefined
       }
@@ -1887,10 +1887,12 @@ class Activity extends ActivityObject {
             inReplyToProp,
             { subject: actorObj }
           )
-          const parentOwner = await parent.owner()
-          if (parentOwner && (await User.isUser(parentOwner))) {
-            const replies = new Collection(await parent.prop('replies'))
-            await replies.prepend(saved)
+          if (parent) {
+            const parentOwner = await parent.owner()
+            if (parentOwner && (await User.isUser(parentOwner))) {
+              const replies = new Collection(await parent.prop('replies'))
+              await replies.prepend(saved)
+            }
           }
         }
         return activity
@@ -2786,7 +2788,7 @@ class RemoteActivity extends Activity {
           }
           await ao.cache()
           if (await ao.prop('inReplyTo')) {
-            const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
+            const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'), { subject: ownerObj })
             await inReplyTo.expand(ownerObj)
             const inReplyToOwner = await inReplyTo.owner()
             if (
