@@ -753,6 +753,9 @@ class ActivityObject {
     }
     if (this.#id && (!this.#json || !this.#complete)) {
       await this.#getCompleteJSON()
+      if (!this.#json) {
+        return [undefined, undefined]
+      }
       for (const name of names) {
         if (name in this.#json) {
           return [name, this.#json[name]]
@@ -2816,14 +2819,14 @@ class RemoteActivity extends Activity {
           logger.debug(`Clearing cache on update for ${await ao.id()}`)
           await ao.clearCache()
           if (await ao.prop('inReplyTo')) {
-            const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'))
+            const inReplyTo = new ActivityObject(await ao.prop('inReplyTo'), { subject: ownerObj })
             await inReplyTo.expand(ownerObj)
             const inReplyToOwner = await inReplyTo.owner()
             if (
               inReplyToOwner &&
               (await inReplyToOwner.id()) === (await ownerObj.id())
             ) {
-              if (!(await inReplyTo.canRead(remote))) {
+              if (!(await inReplyTo.canRead(await remoteObj.id()))) {
                 throw new Error('Cannot reply to something you cannot read!')
               }
               const replies = new Collection(await inReplyTo.prop('replies'))

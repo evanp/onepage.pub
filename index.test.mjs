@@ -6637,4 +6637,433 @@ describe('onepage.pub', () => {
       assert(await isInStream(actor.outbox, createReply, token))
     })
   })
+
+  describe('Remote Update of a reply signs the inReplyTo fetch as the recipient', () => {
+    let actor = null
+    let peer = null
+    let pair = null
+    const keyId = `https://localhost:${FIFTH_PORT}/actor#main-key`
+    let remoteActor = null
+    let parentNote = null
+    let remoteNote = null
+    let remoteActivity = null
+    const parentSignatures = []
+
+    before(async () => {
+      [actor] = await registerActor()
+      pair = await generateKeyPair('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      })
+      remoteActor = {
+        id: `https://localhost:${FIFTH_PORT}/actor`,
+        type: 'Person',
+        preferredUsername: 'updater',
+        publicKey: {
+          id: keyId,
+          owner: `https://localhost:${FIFTH_PORT}/actor`,
+          publicKeyPem: pair.publicKey
+        },
+        published: '2023-09-20T00:00:00Z'
+      }
+      parentNote = {
+        id: `https://localhost:${FIFTH_PORT}/parent`,
+        type: 'Note',
+        attributedTo: remoteActor.id,
+        contentMap: {
+          en: 'An original note'
+        },
+        published: '2023-09-20T00:00:00Z'
+      }
+      remoteNote = {
+        id: `https://localhost:${FIFTH_PORT}/reply`,
+        type: 'Note',
+        attributedTo: remoteActor.id,
+        contentMap: {
+          en: 'An updated reply'
+        },
+        inReplyTo: parentNote.id,
+        published: '2023-09-20T00:00:00Z',
+        updated: '2023-09-21T00:00:00Z'
+      }
+      remoteActivity = {
+        id: `https://localhost:${FIFTH_PORT}/update`,
+        type: 'Update',
+        actor: remoteActor.id,
+        to: [actor.id],
+        object: remoteNote
+      }
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          if (req.url === '/actor') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...remoteActor
+              })
+            )
+          } else if (req.url === '/parent') {
+            parentSignatures.push(req.headers.signature)
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...parentNote
+              })
+            )
+          } else if (req.url === '/reply') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...remoteNote
+              })
+            )
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
+        }
+      )
+      peer.listen(FIFTH_PORT)
+    })
+
+    after(async () => {
+      peer.close()
+    })
+
+    it('can deliver an Update of a reply', async () => {
+      const inbox = actor.inbox
+      const date = new Date().toUTCString()
+      const body = JSON.stringify({
+        '@context': AS2_CONTEXT,
+        ...remoteActivity
+      })
+      const hash = crypto.createHash('sha256')
+      hash.update(body)
+      const digest = `sha-256=${hash.digest('base64')}`
+
+      const header = await signRequest(
+        keyId,
+        pair.privateKey,
+        'POST',
+        inbox,
+        date,
+        digest
+      )
+      const res = await fetch(inbox, {
+        method: 'POST',
+        headers: {
+          'Content-Type': AS2_MEDIA_TYPE,
+          Signature: header,
+          Date: date,
+          Digest: digest
+        },
+        body
+      })
+      const resBody = await res.text()
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`
+      )
+    })
+
+    it('fetches the parent note from the peer', async () => {
+      assert.ok(parentSignatures.length > 0)
+    })
+
+    it("signs the parent fetch with the recipient's key", async () => {
+      const expected =
+        typeof actor.publicKey === 'string'
+          ? actor.publicKey
+          : actor.publicKey.id
+      const header = parentSignatures[0]
+      assert.ok(header, 'No Signature header on parent fetch')
+      const match = /keyId="([^"]+)"/.exec(header)
+      assert.ok(match, `No keyId in Signature header ${header}`)
+      assert.strictEqual(match[1], expected)
+    })
+  })
+
+  describe('Remote Update with unfetchable inReplyTo', () => {
+    let actor = null
+    let token = null
+    let peer = null
+    let pair = null
+    const keyId = `https://localhost:${FIFTH_PORT}/actor#main-key`
+    let remoteActor = null
+    let remoteNote = null
+    let remoteActivity = null
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      pair = await generateKeyPair('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      })
+      remoteActor = {
+        id: `https://localhost:${FIFTH_PORT}/actor`,
+        type: 'Person',
+        preferredUsername: 'updater2',
+        publicKey: {
+          id: keyId,
+          owner: `https://localhost:${FIFTH_PORT}/actor`,
+          publicKeyPem: pair.publicKey
+        },
+        published: '2023-09-20T00:00:00Z'
+      }
+      remoteNote = {
+        id: `https://localhost:${FIFTH_PORT}/reply`,
+        type: 'Note',
+        attributedTo: remoteActor.id,
+        contentMap: {
+          en: 'An updated reply to a note that cannot be fetched'
+        },
+        inReplyTo: `https://localhost:${BAD_PORT}/user/nonexistent/note/3`,
+        published: '2023-09-20T00:00:00Z',
+        updated: '2023-09-21T00:00:00Z'
+      }
+      remoteActivity = {
+        id: `https://localhost:${FIFTH_PORT}/update`,
+        type: 'Update',
+        actor: remoteActor.id,
+        to: [actor.id],
+        object: remoteNote
+      }
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          if (req.url === '/actor') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...remoteActor
+              })
+            )
+          } else if (req.url === '/reply') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...remoteNote
+              })
+            )
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
+        }
+      )
+      peer.listen(FIFTH_PORT)
+    })
+
+    after(async () => {
+      peer.close()
+    })
+
+    it('can deliver an Update of a reply to an unfetchable note', async () => {
+      const inbox = actor.inbox
+      const date = new Date().toUTCString()
+      const body = JSON.stringify({
+        '@context': AS2_CONTEXT,
+        ...remoteActivity
+      })
+      const hash = crypto.createHash('sha256')
+      hash.update(body)
+      const digest = `sha-256=${hash.digest('base64')}`
+
+      const header = await signRequest(
+        keyId,
+        pair.privateKey,
+        'POST',
+        inbox,
+        date,
+        digest
+      )
+      const res = await fetch(inbox, {
+        method: 'POST',
+        headers: {
+          'Content-Type': AS2_MEDIA_TYPE,
+          Signature: header,
+          Date: date,
+          Digest: digest
+        },
+        body
+      })
+      const resBody = await res.text()
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`
+      )
+    })
+
+    it("appears in the addressee's inbox", async () => {
+      assert(await isInStream(actor.inbox, remoteActivity, token))
+    })
+  })
+
+  describe('Remote Update of a reply to a local note', () => {
+    let actor = null
+    let token = null
+    let createNote = null
+    let peer = null
+    let pair = null
+    const keyId = `https://localhost:${FIFTH_PORT}/actor#main-key`
+    let remoteActor = null
+    let remoteNote = null
+    let remoteActivity = null
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      createNote = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'A public note that will get a remote reply'
+          }
+        }
+      })
+      pair = await generateKeyPair('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      })
+      remoteActor = {
+        id: `https://localhost:${FIFTH_PORT}/actor`,
+        type: 'Person',
+        preferredUsername: 'localreplier',
+        publicKey: {
+          id: keyId,
+          owner: `https://localhost:${FIFTH_PORT}/actor`,
+          publicKeyPem: pair.publicKey
+        },
+        published: '2023-09-20T00:00:00Z'
+      }
+      remoteNote = {
+        id: `https://localhost:${FIFTH_PORT}/reply-to-local`,
+        type: 'Note',
+        attributedTo: remoteActor.id,
+        to: [actor.id, PUBLIC],
+        contentMap: {
+          en: 'An updated reply to a local note'
+        },
+        inReplyTo: createNote.object.id,
+        published: '2023-09-20T00:00:00Z',
+        updated: '2023-09-21T00:00:00Z'
+      }
+      remoteActivity = {
+        id: `https://localhost:${FIFTH_PORT}/update-local`,
+        type: 'Update',
+        actor: remoteActor.id,
+        to: [actor.id],
+        object: remoteNote
+      }
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          if (req.url === '/actor') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...remoteActor
+              })
+            )
+          } else if (req.url === '/reply-to-local') {
+            res.writeHead(200)
+            res.end(
+              JSON.stringify({
+                '@context': AS2_CONTEXT,
+                ...remoteNote
+              })
+            )
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
+        }
+      )
+      peer.listen(FIFTH_PORT)
+    })
+
+    after(async () => {
+      peer.close()
+    })
+
+    it('can deliver an Update of a reply to a local note', async () => {
+      const inbox = actor.inbox
+      const date = new Date().toUTCString()
+      const body = JSON.stringify({
+        '@context': AS2_CONTEXT,
+        ...remoteActivity
+      })
+      const hash = crypto.createHash('sha256')
+      hash.update(body)
+      const digest = `sha-256=${hash.digest('base64')}`
+
+      const header = await signRequest(
+        keyId,
+        pair.privateKey,
+        'POST',
+        inbox,
+        date,
+        digest
+      )
+      const res = await fetch(inbox, {
+        method: 'POST',
+        headers: {
+          'Content-Type': AS2_MEDIA_TYPE,
+          Signature: header,
+          Date: date,
+          Digest: digest
+        },
+        body
+      })
+      const resBody = await res.text()
+      assert.ok(
+        res.status >= 200 && res.status < 300,
+        `Bad status ${res.status} for delivery to ${inbox}: ${resBody}`
+      )
+    })
+
+    it("appears in the local note's replies collection", async () => {
+      assert(await isInStream(createNote.object.replies, remoteNote.id, token))
+    })
+  })
+
 })
