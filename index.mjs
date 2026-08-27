@@ -24,6 +24,14 @@ import path from 'node:path'
 import { tmpdir } from 'node:os'
 import cors from 'cors'
 import statuses from 'statuses'
+import { fileURLToPath } from 'node:url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const { version } = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')
+)
 
 // Configuration
 
@@ -3768,7 +3776,6 @@ app.get(
 )
 
 const page = (title, body, user = null) => {
-  const version = process.env.npm_package_version
   return `
   <!DOCTYPE html>
   <html>
