@@ -7066,4 +7066,82 @@ describe('onepage.pub', () => {
     })
   })
 
+  describe('Collection page with an ownerless item', () => {
+    let actor = null
+    let token = null
+    let peer = null
+    let collection = null
+    const remoteObject = {
+      id: `https://localhost:${FIFTH_PORT}/ownerless`,
+      type: 'Note',
+      to: [],
+      contentMap: {
+        en: 'An ownerless note'
+      },
+      published: '2023-09-20T00:00:00Z'
+    }
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      remoteObject.to = [actor.id]
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          if (req.url === '/ownerless') {
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
+            res.end(JSON.stringify({
+              '@context': AS2_CONTEXT,
+              ...remoteObject
+            }))
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
+        }
+      )
+      await new Promise((resolve, reject) => {
+        peer.on('error', reject)
+        peer.listen(FIFTH_PORT, resolve)
+      })
+      collection = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Create',
+        object: {
+          type: 'OrderedCollection',
+          nameMap: {
+            en: 'Collection containing an ownerless item'
+          }
+        }
+      })
+      await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Add',
+        object: remoteObject.id,
+        target: collection.object.id
+      })
+    })
+
+    after(async () => {
+      await new Promise((resolve) => peer.close(resolve))
+    })
+
+    it('can get the collection page without failing', async () => {
+      const coll = await getObject(collection.object.id, token)
+      const res = await fetch(coll.first.id, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      const body = await res.text()
+      assert.strictEqual(res.status, 200, body)
+    })
+  })
+
 })

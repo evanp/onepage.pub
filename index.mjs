@@ -1376,7 +1376,7 @@ class ActivityObject {
     if (subject && domainIsBlocked(subject)) {
       return false
     }
-    if (subject && (await User.isUser(owner))) {
+    if (subject && owner && (await User.isUser(owner))) {
       const blockedProp = await owner.prop('blocked')
       const blocked = new Collection(blockedProp)
       if (await blocked.hasMember(subject)) {
@@ -1392,7 +1392,7 @@ class ActivityObject {
       return false
     }
     // owner can always read
-    if (subject === (await owner.id())) {
+    if (owner && subject === (await owner.id())) {
       return true
     }
     // direct addressees can always read
