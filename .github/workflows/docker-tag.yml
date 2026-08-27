@@ -15,9 +15,9 @@ jobs:
         runs-on: ubuntu-latest
         steps:
 
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v7
 
-        - uses: actions/setup-node@v3
+        - uses: actions/setup-node@v7
           with:
             node-version: 20
 
@@ -35,10 +35,10 @@ jobs:
           packages: write
         steps:
 
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v7
 
         - name: Log in to the Container registry
-          uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+          uses: docker/login-action@af63523ba5f55733d817da0fdb813e660152c72c
           with:
             registry: ghcr.io
             username: ${{ github.actor }}
