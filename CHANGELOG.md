@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Update Dockerfile to NodeJS version 26.
+- Update GitHub actions to test with NodeJS version 22, 24, and 26.
 
 ## [0.19.4] - 2026-08-27
 
