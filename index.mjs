@@ -954,7 +954,7 @@ class ActivityObject {
     const u = new URL(this.#id)
     const base = u.origin + u.pathname + u.search
     if (await this.failedBefore(base)) {
-      logger.info(`Skipping fetch of ${base} for ${await this.#subject}`)
+      logger.info(`Skipping fetch of ${base} for ${await toId(this.#subject)}`)
       return null
     }
     const signStartTime = Date.now()
