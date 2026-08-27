@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.3] - 2026-08-27
+
 ### Fixed
 
 - Read the application version directly from `package.json` for footer rendering.
@@ -881,7 +883,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adopted StandardJS style.
 - Updated local testing certificate and key.
 
-[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.2...HEAD
+[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.3...HEAD
+[0.19.3]: https://github.com/evanp/onepage.pub/compare/v0.19.2...v0.19.3
 [0.19.2]: https://github.com/evanp/onepage.pub/compare/v0.19.1...v0.19.2
 [0.19.1]: https://github.com/evanp/onepage.pub/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/evanp/onepage.pub/compare/v0.18.5...v0.19.0
