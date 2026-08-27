@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - .nvmrc to keep developer environment consistent
 
+### Changed
+
+- Update Dockerfile to NodeJS version 26.
+
 ## [0.19.4] - 2026-08-27
 
 ### Maintenance
