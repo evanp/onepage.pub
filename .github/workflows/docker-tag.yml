@@ -36,9 +36,15 @@ jobs:
         permissions:
           contents: read
           packages: write
+        env:
+          SHA: ${{ github.sha }}
+          IMAGE: ghcr.io/evanp/onepage.pub
         steps:
 
         - uses: actions/checkout@v7
+
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v4
 
         - name: Log in to the Container registry
           uses: docker/login-action@af63523ba5f55733d817da0fdb813e660152c72c
@@ -47,24 +53,26 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Pushing onepage.pub to GHCR
-          env:
-            SHA: ${{ github.sha }}
-            IMAGE: ghcr.io/evanp/onepage.pub
+        - name: Build
+          run: docker buildx build --platform linux/amd64,linux/arm64 --push --tag "$IMAGE:$SHA" .
+
+        - name: Smoke test
           run: |
-            export VERSION=`node -pe "require('./package.json').version"`
-            export MAJOR=${VERSION%.*.*}
-            export MINOR=${VERSION%.*}
+            container_id=$(docker run --detach --publish 65380:65380 --env OPP_ORIGIN=https://test.example/ --env OPP_HOSTNAME=localhost --env OPP_PORT=65380 "$IMAGE:$SHA")
+            trap 'docker rm --force "$container_id"' EXIT
+            for attempt in {1..30}; do
+              if curl --fail --silent --show-error http://localhost:65380/ready; then
+                exit 0
+              fi
+              sleep 1
+            done
+            docker logs "$container_id"
+            exit 1
+
+        - name: Push
+          run: |
+            VERSION=$(node -pe "require('./package.json').version")
+            MAJOR=${VERSION%.*.*}
+            MINOR=${VERSION%.*}
             echo Version: ${VERSION} Major: ${MAJOR} Minor: ${MINOR}
-            docker buildx create --use
-            docker buildx build --platform linux/amd64,linux/arm64 --push -t $IMAGE:$SHA .
-            docker pull $IMAGE:$SHA
-            docker tag $IMAGE:$SHA $IMAGE:$VERSION
-            docker tag $IMAGE:$SHA $IMAGE:$MAJOR
-            docker tag $IMAGE:$SHA $IMAGE:$MINOR
-            docker tag $IMAGE:$SHA $IMAGE:stable
-            docker push $IMAGE:$SHA
-            docker push $IMAGE:$VERSION
-            docker push $IMAGE:$MAJOR
-            docker push $IMAGE:$MINOR
-            docker push $IMAGE:stable
+            docker buildx imagetools create --tag "$IMAGE:$VERSION" --tag "$IMAGE:$MAJOR" --tag "$IMAGE:$MINOR" --tag "$IMAGE:stable" "$IMAGE:$SHA"
