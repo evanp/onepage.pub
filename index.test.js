@@ -395,7 +395,7 @@ function parseAuthenticateHeader (header) {
 
 // Start tests
 
-describe.only('onepage.pub', () => {
+describe('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -7215,7 +7215,7 @@ describe.only('onepage.pub', () => {
     })
   })
 
-  describe.only('Collection page with a remote item returning cached HTML', () => {
+  describe('Collection page with a remote item returning cached HTML', () => {
     let actor = null
     let token = null
     let peer = null
@@ -7268,7 +7268,7 @@ describe.only('onepage.pub', () => {
       await new Promise((resolve) => peer.close(resolve))
     })
 
-    it.only('can get the collection page without failing', async () => {
+    it('can get the collection page without failing', async () => {
       const res = await fetch(collectionPage.object.id, {
         headers: {
           Authorization: `Bearer ${token}`
