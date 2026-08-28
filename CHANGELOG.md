@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.9] - 2026-08-28
+
 ### Added
 
 - npm test:grep to run specific tests
@@ -14,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Better handling for non-JSON responses to requests for ActivityPub objects
+- Rename .mjs files to .js files
 
 ## [0.19.8] - 2026-08-28
 
@@ -928,7 +931,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adopted StandardJS style.
 - Updated local testing certificate and key.
 
-[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.8...HEAD
+[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.9...HEAD
+[0.19.8]: https://github.com/evanp/onepage.pub/compare/v0.19.8...v0.19.9
 [0.19.8]: https://github.com/evanp/onepage.pub/compare/v0.19.7...v0.19.8
 [0.19.7]: https://github.com/evanp/onepage.pub/compare/v0.19.6...v0.19.7
 [0.19.6]: https://github.com/evanp/onepage.pub/compare/v0.19.5...v0.19.6
