@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.10] - 2026-08-28
+
+### Fixed
+
+- Test fixtures that didn't include a JSON-like content type.
+
 ## [0.19.9] - 2026-08-28
 
 ### Added
@@ -931,8 +937,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adopted StandardJS style.
 - Updated local testing certificate and key.
 
-[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.9...HEAD
-[0.19.8]: https://github.com/evanp/onepage.pub/compare/v0.19.8...v0.19.9
+[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.10...HEAD
+[0.19.10]: https://github.com/evanp/onepage.pub/compare/v0.19.9...v0.19.10
+[0.19.9]: https://github.com/evanp/onepage.pub/compare/v0.19.8...v0.19.9
 [0.19.8]: https://github.com/evanp/onepage.pub/compare/v0.19.7...v0.19.8
 [0.19.7]: https://github.com/evanp/onepage.pub/compare/v0.19.6...v0.19.7
 [0.19.6]: https://github.com/evanp/onepage.pub/compare/v0.19.5...v0.19.6

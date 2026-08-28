@@ -4868,7 +4868,9 @@ describe('onepage.pub', () => {
         },
         (req, res) => {
           if (req.url === '/actor') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -4876,7 +4878,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/note') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -4884,7 +4888,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/activity') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -5021,7 +5027,9 @@ describe('onepage.pub', () => {
         },
         (req, res) => {
           if (req.url === '/actor') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -5029,7 +5037,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/note/1') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -5037,7 +5047,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/note/2') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -5045,7 +5057,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/activity/1') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -5053,7 +5067,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/activity/2') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -6537,7 +6553,9 @@ describe('onepage.pub', () => {
         },
         (req, res) => {
           if (req.url === '/actor') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -6545,7 +6563,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/note') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -6707,7 +6727,9 @@ describe('onepage.pub', () => {
         },
         (req, res) => {
           if (req.url === '/actor') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -6716,7 +6738,9 @@ describe('onepage.pub', () => {
             )
           } else if (req.url === '/parent') {
             parentSignatures.push(req.headers.signature)
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -6724,7 +6748,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/reply') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -6856,7 +6882,9 @@ describe('onepage.pub', () => {
         },
         (req, res) => {
           if (req.url === '/actor') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -6864,7 +6892,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/reply') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -6997,7 +7027,9 @@ describe('onepage.pub', () => {
         },
         (req, res) => {
           if (req.url === '/actor') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
@@ -7005,7 +7037,9 @@ describe('onepage.pub', () => {
               })
             )
           } else if (req.url === '/reply-to-local') {
-            res.writeHead(200)
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
             res.end(
               JSON.stringify({
                 '@context': AS2_CONTEXT,
