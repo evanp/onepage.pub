@@ -913,7 +913,7 @@ describe('onepage.pub', () => {
 
     it("appears in the actor's inbox", async () => {
       const inbox = await (await fetch(actor.inbox)).json()
-      const inboxPage = await (await fetch(inbox.first.id)).json()
+      const inboxPage = await getObject(inbox.first.id, token)
       assert(inboxPage.orderedItems.some((act) => act.id === obj.id))
     })
 
@@ -974,7 +974,7 @@ describe('onepage.pub', () => {
 
     it("appears in the actor's inbox", async () => {
       const inbox = await (await fetch(actor.inbox)).json()
-      const inboxPage = await (await fetch(inbox.first.id)).json()
+      const inboxPage = await getObject(inbox.first.id, token)
       assert(inboxPage.orderedItems.some((act) => act.id === obj.id))
     })
 
