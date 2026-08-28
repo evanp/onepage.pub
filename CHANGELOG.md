@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.8] - 2026-08-28
+
 ### Fixed
 
 - Fixup for user addressing works just once.
@@ -918,7 +920,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adopted StandardJS style.
 - Updated local testing certificate and key.
 
-[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.7...HEAD
+[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.8...HEAD
+[0.19.8]: https://github.com/evanp/onepage.pub/compare/v0.19.7...v0.19.8
 [0.19.7]: https://github.com/evanp/onepage.pub/compare/v0.19.6...v0.19.7
 [0.19.6]: https://github.com/evanp/onepage.pub/compare/v0.19.5...v0.19.6
 [0.19.5]: https://github.com/evanp/onepage.pub/compare/v0.19.4...v0.19.5
