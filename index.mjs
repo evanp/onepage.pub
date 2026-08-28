@@ -2604,7 +2604,7 @@ class Collection extends ActivityObject {
           next: firstJson.id,
           attributedTo: await toId(attributedTo)
         }
-        await ActivityObject.copyAddresseeProps(props, await this.json())
+        await ActivityObject.copyAddresseeProps(props, firstJson)
         props[ip] = [objectId]
         const newFirst = new ActivityObject(props)
         await newFirst.save()
@@ -3120,9 +3120,10 @@ class User {
     }
     const props = ['inbox', 'outbox', 'followers', 'following', 'liked']
     for (const prop of props) {
+      const pageProps = (prop === 'inbox') ? { to: undefined } : {}
       const coll = await Collection.empty(this.actorId, [PUBLIC], {
         nameMap: { en: `${this.username}'s ${prop}` }
-      })
+      }, pageProps)
       data[prop] = await coll.id()
     }
     const privProps = ['blocked', 'pendingFollowers', 'pendingFollowing']
@@ -3220,11 +3221,11 @@ class User {
     for (const row of rows) {
       const actorId = row.actorId
       const actor = await ActivityObject.get(actorId)
-      if (!actor.attributedTo) {
+      if (!await actor.prop('attributedTo')) {
         logger.info('Adding attributedTo to actor', { id: actorId })
         await actor.patch({ attributedTo: actorId })
       }
-      if (!actor.to) {
+      if (!await actor.prop('to')) {
         logger.info('Adding to to actor', { id: actorId })
         await actor.patch({ to: PUBLIC })
       }
@@ -3294,9 +3295,16 @@ class User {
       await toId(at) !== await toId(actor)) {
       patch.attributedTo = await actor.id()
     }
-    if (to && !await coll.prop('to')) {
+    const currentTo = await coll.prop('to')
+    const currentToIds = await Promise.all(toArray(currentTo).map(toId))
+    const expectedToIds = await Promise.all(toArray(to).map(toId))
+    if (
+      expectedToIds.length > 0 &&
+      (currentToIds.length !== expectedToIds.length ||
+        expectedToIds.some((id) => !currentToIds.includes(id)))
+    ) {
       patch.to = to
-    } else if (!to && await coll.prop('to')) {
+    } else if (expectedToIds.length === 0 && await coll.hasProp('to')) {
       patch.to = null
     }
     if (Object.keys(patch).length > 0) {

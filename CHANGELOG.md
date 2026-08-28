@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixup for user addressing works just once.
+- User inbox pages are always private.
+
 ## [0.19.7] - 2026-08-28
 
 ### Fixed
