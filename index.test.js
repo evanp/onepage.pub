@@ -36,7 +36,7 @@ const delay = (t) => new Promise((resolve) => setTimeout(resolve, t))
 
 const startServer = (port = MAIN_PORT, props = {}) => {
   return new Promise((resolve, reject) => {
-    const server = spawn('node', ['index.mjs'], {
+    const server = spawn('node', ['index.js'], {
       env: {
         OPP_LOG_LEVEL: 'silent',
         OPP_HOSTNAME: 'localhost',

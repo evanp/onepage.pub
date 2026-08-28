@@ -42,7 +42,7 @@ npm install
 You should be able to run it with Node.js.
 
 ```bash
-node index.mjs
+node index.js
 ```
 
 It takes a few environment variables as configuration options:
