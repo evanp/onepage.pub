@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.7] - 2026-08-28
+
 ### Fixed
 
 - Stop over-filtering remote objects that are fetchable but don't have addressing properties.
@@ -911,7 +913,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adopted StandardJS style.
 - Updated local testing certificate and key.
 
-[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.6...HEAD
+[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.7...HEAD
+[0.19.7]: https://github.com/evanp/onepage.pub/compare/v0.19.6...v0.19.7
 [0.19.6]: https://github.com/evanp/onepage.pub/compare/v0.19.5...v0.19.6
 [0.19.5]: https://github.com/evanp/onepage.pub/compare/v0.19.4...v0.19.5
 [0.19.4]: https://github.com/evanp/onepage.pub/compare/v0.19.3...v0.19.4
