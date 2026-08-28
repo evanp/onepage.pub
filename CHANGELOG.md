@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- npm test:grep to run specific tests
+
 ### Fixed
 
 - Better handling for non-JSON responses to requests for ActivityPub objects
