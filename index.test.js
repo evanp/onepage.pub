@@ -395,7 +395,7 @@ function parseAuthenticateHeader (header) {
 
 // Start tests
 
-describe('onepage.pub', () => {
+describe.only('onepage.pub', () => {
   let child = null
   let remote = null
   let client = null
@@ -7212,6 +7212,70 @@ describe('onepage.pub', () => {
       assert(
         members.some((item) => item.id === remoteActor.id)
       )
+    })
+  })
+
+  describe.only('Collection page with a remote item returning cached HTML', () => {
+    let actor = null
+    let token = null
+    let peer = null
+    let collectionPage = null
+    const remoteObject = {
+      id: `https://localhost:${FIFTH_PORT}/wordpress-actor`,
+      type: 'Person',
+      name: 'WordPress Actor',
+      to: PUBLIC
+    }
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          if (req.url === '/wordpress-actor') {
+            res.writeHead(200, {
+              'Content-Type': 'text/html; charset=utf-8'
+            })
+            res.end('<!DOCTYPE html><html><body>Cached HTML</body></html>')
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
+        }
+      )
+      await new Promise((resolve, reject) => {
+        peer.on('error', reject)
+        peer.listen(FIFTH_PORT, resolve)
+      })
+      collectionPage = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Create',
+        object: {
+          type: 'OrderedCollectionPage',
+          orderedItems: [remoteObject.id],
+          nameMap: {
+            en: 'Collection page containing an item with cached HTML'
+          }
+        }
+      })
+    })
+
+    after(async () => {
+      await new Promise((resolve) => peer.close(resolve))
+    })
+
+    it.only('can get the collection page without failing', async () => {
+      const res = await fetch(collectionPage.object.id, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      const body = await res.text()
+      assert.strictEqual(res.status, 200, body)
     })
   })
 })

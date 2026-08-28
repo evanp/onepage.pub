@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Better handling for non-JSON responses to requests for ActivityPub objects
+
 ## [0.19.8] - 2026-08-28
 
 ### Fixed

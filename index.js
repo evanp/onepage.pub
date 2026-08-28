@@ -986,8 +986,25 @@ class ActivityObject {
       this.#complete = false
       return null
     } else {
+      const contentType = res.headers.get('content-type') || ''
+      if (
+        !contentType.includes('application/activity+json') &&
+        !contentType.includes('application/ld+json') &&
+        !contentType.includes('application/json')
+      ) {
+        logger.warn(`Unexpected content type fetching ${this.#id}: ${contentType}`)
+        this.#complete = false
+        return null
+      }
       const parseStartTime = Date.now()
-      const json = await res.json()
+      let json
+      try {
+        json = await res.json()
+      } catch (err) {
+        logger.warn(`Parsing error for ${this.#id}: ${err.message}`)
+        this.#complete = false
+        return null
+      }
       const parseEndTime = Date.now()
       if (this.#counter) {
         this.#counter.add('json', 'dur', parseEndTime - parseStartTime)
