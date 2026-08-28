@@ -7144,4 +7144,74 @@ describe('onepage.pub', () => {
     })
   })
 
+  describe('Public collection page with a non-public remote actor item', () => {
+    let actor = null
+    let token = null
+    let peer = null
+    let collection = null
+    const remoteActor = {
+      id: `https://localhost:${FIFTH_PORT}/private-actor`,
+      type: 'Person',
+      name: 'Private Remote Actor'
+    }
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          if (req.url === '/private-actor') {
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
+            res.end(JSON.stringify({
+              '@context': AS2_CONTEXT,
+              ...remoteActor
+            }))
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
+        }
+      )
+      await new Promise((resolve, reject) => {
+        peer.on('error', reject)
+        peer.listen(FIFTH_PORT, resolve)
+      })
+      collection = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Create',
+        object: {
+          type: 'OrderedCollection',
+          nameMap: {
+            en: 'Collection containing a non-public remote actor'
+          }
+        }
+      })
+      await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Add',
+        object: remoteActor.id,
+        target: collection.object.id
+      })
+    })
+
+    after(async () => {
+      await new Promise((resolve) => peer.close(resolve))
+    })
+
+    it('includes the remote actor for authenticated readers', async () => {
+      const coll = await getObject(collection.object.id, token)
+      const page = await getObject(coll.first.id, token)
+      const members = page.orderedItems || page.items
+      assert(
+        members.some((item) => item.id === remoteActor.id)
+      )
+    })
+  })
 })

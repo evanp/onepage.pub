@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop over-filtering remote objects that are fetchable but don't have addressing properties.
+
 ## [0.19.6] - 2026-08-27
 
 ### Fixed

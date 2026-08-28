@@ -4917,10 +4917,13 @@ app.get(
       prop in output && Array.isArray(output[prop]))
     if (name) {
       output[name] = (await Promise.all(output[name].map(async (value) => {
+        const id = await toId(value)
         const item = await ActivityObject.get(value, options)
         if (!item) {
-          return { id: await toId(value) }
-        } else if (!(await item.canRead(req.auth?.subject))) {
+          return { id }
+        } else if (
+          !ActivityObject.isRemoteId(id) &&
+          !(await item.canRead(req.auth?.subject))) {
           return null
         } else {
           return await item.expanded()
