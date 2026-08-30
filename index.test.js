@@ -225,6 +225,8 @@ const isInStream = async (collection, object, token = null) => {
   return members.some((item) => item.id === objectId)
 }
 
+const idOf = (object) => typeof object === 'string' ? object : object.id
+
 const getProxy = async (id, actor, token) => {
   const res = await fetch(actor.endpoints.proxyUrl, {
     method: 'POST',
@@ -908,7 +910,7 @@ describe('onepage.pub', () => {
     })
 
     it('has the correct addressees', async () => {
-      assert.strictEqual(obj.to.id, activity.to)
+      assert.strictEqual(idOf(obj.to), activity.to)
     })
 
     it("appears in the actor's inbox", async () => {
@@ -969,7 +971,7 @@ describe('onepage.pub', () => {
     })
 
     it('has the correct addressees', async () => {
-      assert.strictEqual(obj.to?.id, activity.to)
+      assert.strictEqual(idOf(obj.to), activity.to)
     })
 
     it("appears in the actor's inbox", async () => {
@@ -5536,14 +5538,14 @@ describe('onepage.pub', () => {
     it('note has addressees', async () => {
       assert.ok(note.to)
       assert.strictEqual(note.to.length, 1)
-      assert.strictEqual(note.to[0].id, PUBLIC)
+      assert.strictEqual(idOf(note.to[0]), PUBLIC)
     })
 
     it('retrieved has addressees', async () => {
       const retrieved = await getObject(note.id, token1)
       assert.ok(retrieved.to)
       assert.strictEqual(retrieved.to.length, 1)
-      assert.strictEqual(retrieved.to[0].id, PUBLIC)
+      assert.strictEqual(idOf(retrieved.to[0]), PUBLIC)
     })
   })
 
@@ -5570,14 +5572,14 @@ describe('onepage.pub', () => {
     it('create has addressees', async () => {
       assert.ok(create.to)
       assert.strictEqual(create.to.length, 1)
-      assert.strictEqual(create.to[0].id, PUBLIC)
+      assert.strictEqual(idOf(create.to[0]), PUBLIC)
     })
 
     it('retrieved has addressees', async () => {
       const retrieved = await getObject(create.id, token1)
       assert.ok(retrieved.to)
       assert.strictEqual(retrieved.to.length, 1)
-      assert.strictEqual(retrieved.to[0].id, PUBLIC)
+      assert.strictEqual(idOf(retrieved.to[0]), PUBLIC)
     })
   })
 
@@ -5775,17 +5777,17 @@ describe('onepage.pub', () => {
     it('Collection has correct addressees', async () => {
       outbox = await getObject(actor1.outbox, token1)
       assert.strictEqual(outbox.to.length, 1)
-      assert.strictEqual(outbox.to[0].id, PUBLIC)
+      assert.strictEqual(idOf(outbox.to[0]), PUBLIC)
     })
     it('First collection page has correct addressees', async () => {
       const firstPage = await getObject(outbox.first.id, token1)
       assert.strictEqual(firstPage.to.length, 1)
-      assert.strictEqual(firstPage.to[0].id, PUBLIC)
+      assert.strictEqual(idOf(firstPage.to[0]), PUBLIC)
     })
     it('Last collection page has correct addressees', async () => {
       const firstPage = await getObject(outbox.last.id, token1)
       assert.strictEqual(firstPage.to.length, 1)
-      assert.strictEqual(firstPage.to[0].id, PUBLIC)
+      assert.strictEqual(idOf(firstPage.to[0]), PUBLIC)
     })
     it('Other actor can get outbox', async () => {
       const outbox = await getObject(actor1.outbox, token2)
@@ -7310,6 +7312,221 @@ describe('onepage.pub', () => {
       })
       const body = await res.text()
       assert.strictEqual(res.status, 200, body)
+    })
+  })
+
+  describe('Reading local objects expands remote references selectively', () => {
+    let actor = null
+    let token = null
+    let peer = null
+    let pair = null
+    let localItem = null
+    let collectionPage = null
+    let note = null
+    const keyId = `https://localhost:${FIFTH_PORT}/remote-reader#main-key`
+    const remoteReader = {
+      id: `https://localhost:${FIFTH_PORT}/remote-reader`,
+      type: 'Person',
+      preferredUsername: 'remote-reader'
+    }
+    const remoteInReplyTo = {
+      id: `https://localhost:${FIFTH_PORT}/parent-note`,
+      type: 'Note',
+      contentMap: {
+        en: 'A remote parent note'
+      }
+    }
+    const remoteItem = {
+      id: `https://localhost:${FIFTH_PORT}/remote-item`,
+      type: 'Note',
+      name: 'Remote item',
+      contentMap: {
+        en: 'A remote collection item'
+      }
+    }
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      pair = await generateKeyPair('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        },
+        publicKeyEncoding: {
+          type: 'pkcs1',
+          format: 'pem'
+        }
+      })
+      remoteReader.publicKey = {
+        id: keyId,
+        owner: remoteReader.id,
+        publicKeyPem: pair.publicKey
+      }
+      peer = https.createServer(
+        {
+          key: fs.readFileSync('localhost.key'),
+          cert: fs.readFileSync('localhost.crt')
+        },
+        (req, res) => {
+          let body = null
+          if (req.url === '/remote-reader') {
+            body = remoteReader
+          } else if (req.url === '/parent-note') {
+            body = remoteInReplyTo
+          } else if (req.url === '/remote-item') {
+            body = remoteItem
+          }
+          if (body) {
+            res.writeHead(200, {
+              'Content-Type': AS2_MEDIA_TYPE
+            })
+            res.end(JSON.stringify({
+              '@context': AS2_CONTEXT,
+              ...body
+            }))
+          } else {
+            res.writeHead(404)
+            res.end('Not found')
+          }
+        }
+      )
+      await new Promise((resolve, reject) => {
+        peer.on('error', reject)
+        peer.listen(FIFTH_PORT, resolve)
+      })
+      localItem = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Create',
+        object: {
+          type: 'Note',
+          inReplyTo: remoteInReplyTo.id,
+          contentMap: {
+            en: 'A local collection item'
+          }
+        }
+      })
+      collectionPage = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Create',
+        object: {
+          type: 'OrderedCollectionPage',
+          orderedItems: [
+            localItem.object.id,
+            remoteItem.id
+          ],
+          nameMap: {
+            en: 'Collection page with local and remote references'
+          }
+        }
+      })
+      note = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Create',
+        object: {
+          type: 'Note',
+          inReplyTo: remoteInReplyTo.id,
+          contentMap: {
+            en: 'A local note with a remote parent'
+          }
+        }
+      })
+    })
+
+    after(async () => {
+      await new Promise((resolve) => peer.close(resolve))
+    })
+
+    const getObjectAsRemoteReader = async (id) => {
+      const date = new Date().toUTCString()
+      const header = await signRequest(
+        keyId,
+        pair.privateKey,
+        'GET',
+        id,
+        date
+      )
+      const res = await fetch(id, {
+        headers: {
+          Accept: AS2,
+          Signature: header,
+          Date: date
+        }
+      })
+      const body = await res.text()
+      assert.strictEqual(res.status, 200, body)
+      return JSON.parse(body)
+    }
+
+    describe('Collection items', () => {
+      it('expands local items but not remote items for a remote subject', async () => {
+        const object = await getObjectAsRemoteReader(collectionPage.object.id)
+        assert.strictEqual(object.id, collectionPage.object.id)
+        assert.strictEqual(object.type, 'OrderedCollectionPage')
+        assert.ok(Array.isArray(object.orderedItems))
+        assert.strictEqual(object.orderedItems.length, 2)
+        assert.strictEqual(object.orderedItems[0].id, localItem.object.id)
+        assert.strictEqual(
+          object.orderedItems[0].contentMap.en,
+          'A local collection item'
+        )
+        assert.strictEqual(object.orderedItems[0].inReplyTo, remoteInReplyTo.id)
+        assert.strictEqual(object.orderedItems[1], remoteItem.id)
+      })
+
+      it('expands local items and remote items for a local subject', async () => {
+        const object = await getObject(collectionPage.object.id, token)
+        assert.strictEqual(object.id, collectionPage.object.id)
+        assert.strictEqual(object.type, 'OrderedCollectionPage')
+        assert.ok(Array.isArray(object.orderedItems))
+        assert.strictEqual(object.orderedItems.length, 2)
+        assert.strictEqual(object.orderedItems[0].id, localItem.object.id)
+        assert.strictEqual(
+          object.orderedItems[0].contentMap.en,
+          'A local collection item'
+        )
+        assert.strictEqual(object.orderedItems[0].inReplyTo.id, remoteInReplyTo.id)
+        assert.strictEqual(
+          object.orderedItems[0].inReplyTo.contentMap.en,
+          remoteInReplyTo.contentMap.en
+        )
+        assert.strictEqual(object.orderedItems[1].id, remoteItem.id)
+        assert.strictEqual(
+          object.orderedItems[1].contentMap.en,
+          remoteItem.contentMap.en
+        )
+      })
+    })
+
+    describe('Non-collection object properties', () => {
+      it('does not expand remote properties for a remote subject', async () => {
+        const object = await getObjectAsRemoteReader(note.object.id)
+        assert.strictEqual(object.id, note.object.id)
+        assert.strictEqual(object.type, 'Note')
+        assert.strictEqual(
+          object.contentMap.en,
+          'A local note with a remote parent'
+        )
+        assert.strictEqual(object.inReplyTo, remoteInReplyTo.id)
+      })
+
+      it('expands remote properties for a local subject', async () => {
+        const object = await getObject(note.object.id, token)
+        assert.strictEqual(object.id, note.object.id)
+        assert.strictEqual(object.type, 'Note')
+        assert.strictEqual(
+          object.contentMap.en,
+          'A local note with a remote parent'
+        )
+        assert.strictEqual(object.inReplyTo.id, remoteInReplyTo.id)
+        assert.strictEqual(
+          object.inReplyTo.contentMap.en,
+          remoteInReplyTo.contentMap.en
+        )
+      })
     })
   })
 })

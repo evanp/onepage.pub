@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Only expand remote objects in property values or collection
+  items if the subject is local.
+
 ## [0.19.10] - 2026-08-28
 
 ### Fixed
