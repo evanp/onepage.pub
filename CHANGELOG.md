@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.11] - 2026-08-30
+
 ### Fixed
 
 - Only expand remote objects in property values or collection
@@ -943,7 +945,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adopted StandardJS style.
 - Updated local testing certificate and key.
 
-[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.10...HEAD
+[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.11...HEAD
+[0.19.11]: https://github.com/evanp/onepage.pub/compare/v0.19.10...v0.19.11
 [0.19.10]: https://github.com/evanp/onepage.pub/compare/v0.19.9...v0.19.10
 [0.19.9]: https://github.com/evanp/onepage.pub/compare/v0.19.8...v0.19.9
 [0.19.8]: https://github.com/evanp/onepage.pub/compare/v0.19.7...v0.19.8
