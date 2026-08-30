@@ -56,7 +56,7 @@
     "lint": "standard",
     "lint:fix": "standard --fix"
   },
-  "version": "0.19.10",
+  "version": "0.19.11",
   "engine": {
     "node": ">=20.0.0"
   }
