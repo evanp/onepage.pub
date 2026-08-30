@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Only expand remote objects in property values or collection
   items if the subject is local.
+- Expose Location header to CORS clients.
 
 ## [0.19.10] - 2026-08-28
 

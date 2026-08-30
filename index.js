@@ -3517,7 +3517,8 @@ app.use((req, res, next) => {
 })
 
 app.use(cors({
-  maxAge: 86400
+  maxAge: 86400,
+  exposedHeaders: ['Location']
 }))
 
 app.use(

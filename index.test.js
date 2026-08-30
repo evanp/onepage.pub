@@ -901,6 +901,13 @@ describe('onepage.pub', () => {
       assert.strictEqual(res.headers.get('Content-Type'), AS2_MEDIA_TYPE)
     })
 
+    it('exposes the Location header to CORS clients', async () => {
+      assert.strictEqual(
+        res.headers.get('Access-Control-Expose-Headers'),
+        'Location'
+      )
+    })
+
     it('has an object id', async () => {
       assert(obj.id)
     })
