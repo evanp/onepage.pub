@@ -680,7 +680,7 @@ class ActivityObject {
   #id
   #json
   #owner
-  #addressees
+  #addresseeIds
   #complete = false
   #subject
   #cache
@@ -1362,30 +1362,32 @@ class ActivityObject {
   }
 
   async addressees () {
-    if (!this.#addressees) {
+    const ids = await this.addresseeIds()
+    return await Promise.all(
+      ids.map((id) => ActivityObject.get(id, this.#options()))
+    )
+  }
+
+  async addresseeIds () {
+    if (!this.#addresseeIds) {
       const id = await this.id()
       const rows = await db.all(
         'SELECT addresseeId FROM addressee_2 WHERE objectId = ?',
         [id]
       )
       if (rows.length > 0) {
-        this.#addressees = await Promise.all(
-          rows.map((row) => ActivityObject.get(row.addresseeId, this.#options()))
-        )
+        this.#addresseeIds = rows.map((row) => row.addresseeId)
       } else {
         const addresseeIds = ActivityObject.guessAddressees(await this.json())
-        this.#addressees = addresseeIds.map(id => new ActivityObject(id, this.#options()))
+        this.#addresseeIds = addresseeIds
       }
     }
-    return this.#addressees
+    return this.#addresseeIds
   }
 
   async canRead (subject) {
     const owner = await this.owner()
-    const addressees = await this.addressees()
-    const addresseeIds = await Promise.all(
-      addressees.map((addressee) => addressee.id())
-    )
+    const addresseeIds = await this.addresseeIds()
     if (subject && typeof subject !== 'string') {
       throw new Error(`Unexpected subject: ${JSON.stringify(subject)}`)
     }
@@ -1689,9 +1691,9 @@ class ActivityObject {
 
   async ensureAddressee (addressee) {
     const id = await toId(addressee)
-    const addressees = await this.addressees()
-    for (const a of addressees) {
-      if ((await a.id()) === id) {
+    const addresseeIds = await this.addresseeIds()
+    for (const a of addresseeIds) {
+      if (a === id) {
         return
       }
     }

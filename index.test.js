@@ -7536,4 +7536,52 @@ describe('onepage.pub', () => {
       })
     })
   })
+
+  describe('Local collection page with item addressed to unfetchable remote actor', () => {
+    let actor = null
+    let token = null
+    let note = null
+    let collectionPage = null
+    const unfetchableActor = `https://localhost:${BAD_PORT}/actor`
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      actor = await getObject(actor.id, token)
+      const createNote = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: [
+          PUBLIC,
+          unfetchableActor
+        ],
+        type: 'Create',
+        object: {
+          type: 'Note',
+          contentMap: {
+            en: 'A local note addressed to an unfetchable remote actor'
+          }
+        }
+      })
+      note = createNote.object
+      collectionPage = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        to: PUBLIC,
+        type: 'Create',
+        object: {
+          type: 'OrderedCollectionPage',
+          orderedItems: [note.id],
+          nameMap: {
+            en: 'Collection page with item addressed to unfetchable remote actor'
+          }
+        }
+      })
+    })
+
+    it('can get the collection page without failing', async () => {
+      const object = await getObject(collectionPage.object.id, token)
+      assert.strictEqual(object.id, collectionPage.object.id)
+      assert.ok(Array.isArray(object.orderedItems))
+      assert.strictEqual(object.orderedItems.length, 1)
+      assert.strictEqual(object.orderedItems[0].id, note.id)
+    })
+  })
 })
