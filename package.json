@@ -24,7 +24,7 @@
     "@popperjs/core": "^2.11.8",
     "bcrypt": "^6.0.0",
     "bootstrap": "^5.3.8",
-    "config": "^5.0.0",
+    "config": "^5.0.1",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.6",
     "express": "^4.22.2",
