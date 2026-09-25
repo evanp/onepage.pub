@@ -4262,7 +4262,7 @@ app.post(
   jwtRequired,
   tokenTypeCheck,
   wrap(async (req, res) => {
-    const id = req.body.id
+    const id = decodeURIComponent(req.body.id)
     if (!id) {
       throw new createError.BadRequest('Missing id')
     }
