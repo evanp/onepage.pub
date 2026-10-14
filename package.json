@@ -25,7 +25,7 @@
     "bcrypt": "^6.0.0",
     "bootstrap": "^5.3.8",
     "config": "^5.0.1",
-    "cookie-parser": "^1.4.6",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "express-async-handler": "^1.2.0",
