@@ -7584,4 +7584,180 @@ describe('onepage.pub', () => {
       assert.strictEqual(object.orderedItems[0].id, note.id)
     })
   })
+
+  describe('seekItem', () => {
+    let actor, token, note, privateActivity, missingItem, customCollection
+    let outboxPages
+
+    const seek = async (collection, item, principal = token) => {
+      assert.strictEqual(typeof collection.seekItem, 'string')
+      const url = new URL(collection.seekItem)
+      assert.strictEqual(url.protocol, 'https:')
+      url.searchParams.set('item', idOf(item))
+      return fetch(url, {
+        redirect: 'manual',
+        headers: {
+          Accept: AS2,
+          ...(principal ? { Authorization: `Bearer ${principal}` } : {})
+        }
+      })
+    }
+
+    const assertRedirect = (res, page) => {
+      assert.ok([307, 308].includes(res.status), `Expected redirect, got ${res.status}`)
+      assert.strictEqual(res.headers.get('Location'), idOf(page))
+    }
+
+    const assertNotFound = async (res) => {
+      assert.strictEqual(res.status, 404)
+      assert.match(res.headers.get('Content-Type'), /^application\/problem\+json(?:;|$)/)
+      assert.strictEqual((await res.json()).status, 404)
+      assert.strictEqual(res.headers.get('Location'), null)
+    }
+
+    const assertDiscovery = (collection) => {
+      assert.strictEqual(typeof collection.seekItem, 'string')
+      assert.strictEqual(new URL(collection.seekItem).protocol, 'https:')
+      const contexts = [].concat(collection['@context'])
+      assert.ok(contexts.some((context) =>
+        typeof context === 'string' &&
+        /^https:\/\/purl\.archive\.org\/socialweb\/seekitem(?:\/1(?:\.0(?:\.0)?)?)?$/.test(context)
+      ), 'Expected the seekItem extension context')
+    }
+
+    before(async () => {
+      [actor, token] = await registerActor()
+      note = (await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        type: 'Create',
+        to: PUBLIC,
+        object: { type: 'Note', content: 'A note for seekItem tests' }
+      })).object
+      customCollection = (await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        type: 'Create',
+        to: PUBLIC,
+        object: { type: 'Collection', name: 'Seekable collection' }
+      })).object
+      missingItem = (await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        type: 'Create',
+        to: PUBLIC,
+        object: { type: 'Note', content: 'Not a member of the tested collections' }
+      })).object
+      privateActivity = await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        type: 'IntransitiveActivity',
+        to: idOf(actor.followers)
+      })
+      for (let i = 0; i < 45; i++) {
+        await doActivity(actor, token, {
+          '@context': AS2_CONTEXT,
+          type: 'IntransitiveActivity',
+          to: PUBLIC
+        })
+      }
+      await settle()
+      outboxPages = []
+      const outbox = await getObject(idOf(actor.outbox), token)
+      for (let ref = outbox.first; ref;) {
+        const page = await getObject(idOf(ref), token)
+        outboxPages.push(page)
+        ref = page.next
+      }
+      assert.ok(outboxPages.length >= 3, 'Expected at least three outbox pages')
+    })
+
+    for (const property of [
+      'inbox', 'outbox', 'followers', 'following', 'liked',
+      'pendingFollowing', 'pendingFollowers', 'blocked'
+    ]) {
+      it(`advertises seekItem on the actor's ${property}`, async () => {
+        assertDiscovery(await getObject(idOf(actor[property]), token))
+      })
+    }
+
+    for (const property of ['replies', 'likes', 'shares']) {
+      it(`advertises seekItem on a Note's ${property}`, async () => {
+        assertDiscovery(await getObject(idOf(note[property]), token))
+      })
+    }
+
+    for (const position of ['first', 'middle', 'last']) {
+      it(`finds an activity on the ${position} outbox page`, async () => {
+        const index = position === 'first'
+          ? 0
+          : position === 'last'
+            ? outboxPages.length - 1
+            : Math.floor(outboxPages.length / 2)
+        const page = outboxPages[index]
+        const item = page.orderedItems.find((item) => idOf(item) !== privateActivity.id)
+        assert.ok(item, 'Expected a public activity on the page')
+        const outbox = await getObject(idOf(actor.outbox), token)
+        assertRedirect(await seek(outbox, item), page)
+      })
+    }
+
+    it('returns 404 for a readable object that is not an outbox member', async () => {
+      await getObject(idOf(missingItem), token)
+      const outbox = await getObject(idOf(actor.outbox), token)
+      await assertNotFound(await seek(outbox, missingItem))
+    })
+
+    it('hides membership of an inbox the anonymous principal cannot read', async () => {
+      const inbox = await getObject(idOf(actor.inbox), token)
+      const page = await getObject(idOf(inbox.first), token)
+      const item = page.orderedItems[0]
+      assert.ok(item)
+      assertRedirect(await seek(inbox, item), page)
+      await assertNotFound(await seek(inbox, item, null))
+    })
+
+    it('hides a followers-only activity in a public outbox from an anonymous principal', async () => {
+      const outbox = await getObject(idOf(actor.outbox), token)
+      const page = outboxPages.find((page) =>
+        page.orderedItems.some((item) => idOf(item) === privateActivity.id)
+      )
+      assert.ok(page)
+      await getObject(privateActivity.id, token)
+      const anonymous = await fetch(privateActivity.id, { headers: { Accept: AS2 } })
+      assert.ok([401, 403, 404].includes(anonymous.status))
+      assertRedirect(await seek(outbox, privateActivity), page)
+      await assertNotFound(await seek(outbox, privateActivity, null))
+    })
+
+    it('advertises seekItem on a user-created Collection', async () => {
+      const collection = await getObject(idOf(customCollection), token)
+      assert.ok(collection.first)
+      assertDiscovery(collection)
+    })
+
+    it('finds added items and stops finding a removed item while it remains readable', async () => {
+      for (const item of [note, missingItem]) {
+        await doActivity(actor, token, {
+          '@context': AS2_CONTEXT,
+          type: 'Add',
+          to: PUBLIC,
+          object: idOf(item),
+          target: idOf(customCollection)
+        })
+      }
+      const collection = await getObject(idOf(customCollection), token)
+      const page = await getObject(idOf(collection.first), token)
+      for (const item of [note, missingItem]) {
+        assert.ok(page.items.some((member) => idOf(member) === idOf(item)))
+        assertRedirect(await seek(collection, item), page)
+      }
+      await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        type: 'Remove',
+        to: PUBLIC,
+        object: idOf(note),
+        target: idOf(customCollection)
+      })
+      await getObject(idOf(note), token)
+      await assertNotFound(await seek(collection, note))
+      assertRedirect(await seek(collection, missingItem), page)
+    })
+  })
 })

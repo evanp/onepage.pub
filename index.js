@@ -86,6 +86,7 @@ const PENDING_CONTEXT = 'https://purl.archive.org/socialweb/pending'
 const WEBFINGER_CONTEXT = 'https://purl.archive.org/socialweb/webfinger'
 const MISCELLANY_CONTEXT = 'https://purl.archive.org/socialweb/miscellany'
 const OAUTH_CONTEXT = 'https://purl.archive.org/socialweb/oauth/1.1'
+const SEEKITEM_CONTEXT = 'https://purl.archive.org/socialweb/seekitem/1.0'
 
 const CONTEXT = [
   AS_CONTEXT,
@@ -94,7 +95,8 @@ const CONTEXT = [
   PENDING_CONTEXT,
   WEBFINGER_CONTEXT,
   MISCELLANY_CONTEXT,
-  OAUTH_CONTEXT
+  OAUTH_CONTEXT,
+  SEEKITEM_CONTEXT
 ]
 
 const LD_MEDIA_TYPE = 'application/ld+json'
@@ -2538,17 +2540,25 @@ class Collection extends ActivityObject {
   }
 
   async hasMember (object, subject = null) {
+    const page = await this.getPage(await toId(object), subject)
+    return page !== null
+  }
+
+  async getPage (objectId, subject = null) {
     await this.ensureComplete()
-    const objectId = await toId(object)
     const match = (item) =>
       (isString(item) && item === objectId) ||
       (typeof item === 'object' && item.id === objectId)
     if (await this.hasProp('orderedItems')) {
       const orderedItems = await this.prop('orderedItems')
-      return orderedItems.some(match)
+      return (orderedItems.some(match))
+        ? this
+        : null
     } else if (await this.hasProp('items')) {
       const items = await this.prop('items')
-      return items.some(match)
+      return (items.some(match))
+        ? this
+        : null
     } else if (await this.hasProp('first')) {
       let page = null
       for (
@@ -2561,17 +2571,18 @@ class Collection extends ActivityObject {
         if (await page.hasProp('orderedItems')) {
           const orderedItems = await page.prop('orderedItems')
           if (orderedItems.some(match)) {
-            return true
+            return page
           }
         } else if (await page.hasProp('items')) {
           const items = await page.prop('items')
           if (items.some(match)) {
-            return true
+            return page
           }
         }
       }
-      return false
+      return null
     }
+    return null
   }
 
   async prependData (data) {
@@ -4915,6 +4926,61 @@ app.get(
 )
 
 app.get(
+  '/:type/:id/seekItem',
+  jwtOptional,
+  tokenTypeCheck,
+  HTTPSignature.authenticate,
+  wrap(async (req, res) => {
+    const { id, type } = req.params
+    const full = makeUrl(`/${type}/${id}`)
+    const counter = req.counter
+    const cache = req.cache
+    if (
+      req.auth &&
+      req.auth.scope &&
+      !req.auth.scope.split(' ').includes('read')
+    ) {
+      throw new createError.Forbidden('Missing read scope')
+    }
+    const subject = req.auth?.subject
+    const options = { subject, counter, cache }
+    const obj = await ActivityObject.get(full, options)
+    if (!obj) {
+      throw new createError.NotFound('Object not found')
+    }
+    if (!(await obj.canRead(subject))) {
+      throw new createError.NotFound('Object not found')
+    }
+    if (!await obj.isCollection()) {
+      throw new createError.BadRequest('Not a collection')
+    }
+    const itemId = req.query?.item
+    if (!itemId) {
+      throw new createError.BadRequest('item param required')
+    }
+    const coll = await Collection.fromActivityObject(obj)
+    if (!coll) {
+      throw new createError.BadRequest('Not a collection')
+    }
+    const page = await coll.getPage(itemId, subject)
+    if (page === null) {
+      throw new createError.NotFound('Object not found')
+    }
+    if (!(await page.canRead(subject))) {
+      throw new createError.NotFound('Object not found')
+    }
+    const item = await ActivityObject.get(itemId, options)
+    if (!item) {
+      throw new createError.NotFound('Object not found')
+    }
+    if (!(await item.canRead(subject))) {
+      throw new createError.NotFound('Object not found')
+    }
+    res.redirect(308, await page.id())
+  })
+)
+
+app.get(
   '/:type/:id',
   jwtOptional,
   tokenTypeCheck,
@@ -4986,6 +5052,11 @@ app.get(
 
       output.universalClientID = true
     }
+
+    if (await obj.isCollection()) {
+      output.seekItem = (await obj.id()) + '/seekItem'
+    }
+
     if (output.type === 'Tombstone') {
       res.status(410)
     }
