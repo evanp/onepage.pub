@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-10-21
+
+### Fixed
+
+- Use an Express 5-compatible upload route, preserving the captured file path.
+- Handle missing or unparsed request bodies with client errors instead of
+  internal server errors.
+- Correct the package metadata key from `engine` to `engines`.
+
+### Changed
+
+- Require Node.js 22 or later.
+- Update `express` to 5.3.0 and `mime` to 4.1.1.
+
 ## [0.20.0] - 2026-10-21
 
 ### Added
@@ -947,7 +961,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved remove-object splicing and re-follow errors.
 - Fixed PURL URL handling.
 
-[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.20.1...HEAD
+[0.20.1]: https://github.com/evanp/onepage.pub/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/evanp/onepage.pub/compare/v0.19.12...v0.20.0
 [0.19.12]: https://github.com/evanp/onepage.pub/compare/v0.19.11...v0.19.12
 [0.19.11]: https://github.com/evanp/onepage.pub/compare/v0.19.10...v0.19.11
