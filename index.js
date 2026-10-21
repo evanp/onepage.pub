@@ -3967,29 +3967,29 @@ app.post(
     if (req.get('Content-Type') !== 'application/x-www-form-urlencoded') {
       throw new createError.BadRequest('Invalid Content-Type')
     }
-    if (!req.body.username) {
+    if (!req.body?.username) {
       throw new createError.BadRequest('Username is required')
     }
-    if (!req.body.password) {
+    if (!req.body?.password) {
       throw new createError.BadRequest('Password is required')
     }
-    if (req.body.password !== req.body.confirmation) {
+    if (req.body?.password !== req.body?.confirmation) {
       throw new createError.BadRequest('Passwords do not match')
     }
     if (
       INVITE_CODE &&
       INVITE_CODE.length > 0 &&
-      (!req.body.invitecode || req.body.invitecode !== INVITE_CODE)
+      (!req.body?.invitecode || req.body?.invitecode !== INVITE_CODE)
     ) {
       throw new createError.BadRequest('Correct invite code required')
     }
-    const username = req.body.username
+    const username = req.body?.username
 
     if (await User.usernameExists(username)) {
       throw new createError.BadRequest('Username already exists')
     }
 
-    const password = req.body.password
+    const password = req.body?.password
     const user = new User(username, password)
     await user.save()
     const token = await jwtsign(
@@ -4273,7 +4273,7 @@ app.post(
   jwtRequired,
   tokenTypeCheck,
   wrap(async (req, res) => {
-    const id = req.body.id
+    const id = req.body?.id
     if (!id) {
       throw new createError.BadRequest('Missing id')
     }
@@ -4484,21 +4484,21 @@ app.post(
       res.redirect('/login&returnTo=' + encodeURIComponent(req.originalUrl))
     } else {
       if (
-        !req.body.csrf_token ||
-        req.body.csrf_token !== req.session.csrfToken
+        !req.body?.csrf_token ||
+        req.body?.csrf_token !== req.session.csrfToken
       ) {
         throw new createError.BadRequest('Invalid CSRF token')
       }
-      if (!req.body.client_id) {
+      if (!req.body?.client_id) {
         throw new createError.BadRequest('Missing client_id')
       }
-      if (!req.body.redirect_uri) {
+      if (!req.body?.redirect_uri) {
         throw new createError.BadRequest('Missing redirect_uri')
       }
-      if (!req.body.scope) {
+      if (!req.body?.scope) {
         throw new createError.BadRequest('Missing scope')
       }
-      if (!req.body.code_challenge) {
+      if (!req.body?.code_challenge) {
         throw new createError.BadRequest('Missing code_challenge')
       }
       // We use a JWT for the authorization code
@@ -4507,19 +4507,19 @@ app.post(
           jwtid: nanoid(),
           type: 'authz',
           subject: req.user.actorId,
-          scope: req.body.scope,
-          challenge: req.body.code_challenge,
-          client: req.body.client_id,
-          redir: req.body.redirect_uri,
+          scope: req.body?.scope,
+          challenge: req.body?.code_challenge,
+          client: req.body?.client_id,
+          redir: req.body?.redirect_uri,
           expiresIn: '10m',
           issuer: makeUrl('')
         },
         req.jwtKeyData,
         { algorithm: 'RS256' }
       )
-      const state = req.body.state
+      const state = req.body?.state
       const location =
-        req.body.redirect_uri + '?' + querystring.stringify({ code, state })
+        req.body?.redirect_uri + '?' + querystring.stringify({ code, state })
       res.redirect(location)
     }
   })
@@ -4537,41 +4537,41 @@ app.post(
       throw new createError.BadRequest('Invalid Content-Type')
     }
     if (
-      !req.body.grant_type ||
-      !['authorization_code', 'refresh_token'].includes(req.body.grant_type)
+      !req.body?.grant_type ||
+      !['authorization_code', 'refresh_token'].includes(req.body?.grant_type)
     ) {
       throw new createError.BadRequest('Invalid grant_type')
     }
-    if (req.body.grant_type === 'authorization_code') {
-      if (!req.body.code) {
+    if (req.body?.grant_type === 'authorization_code') {
+      if (!req.body?.code) {
         throw new createError.BadRequest('Missing code')
       }
-      if (!req.body.redirect_uri) {
+      if (!req.body?.redirect_uri) {
         throw new createError.BadRequest('Missing redirect_uri')
       }
-      if (!req.body.client_id) {
+      if (!req.body?.client_id) {
         throw new createError.BadRequest('Missing client_id')
       }
-      if (!req.body.code_verifier) {
+      if (!req.body?.code_verifier) {
         throw new createError.BadRequest('Missing code_verifier')
       }
-      const code = req.body.code
+      const code = req.body?.code
       const fields = await jwtverify(code, req.jwtKeyData, {
         algorithm: 'RS256'
       })
       if (fields.type !== 'authz') {
         throw new createError.BadRequest('Invalid code')
       }
-      if (fields.client !== req.body.client_id) {
+      if (fields.client !== req.body?.client_id) {
         throw new createError.BadRequest('Invalid client')
       }
-      if (fields.redir !== req.body.redirect_uri) {
+      if (fields.redir !== req.body?.redirect_uri) {
         throw new createError.BadRequest('Invalid redirect_uri')
       }
       if (
         fields.challenge !==
         (await base64URLEncode(
-          crypto.createHash('sha256').update(req.body.code_verifier).digest()
+          crypto.createHash('sha256').update(req.body?.code_verifier).digest()
         ))
       ) {
         throw new createError.BadRequest('Invalid code_verifier')
@@ -4618,11 +4618,11 @@ app.post(
         expires_in: 86400,
         refresh_token: refreshToken
       })
-    } else if (req.body.grant_type === 'refresh_token') {
-      if (!req.body.refresh_token) {
+    } else if (req.body?.grant_type === 'refresh_token') {
+      if (!req.body?.refresh_token) {
         throw new createError.BadRequest('Missing refresh_token')
       }
-      const refreshToken = req.body.refresh_token
+      const refreshToken = req.body?.refresh_token
       const fields = await jwtverify(refreshToken, req.jwtKeyData, {
         algorithm: 'RS256'
       })
@@ -4776,6 +4776,9 @@ app.post(
         throw new InvalidClientMetadataError('Invalid Content-Type')
       }
       const body = req.body
+      if (!body) {
+        throw new InvalidClientMetadataError('no body')
+      }
       const client = await clientFromCimd(body)
       await client.save()
       res.status(201)
@@ -4893,7 +4896,7 @@ app.post(
 )
 
 app.get(
-  '/uploads/*',
+  /^\/uploads\/(.*)$/i,
   jwtOptional,
   tokenTypeCheck,
   HTTPSignature.authenticate,
@@ -5097,6 +5100,9 @@ app.post(
         )
       }
       let data = req.body
+      if (!data) {
+        throw new createError.BadRequest('No request body')
+      }
       // We do some testing for implicit create
       const type = data.type
       if (ActivityObject.isActivityType(type)) {
@@ -5144,6 +5150,9 @@ app.post(
       }
       if (await User.isUser(remote)) {
         throw new createError.Forbidden('Remote delivery only')
+      }
+      if (!req.body) {
+        throw new createError.BadRequest('No request body')
       }
       const activity = new RemoteActivity(req.body)
       const actor =
