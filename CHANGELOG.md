@@ -92,7 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.19.4] - 2026-08-27
 
-### Maintenance
+### Changed
 
 - Updated `multer` and `form-data` dependencies.
 
@@ -103,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Read the application version directly from `package.json` for footer rendering.
 - Handle unfetchable `inReplyTo` values without returning 500 errors.
 
-### Maintenance
+### Changed
 
 - Updated npm dependencies and GitHub Actions dependencies.
 - Simplified Dependabot configuration for GitHub Actions.
@@ -111,7 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.19.2] - 2026-03-10
 
-### Maintenance
+### Changed
 
 - Updated `multer` and `minimatch`.
 
@@ -121,7 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Made redirect URI checks more robust.
 
-### Maintenance
+### Changed
 
 - Updated package metadata and dependencies.
 
@@ -175,13 +175,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added OAuth discovery.
 - Added Dynamic Client Registration.
 
-### Maintenance
+### Changed
 
 - Updated dependencies.
 
 ## [0.16.1] - 2025-09-16
 
-### Maintenance
+### Changed
 
 - Updated `mime`, `bootstrap`, and `config`.
 
@@ -232,7 +232,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cached a pool of `get` and `all` statements per request.
 - Added new per-request `get` and `all` statement handling.
 
-### Performance
+### Changed
 
 - Tuned SQLite3 behavior.
 - Reinstated automatic query preparation.
@@ -252,13 +252,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.15.2] - 2025-08-18
 
-### Performance
+### Changed
 
 - Reverted automatic query preparation.
 
 ## [0.15.1] - 2025-08-18
 
-### Performance
+### Changed
 
 - Added an index to `user(actorId)`.
 - Added automatic query preparation.
@@ -274,14 +274,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added request duration and metadata to logs.
+- Logged content negotiation errors.
 
 ### Fixed
 
 - Set CORS expiration to one day.
-
-### Maintenance
-
-- Logged content negotiation errors.
 
 ## [0.14.2] - 2025-08-17
 
@@ -292,13 +289,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.14.1] - 2025-08-17
 
-### Testing
+### Added
 
 - Added tests for `Link`, `Hashtag`, and `Mention` link types.
 
 ## [0.14.0] - 2025-08-16
 
-### Maintenance
+### Changed
 
 - Release version update only.
 
@@ -344,13 +341,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.12.8] - 2025-08-14
 
-### Performance
+### Added
 
 - Added metering for more crypto and JSON tasks.
 
 ## [0.12.7] - 2025-08-14
 
-### Performance
+### Changed
 
 - Parallelized expansion of collection page items.
 - Parallelized expansion of properties.
@@ -393,7 +390,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.12.1] - 2025-08-14
 
-### Maintenance
+### Changed
 
 - Updated dependencies.
 
@@ -425,7 +422,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.11.7] - 2025-07-16
 
-### Maintenance
+### Changed
 
 - Updated `supertest`.
 
@@ -435,7 +432,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Allowed WebFinger requests for the server actor.
 
-### Documentation
+### Changed
 
 - Linted `README.md`.
 
@@ -447,7 +444,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.11.4] - 2025-07-09
 
-### Maintenance
+### Changed
 
 - Switched linting from ESLint to StandardJS.
 - Updated dependencies.
@@ -508,7 +505,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Showed warnings for errors in logs.
 
-### Testing
+### Changed
 
 - Made test output silent by default.
 
@@ -549,7 +546,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Checked for null `publicKey` values in `HTTPSignature.validate()`.
 - Added GitHub Actions workflow permissions.
 
-### Maintenance
+### Changed
 
 - Updated dependencies.
 
@@ -564,13 +561,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Avoided authenticating key requests when authentication is unnecessary.
 - Downgraded ESLint from 9 to 8.
 
-### Maintenance
+### Changed
 
 - Updated dependencies.
 
 ## [0.9.5] - 2024-09-07
 
-### Maintenance
+### Changed
 
 - Updated dependencies.
 
@@ -584,7 +581,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Improved handling of unexpected signature algorithms.
 
-### Maintenance
+### Changed
 
 - Switched to StandardJS.
 
@@ -619,9 +616,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Used default tools for retrieving remote clients.
-
-### Maintenance
-
 - Updated dependencies.
 
 ## [0.8.2] - 2024-01-14
@@ -679,15 +673,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Refactored server handling into a `Server` class.
 - Changed database initialization.
+- Updated dependencies.
 
 ### Fixed
 
 - Ensured server keys use PKCS8/SPKI formats.
 - Improved title handling for tag actions.
-
-### Maintenance
-
-- Updated dependencies.
 
 ## [0.6.4] - 2024-01-07
 
@@ -695,7 +686,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added Digest headers to HTTP Signatures.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart version metadata.
 
@@ -705,7 +696,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Converted PKCS1 keys to PKCS8 and SPKI.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -715,7 +706,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Emitted SPKI public keys.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -731,7 +722,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved handling for unfound IDs in Update activities.
 - Checked null values in `User.isUser()`.
 
-### Maintenance
+### Changed
 
 - Updated dependencies.
 
@@ -740,12 +731,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Copied addressees between Create activities and created objects.
-
-### Testing
-
 - Added coverage for liking uncached objects.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -759,7 +747,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Adjusted behavior to make tests pass.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -771,7 +759,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added collection pages.
 - Generated signing keys.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -781,7 +769,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Handled HTTP Signatures whose key IDs include URL fragments.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -790,9 +778,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Represented actor streams as strings instead of embedded objects.
-
-### Maintenance
-
 - Updated Helm chart metadata.
 
 ## [0.3.7] - 2023-10-22
@@ -801,7 +786,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Included subject data in logs.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -811,7 +796,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Redirected unauthenticated OAuth authorization requests to login.
 
-### Maintenance
+### Changed
 
 - Changed the Helm chart to use the `0.3` tag by default.
 
@@ -821,7 +806,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Used the logger for serious errors.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -832,7 +817,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed a duplicate homepage headline.
 - Avoided changing immutable PVC settings.
 
-### Maintenance
+### Changed
 
 - Updated application version metadata.
 
@@ -843,7 +828,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made token endpoint media type checks more careful.
 - Removed cruft from tag action handling.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -854,13 +839,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected URLs behind a load balancer.
 - Ignored `.DS_Store`.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
 ## [0.3.1] - 2023-10-10
 
-### Documentation
+### Added
 
 - Documented additional environment variables.
 
@@ -870,7 +855,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Derived the application name from `OPP_ORIGIN`.
 
-### Maintenance
+### Changed
 
 - Updated Helm chart metadata.
 
@@ -888,7 +873,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Built Docker tags correctly.
 - Ignored `values-*.yaml` files.
 
-### Maintenance
+### Changed
 
 - Updated dependencies.
 
@@ -910,6 +895,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Dockerfile, Docker Compose, multi-platform Docker builds, and cached Docker builds.
 - Added Helm chart, proxy support, deployment defaults, liveness endpoint, and readiness endpoint.
 - Added a test script to `package.json`.
+- Added Dependabot configuration.
 
 ### Fixed
 
@@ -925,13 +911,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed Docker workflow permissions, repository naming, and build command arguments.
 - Corrected default address and hostname handling.
 
-### Documentation
+### Changed
 
 - Updated installation instructions and README content.
-
-### Maintenance
-
-- Added Dependabot configuration.
 - Updated dependencies.
 
 ## [0.1.0] - 2023-06-19
@@ -946,11 +928,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Create, Update, Delete, Add, Remove, Like, Block, Announce, replies, and queue handling.
 - Added blocked and pending namespace support.
 - Added Undo handling for Like, Block, and Follow activities.
+- Added README, license, code of conduct, and conventional commit documentation.
+- Added test helpers and coverage for SSL, actors, remote delivery, registration, outbox distribution, followers, following, liked streams, and filtering.
 
 ### Changed
 
 - Refactored database, HTTP Signature, collection, activity, activity object, and user logic into classes and methods.
 - Reworked object persistence and retrieval helpers.
+- Adopted StandardJS style.
+- Updated local testing certificate and key.
 
 ### Fixed
 
@@ -958,19 +944,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added ownership and addressee information for authorization.
 - Improved remove-object splicing and re-follow errors.
 - Fixed PURL URL handling.
-
-### Documentation
-
-- Added README, license, code of conduct, and conventional commit documentation.
-
-### Testing
-
-- Added test helpers and coverage for SSL, actors, remote delivery, registration, outbox distribution, followers, following, liked streams, and filtering.
-
-### Maintenance
-
-- Adopted StandardJS style.
-- Updated local testing certificate and key.
 
 [Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.12...HEAD
 [0.19.12]: https://github.com/evanp/onepage.pub/compare/v0.19.11...v0.19.12
