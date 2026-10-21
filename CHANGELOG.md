@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-21
+
 ### Added
 
 - Support `seekItem` discovery and lookup for collections, with redirects to
@@ -945,7 +947,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved remove-object splicing and re-follow errors.
 - Fixed PURL URL handling.
 
-[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.19.12...HEAD
+[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/evanp/onepage.pub/compare/v0.19.12...v0.20.0
 [0.19.12]: https://github.com/evanp/onepage.pub/compare/v0.19.11...v0.19.12
 [0.19.11]: https://github.com/evanp/onepage.pub/compare/v0.19.10...v0.19.11
 [0.19.10]: https://github.com/evanp/onepage.pub/compare/v0.19.9...v0.19.10
