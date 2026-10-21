@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Support `seekItem` discovery and lookup for collections, with redirects to
+  the page containing an item and permission checks for collections, pages,
+  and items.
+- Tests for `seekItem` discovery, pagination, authorization, and collection
+  membership changes through `Add` and `Remove`.
+
+### Fixed
+
+- Use a version tag for `docker/login-action` in the release workflow.
+
+### Changed
+
+- Updated `config`, `cookie-parser`, `express`, `multer`, `nanoid`, and `supertest`.
+- Updated transitive dependencies including `brace-expansion`, `js-yaml`,
+  `proxy-addr`, `qs`, and `undici`.
+- Suppress duplicate-heading lint errors for repeated changelog sections.
+
 ## [0.19.12] - 2026-08-30
 
 ### Fixed
