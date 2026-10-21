@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.2] - 2026-10-21
+
+### Fixed
+
+- Allow `seekItem` to find remote collection members without addressing
+  properties, including for anonymous requests.
+
 ## [0.20.1] - 2026-10-21
 
 ### Fixed
@@ -961,7 +968,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved remove-object splicing and re-follow errors.
 - Fixed PURL URL handling.
 
-[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.20.1...HEAD
+[Unreleased]: https://github.com/evanp/onepage.pub/compare/v0.20.2...HEAD
+[0.20.2]: https://github.com/evanp/onepage.pub/compare/v0.20.1...v0.20.2
 [0.20.1]: https://github.com/evanp/onepage.pub/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/evanp/onepage.pub/compare/v0.19.12...v0.20.0
 [0.19.12]: https://github.com/evanp/onepage.pub/compare/v0.19.11...v0.19.12
