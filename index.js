@@ -4976,7 +4976,8 @@ app.get(
     if (!item) {
       throw new createError.NotFound('Object not found')
     }
-    if (!(await item.canRead(subject))) {
+    const isRemote = ActivityObject.isRemoteId(itemId)
+    if (!isRemote && !(await item.canRead(subject))) {
       throw new createError.NotFound('Object not found')
     }
     res.redirect(308, await page.id())

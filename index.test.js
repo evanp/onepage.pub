@@ -7256,6 +7256,49 @@ describe('onepage.pub', () => {
         members.some((item) => item.id === remoteActor.id)
       )
     })
+
+    it('seekItem finds a remote actor without addressing', async () => {
+      const coll = await getObject(collection.object.id, token)
+      const page = await getObject(idOf(coll.first), token)
+      const members = page.orderedItems || page.items
+      assert.ok(members.some((item) => idOf(item) === remoteActor.id))
+
+      const url = new URL(coll.seekItem)
+      url.searchParams.set('item', remoteActor.id)
+      const res = await fetch(url, {
+        headers: { Accept: AS2, Authorization: `Bearer ${token}` },
+        redirect: 'manual'
+      })
+
+      assert.strictEqual(res.status, 308)
+      assert.strictEqual(res.headers.get('Location'), page.id)
+    })
+
+    it('seekItem finds a remote actor without a bearer token', async () => {
+      const publicCollection = (await doActivity(actor, token, {
+        '@context': AS2_CONTEXT,
+        type: 'Create',
+        to: PUBLIC,
+        object: {
+          type: 'OrderedCollection',
+          to: PUBLIC,
+          orderedItems: [remoteActor.id]
+        }
+      })).object
+      const headers = { Accept: AS2 }
+      const collectionRes = await fetch(publicCollection.id, { headers })
+      assert.strictEqual(collectionRes.status, 200)
+      const coll = await collectionRes.json()
+      const members = coll.orderedItems || coll.items
+      assert.ok(members.some((item) => idOf(item) === remoteActor.id))
+
+      const url = new URL(coll.seekItem)
+      url.searchParams.set('item', remoteActor.id)
+      const res = await fetch(url, { headers, redirect: 'manual' })
+
+      assert.strictEqual(res.status, 308)
+      assert.strictEqual(res.headers.get('Location'), coll.id)
+    })
   })
 
   describe('Collection page with a remote item returning cached HTML', () => {
