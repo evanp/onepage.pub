@@ -23,7 +23,7 @@
   "dependencies": {
     "@popperjs/core": "^2.11.8",
     "bcrypt": "^6.0.0",
-    "bootstrap": "^5.3.8",
+    "bootstrap": "^5.3.9",
     "config": "^5.0.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
